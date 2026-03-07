@@ -1,0 +1,128 @@
+"""HB_Zayfer — Full-featured encryption/decryption suite.
+
+This package exposes the Rust-powered cryptographic core via a clean Python API.
+All heavy cryptographic operations run in native Rust with the GIL released.
+
+Quick start::
+
+    import hb_zayfer as hbz
+
+    # Password-based file encryption
+    hbz.encrypt_file("secret.pdf", "secret.pdf.hbzf", passphrase=b"hunter2")
+    hbz.decrypt_file("secret.pdf.hbzf", "recovered.pdf", passphrase=b"hunter2")
+
+    # RSA key generation & encrypt/decrypt
+    priv_pem, pub_pem = hbz.rsa_generate(4096)
+    ct = hbz.rsa_encrypt(pub_pem, b"hello")
+    assert hbz.rsa_decrypt(priv_pem, ct) == b"hello"
+
+    # Key store & contacts
+    ks = hbz.KeyStore()
+    ks.add_contact("Alice", email="alice@example.com")
+"""
+
+from __future__ import annotations
+
+from hb_zayfer._native import (
+    # Version
+    version,
+    # Symmetric – AES-256-GCM
+    aes_encrypt,
+    aes_decrypt,
+    # Symmetric – ChaCha20-Poly1305
+    chacha_encrypt,
+    chacha_decrypt,
+    # KDF
+    generate_salt,
+    derive_key_argon2,
+    derive_key_scrypt,
+    # RSA
+    rsa_generate,
+    rsa_encrypt,
+    rsa_decrypt,
+    rsa_sign,
+    rsa_verify,
+    rsa_fingerprint,
+    # Ed25519
+    ed25519_generate,
+    ed25519_sign,
+    ed25519_verify,
+    ed25519_fingerprint,
+    # X25519
+    x25519_generate,
+    x25519_encrypt_key_agreement,
+    x25519_decrypt_key_agreement,
+    x25519_fingerprint,
+    # OpenPGP
+    pgp_generate,
+    pgp_encrypt,
+    pgp_decrypt,
+    pgp_sign,
+    pgp_verify,
+    pgp_fingerprint,
+    pgp_user_id,
+    # HBZF format
+    encrypt_data,
+    decrypt_data,
+    encrypt_file,
+    decrypt_file,
+    # Utilities
+    compute_fingerprint,
+    detect_key_format,
+    # Classes
+    KeyStore,
+    KeyMetadata,
+    Contact,
+)
+
+__all__ = [
+    "version",
+    # Symmetric
+    "aes_encrypt",
+    "aes_decrypt",
+    "chacha_encrypt",
+    "chacha_decrypt",
+    # KDF
+    "generate_salt",
+    "derive_key_argon2",
+    "derive_key_scrypt",
+    # RSA
+    "rsa_generate",
+    "rsa_encrypt",
+    "rsa_decrypt",
+    "rsa_sign",
+    "rsa_verify",
+    "rsa_fingerprint",
+    # Ed25519
+    "ed25519_generate",
+    "ed25519_sign",
+    "ed25519_verify",
+    "ed25519_fingerprint",
+    # X25519
+    "x25519_generate",
+    "x25519_encrypt_key_agreement",
+    "x25519_decrypt_key_agreement",
+    "x25519_fingerprint",
+    # OpenPGP
+    "pgp_generate",
+    "pgp_encrypt",
+    "pgp_decrypt",
+    "pgp_sign",
+    "pgp_verify",
+    "pgp_fingerprint",
+    "pgp_user_id",
+    # HBZF format
+    "encrypt_data",
+    "decrypt_data",
+    "encrypt_file",
+    "decrypt_file",
+    # Utilities
+    "compute_fingerprint",
+    "detect_key_format",
+    # Classes
+    "KeyStore",
+    "KeyMetadata",
+    "Contact",
+]
+
+__version__ = version()

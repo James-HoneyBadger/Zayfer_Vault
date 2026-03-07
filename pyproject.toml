@@ -1,0 +1,44 @@
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "hb_zayfer"
+version = "0.1.0"
+description = "A full-featured encryption/decryption suite with GUI, CLI, and web interfaces"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Rust",
+    "Topic :: Security :: Cryptography",
+]
+
+[project.optional-dependencies]
+gui = ["PySide6>=6.5"]
+web = ["fastapi>=0.100", "uvicorn[standard]>=0.20", "python-multipart>=0.0.6"]
+cli = ["click>=8.0", "rich>=13.0"]
+dev = ["pytest>=7.0", "pytest-asyncio>=0.21", "httpx>=0.24"]
+all = ["hb_zayfer[gui,web,cli,dev]"]
+
+[project.scripts]
+hb-zayfer = "hb_zayfer.cli:main"
+hb-zayfer-gui = "hb_zayfer.gui:main"
+hb-zayfer-web = "hb_zayfer.web:main"
+
+[tool.maturin]
+manifest-path = "crates/python/Cargo.toml"
+python-source = "python"
+module-name = "hb_zayfer._native"
+features = ["pyo3/extension-module"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests/python"]
+asyncio_mode = "auto"

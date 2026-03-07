@@ -1,0 +1,17 @@
+[package]
+name = "hb_zayfer_python"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Python bindings for HB_Zayfer encryption suite"
+
+[lib]
+name = "_native"
+crate-type = ["cdylib"]
+
+[dependencies]
+hb_zayfer_core = { path = "../core" }
+pyo3.workspace = true
+serde_json.workspace = true
+base64.workspace = true

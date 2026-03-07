@@ -1,0 +1,23 @@
+[package]
+name = "hb_zayfer_cli"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "CLI binary for HB_Zayfer encryption suite"
+
+[[bin]]
+name = "hb-zayfer"
+path = "src/main.rs"
+
+[dependencies]
+hb_zayfer_core = { path = "../core" }
+clap.workspace = true
+anyhow.workspace = true
+dialoguer.workspace = true
+indicatif.workspace = true
+serde_json.workspace = true
+base64.workspace = true
+hex.workspace = true
+rand.workspace = true
+rand_core.workspace = true

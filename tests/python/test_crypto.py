@@ -1,0 +1,364 @@
+"""Tests for the HB Zayfer Python bindings.
+
+These tests exercise the native (_native) module exposed through hb_zayfer,
+covering symmetric ciphers, KDF, RSA, Ed25519, X25519, OpenPGP, the HBZF
+streaming format, and the on-disk keystore.
+
+Run with:  pytest tests/python/ -v
+Requires : maturin develop  (to build the native module first)
+"""
+
+from __future__ import annotations
+
+import base64
+import os
+import tempfile
+from pathlib import Path
+
+import pytest
+
+import hb_zayfer as hbz
+
+
+# ===========================================================================
+# Helpers
+# ===========================================================================
+
+@pytest.fixture(autouse=True)
+def _isolated_keystore(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """Ensure every test gets its own keystore directory."""
+    monkeypatch.setenv("HB_ZAYFER_HOME", str(tmp_path))
+    # Store tmp_path on the module for KeyStore tests to use
+    global _ks_path
+    _ks_path = str(tmp_path)
+
+_ks_path: str = ""
+
+
+# ===========================================================================
+# Version
+# ===========================================================================
+
+def test_version():
+    v = hbz.version()
+    assert isinstance(v, str)
+    assert len(v) > 0
+
+
+# ===========================================================================
+# KDF
+# ===========================================================================
+
+def test_generate_salt():
+    s = hbz.generate_salt(32)
+    assert isinstance(s, bytes)
+    assert len(s) == 32
+
+
+def test_derive_key_argon2():
+    salt = hbz.generate_salt(32)
+    key = hbz.derive_key_argon2(b"password", salt)
+    assert isinstance(key, bytes) and len(key) == 32
+
+
+def test_derive_key_scrypt():
+    salt = hbz.generate_salt(32)
+    key = hbz.derive_key_scrypt(b"password", salt)
+    assert isinstance(key, bytes) and len(key) == 32
+
+
+def test_kdf_deterministic():
+    salt = hbz.generate_salt(32)
+    k1 = hbz.derive_key_argon2(b"hello", salt)
+    k2 = hbz.derive_key_argon2(b"hello", salt)
+    assert k1 == k2
+
+
+def test_kdf_different_passwords():
+    salt = hbz.generate_salt(32)
+    k1 = hbz.derive_key_argon2(b"alpha", salt)
+    k2 = hbz.derive_key_argon2(b"bravo", salt)
+    assert k1 != k2
+
+
+# ===========================================================================
+# AES-256-GCM
+# ===========================================================================
+
+def test_aes_roundtrip():
+    key = hbz.derive_key_argon2(b"pw", hbz.generate_salt(32))
+    nonce, ct = hbz.aes_encrypt(key, b"Hello AES", b"")
+    pt = hbz.aes_decrypt(key, nonce, ct, b"")
+    assert pt == b"Hello AES"
+
+
+def test_aes_wrong_key():
+    k1 = hbz.derive_key_argon2(b"a", hbz.generate_salt(32))
+    k2 = hbz.derive_key_argon2(b"b", hbz.generate_salt(32))
+    nonce, ct = hbz.aes_encrypt(k1, b"secret", b"")
+    with pytest.raises(Exception):
+        hbz.aes_decrypt(k2, nonce, ct, b"")
+
+
+# ===========================================================================
+# ChaCha20-Poly1305
+# ===========================================================================
+
+def test_chacha_roundtrip():
+    key = hbz.derive_key_argon2(b"pw", hbz.generate_salt(32))
+    nonce, ct = hbz.chacha_encrypt(key, b"Hello ChaCha", b"")
+    pt = hbz.chacha_decrypt(key, nonce, ct, b"")
+    assert pt == b"Hello ChaCha"
+
+
+def test_chacha_wrong_key():
+    k1 = hbz.derive_key_argon2(b"x", hbz.generate_salt(32))
+    k2 = hbz.derive_key_argon2(b"y", hbz.generate_salt(32))
+    nonce, ct = hbz.chacha_encrypt(k1, b"msg", b"")
+    with pytest.raises(Exception):
+        hbz.chacha_decrypt(k2, nonce, ct, b"")
+
+
+# ===========================================================================
+# RSA
+# ===========================================================================
+
+def test_rsa_keygen():
+    priv_pem, pub_pem = hbz.rsa_generate(2048)
+    assert "BEGIN" in priv_pem
+    assert "BEGIN" in pub_pem
+
+
+def test_rsa_encrypt_decrypt():
+    priv_pem, pub_pem = hbz.rsa_generate(2048)
+    ct = hbz.rsa_encrypt(pub_pem, b"RSA data")
+    pt = hbz.rsa_decrypt(priv_pem, ct)
+    assert pt == b"RSA data"
+
+
+def test_rsa_sign_verify():
+    priv_pem, pub_pem = hbz.rsa_generate(2048)
+    sig = hbz.rsa_sign(priv_pem, b"msg")
+    assert hbz.rsa_verify(pub_pem, b"msg", sig)
+
+
+def test_rsa_verify_tampered():
+    priv_pem, pub_pem = hbz.rsa_generate(2048)
+    sig = hbz.rsa_sign(priv_pem, b"original")
+    # Tampered message should fail
+    assert not hbz.rsa_verify(pub_pem, b"tampered", sig)
+
+
+def test_rsa_fingerprint():
+    _, pub_pem = hbz.rsa_generate(2048)
+    fp = hbz.rsa_fingerprint(pub_pem)
+    assert isinstance(fp, str) and len(fp) > 0
+    assert hbz.rsa_fingerprint(pub_pem) == fp  # deterministic
+
+
+# ===========================================================================
+# Ed25519
+# ===========================================================================
+
+def test_ed25519_keygen():
+    sk, vk = hbz.ed25519_generate()
+    assert "BEGIN" in sk and "BEGIN" in vk
+
+
+def test_ed25519_sign_verify():
+    sk, vk = hbz.ed25519_generate()
+    sig = hbz.ed25519_sign(sk, b"Ed25519 msg")
+    assert hbz.ed25519_verify(vk, b"Ed25519 msg", sig)
+
+
+def test_ed25519_verify_tampered():
+    sk, vk = hbz.ed25519_generate()
+    sig = hbz.ed25519_sign(sk, b"real")
+    assert not hbz.ed25519_verify(vk, b"fake", sig)
+
+
+def test_ed25519_fingerprint():
+    _, vk = hbz.ed25519_generate()
+    fp = hbz.ed25519_fingerprint(vk)
+    assert isinstance(fp, str) and len(fp) > 0
+
+
+# ===========================================================================
+# X25519
+# ===========================================================================
+
+def test_x25519_keygen():
+    sk, pk = hbz.x25519_generate()
+    assert isinstance(sk, bytes) and len(sk) == 32
+    assert isinstance(pk, bytes) and len(pk) == 32
+
+
+def test_x25519_key_agreement():
+    sk_a, pk_a = hbz.x25519_generate()
+    sk_b, pk_b = hbz.x25519_generate()
+    # encrypt_key_agreement(their_pub) -> (ephemeral_pub, symmetric_key)
+    eph_pub, sym_key_a = hbz.x25519_encrypt_key_agreement(pk_b)
+    # decrypt_key_agreement(our_secret, ephemeral_pub) -> symmetric_key
+    sym_key_b = hbz.x25519_decrypt_key_agreement(sk_b, eph_pub)
+    assert sym_key_a == sym_key_b
+    assert len(sym_key_a) == 32
+
+
+def test_x25519_fingerprint():
+    _, pk = hbz.x25519_generate()
+    fp = hbz.x25519_fingerprint(pk)
+    assert isinstance(fp, str) and len(fp) > 0
+
+
+# ===========================================================================
+# OpenPGP
+# ===========================================================================
+
+def test_pgp_keygen():
+    pub_arm, sec_arm = hbz.pgp_generate("Test <test@test.com>")
+    assert "PGP PUBLIC KEY" in pub_arm
+    assert "PGP PRIVATE KEY" in sec_arm
+
+
+def test_pgp_encrypt_decrypt():
+    pub_arm, sec_arm = hbz.pgp_generate("Test <t@t.com>")
+    ct = hbz.pgp_encrypt(b"PGP data", [pub_arm])
+    pt = hbz.pgp_decrypt(ct, sec_arm)
+    assert pt == b"PGP data"
+
+
+def test_pgp_sign_verify():
+    pub_arm, sec_arm = hbz.pgp_generate("Signer <s@s.com>")
+    signed = hbz.pgp_sign(b"signed msg", sec_arm)
+    content, valid = hbz.pgp_verify(signed, pub_arm)
+    assert valid
+    assert content == b"signed msg"
+
+
+def test_pgp_fingerprint_and_uid():
+    uid = "FP Test <fp@test.com>"
+    pub_arm, _ = hbz.pgp_generate(uid)
+    fp = hbz.pgp_fingerprint(pub_arm)
+    assert isinstance(fp, str) and len(fp) > 0
+    extracted_uid = hbz.pgp_user_id(pub_arm)
+    assert "FP Test" in extracted_uid
+
+
+# ===========================================================================
+# HBZF Streaming Format
+# ===========================================================================
+
+def test_encrypt_decrypt_data_aes():
+    ct = hbz.encrypt_data(
+        b"HBZF test", algorithm="aes", wrapping="password",
+        passphrase=b"pw123",
+    )
+    assert ct[:4] == b"HBZF"
+    pt = hbz.decrypt_data(ct, passphrase=b"pw123")
+    assert pt == b"HBZF test"
+
+
+def test_encrypt_decrypt_data_chacha():
+    ct = hbz.encrypt_data(
+        b"ChaCha HBZF", algorithm="chacha", wrapping="password",
+        passphrase=b"cc",
+    )
+    pt = hbz.decrypt_data(ct, passphrase=b"cc")
+    assert pt == b"ChaCha HBZF"
+
+
+def test_encrypt_decrypt_data_wrong_password():
+    ct = hbz.encrypt_data(
+        b"secret", algorithm="aes", wrapping="password",
+        passphrase=b"right",
+    )
+    with pytest.raises(Exception):
+        hbz.decrypt_data(ct, passphrase=b"wrong")
+
+
+def test_encrypt_decrypt_file(tmp_path: Path):
+    src = tmp_path / "plain.txt"
+    enc = tmp_path / "cipher.hbzf"
+    dec = tmp_path / "decrypted.txt"
+
+    src.write_bytes(b"file content for HBZF")
+    hbz.encrypt_file(str(src), str(enc), algorithm="aes", wrapping="password",
+                     passphrase=b"fp")
+    assert enc.exists()
+
+    hbz.decrypt_file(str(enc), str(dec), passphrase=b"fp")
+    assert dec.read_bytes() == b"file content for HBZF"
+
+
+# ===========================================================================
+# KeyStore
+# ===========================================================================
+
+def test_keystore_basic():
+    ks = hbz.KeyStore(_ks_path)
+    keys = ks.list_keys()
+    assert isinstance(keys, list)
+    assert len(keys) == 0
+
+
+def test_keystore_store_load_ed25519():
+    ks = hbz.KeyStore(_ks_path)
+    sk, vk = hbz.ed25519_generate()
+    fp = hbz.ed25519_fingerprint(vk)
+
+    ks.store_public_key(fp, vk.encode(), "ed25519", "test-key")
+    ks.store_private_key(fp, sk.encode(), b"pass", "ed25519", "test-key")
+
+    loaded_pub = ks.load_public_key(fp)
+    assert loaded_pub == vk.encode()
+
+    loaded_priv = ks.load_private_key(fp, b"pass")
+    assert loaded_priv == sk.encode()
+
+
+def test_keystore_wrong_passphrase():
+    ks = hbz.KeyStore(_ks_path)
+    sk, vk = hbz.ed25519_generate()
+    fp = hbz.ed25519_fingerprint(vk)
+    ks.store_private_key(fp, sk.encode(), b"correct", "ed25519", "k")
+    with pytest.raises(Exception):
+        ks.load_private_key(fp, b"wrong")
+
+
+def test_keystore_list_and_delete():
+    ks = hbz.KeyStore(_ks_path)
+    sk, vk = hbz.ed25519_generate()
+    fp = hbz.ed25519_fingerprint(vk)
+    ks.store_public_key(fp, vk.encode(), "ed25519", "del-test")
+
+    keys = ks.list_keys()
+    assert any(k.fingerprint == fp for k in keys)
+
+    ks.delete_key(fp)
+    keys2 = ks.list_keys()
+    assert not any(k.fingerprint == fp for k in keys2)
+
+
+def test_keystore_contacts():
+    ks = hbz.KeyStore(_ks_path)
+    ks.add_contact("Alice", email="alice@example.com")
+
+    contacts = ks.list_contacts()
+    assert len(contacts) == 1
+    assert contacts[0].name == "Alice"
+    assert contacts[0].email == "alice@example.com"
+
+    ks.remove_contact("Alice")
+    assert len(ks.list_contacts()) == 0
+
+
+def test_keystore_associate_key():
+    ks = hbz.KeyStore(_ks_path)
+    _, vk = hbz.ed25519_generate()
+    fp = hbz.ed25519_fingerprint(vk)
+    ks.store_public_key(fp, vk.encode(), "ed25519", "assoc")
+    ks.add_contact("Bob")
+    ks.associate_key_with_contact("Bob", fp)
+
+    contacts = ks.list_contacts()
+    assert fp in contacts[0].key_fingerprints
