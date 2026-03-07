@@ -12,7 +12,6 @@ use openpgp::parse::{Parse, stream::*};
 use openpgp::policy::StandardPolicy;
 use openpgp::serialize::stream::*;
 use openpgp::serialize::Marshal;
-use openpgp::Fingerprint;
 
 use crate::error::{HbError, HbResult};
 
@@ -90,9 +89,9 @@ pub fn encrypt_message(
 ) -> HbResult<Vec<u8>> {
     let mut output = Vec::new();
 
-    let mut recipient_keys = Vec::new();
+    let mut recipient_kas = Vec::new();
     for cert in recipients {
-        for key in cert
+        for ka in cert
             .keys()
             .with_policy(POLICY, None)
             .supported()
@@ -108,19 +107,19 @@ pub fn encrypt_message(
                     .for_storage_encryption(),
             )
         {
-            recipient_keys.push(key.key().clone());
+            recipient_kas.push(ka);
         }
     }
 
-    if recipient_keys.is_empty() {
+    if recipient_kas.is_empty() {
         return Err(HbError::OpenPgp(
             "No valid encryption-capable keys found in recipients".into(),
         ));
     }
 
-    let recipients_refs: Vec<openpgp::serialize::stream::Recipient> = recipient_keys
-        .iter()
-        .map(openpgp::serialize::stream::Recipient::from)
+    let recipients_refs: Vec<openpgp::serialize::stream::Recipient> = recipient_kas
+        .into_iter()
+        .map(Into::into)
         .collect();
 
     {
@@ -129,7 +128,7 @@ pub fn encrypt_message(
             .kind(openpgp::armor::Kind::Message)
             .build()
             .map_err(|e| HbError::OpenPgp(format!("Armorer: {e}")))?;
-        let encryptor = Encryptor2::for_recipients(armorer, recipients_refs)
+        let encryptor = Encryptor::for_recipients(armorer, recipients_refs)
             .build()
             .map_err(|e| HbError::OpenPgp(format!("Encryptor: {e}")))?;
         let mut literal = LiteralWriter::new(encryptor)
@@ -183,7 +182,7 @@ impl DecryptHelper {
                             .for_storage_encryption(),
                     )
                 {
-                    if let Some(pair) = key.key().clone().into_keypair().ok() {
+                    if let Ok(pair) = key.key().clone().into_keypair() {
                         result.push((pkesk.clone(), pair));
                     }
                 }
@@ -194,15 +193,13 @@ impl DecryptHelper {
 }
 
 impl DecryptionHelper for DecryptHelper {
-    fn decrypt<D>(
+    fn decrypt(
         &mut self,
         pkesks: &[openpgp::packet::PKESK],
         _skesks: &[openpgp::packet::SKESK],
         sym_algo: Option<SymmetricAlgorithm>,
-        mut decrypt: D,
-    ) -> openpgp::Result<Option<Fingerprint>>
-    where
-        D: FnMut(SymmetricAlgorithm, &SessionKey) -> bool,
+        decrypt: &mut dyn FnMut(Option<SymmetricAlgorithm>, &SessionKey) -> bool,
+    ) -> openpgp::Result<Option<openpgp::Cert>>
     {
         for (pkesk, mut pair) in self.get_secret_keys_for(pkesks) {
             if pkesk
@@ -266,6 +263,7 @@ pub fn sign_message(message: &[u8], signer_cert: &openpgp::Cert) -> HbResult<Vec
             .build()
             .map_err(|e| HbError::OpenPgp(format!("Armorer: {e}")))?;
         let signer = Signer::new(armorer, keypair)
+            .map_err(|e| HbError::OpenPgp(format!("Signer init: {e}")))?
             .build()
             .map_err(|e| HbError::OpenPgp(format!("Signer: {e}")))?;
         let mut literal = LiteralWriter::new(signer)
