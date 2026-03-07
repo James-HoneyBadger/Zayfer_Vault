@@ -23,7 +23,7 @@ argon2 = "0.5"
 scrypt = "0.11"
 
 # OpenPGP
-sequoia-openpgp = { version = "1", default-features = false, features = ["crypto-rust", "allow-experimental-crypto", "allow-variable-time-crypto"] }
+sequoia-openpgp = { version = "2", default-features = false, features = ["crypto-rust", "allow-experimental-crypto", "allow-variable-time-crypto"] }
 
 # Key serialization
 pkcs8 = { version = "0.10", features = ["pem", "encryption"] }
