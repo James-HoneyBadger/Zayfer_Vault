@@ -1,13 +1,205 @@
 # Changelog
 
-All notable changes to HB_Zayfer will be documented in this file.
+All notable changes to HB Zayfer will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
-## [0.1.0] — 2026-03-06
+## [1.0.0] — 2025-06-09
+
+### Sprint 6 — Infrastructure & Distribution
+
+- **QR Code Key Exchange** (`crates/core/src/qr.rs`):
+  - `hbzf-key://` URI scheme for sharing public keys via QR codes.
+  - `qr_encode_key_uri()` and `qr_decode_key_uri()` in Rust, Python, and CLI.
+  - GUI **QR Exchange** view for generating and scanning key URIs.
+  - Web API endpoints: `POST /qr/encode`, `POST /qr/decode`.
+
+- **WebAssembly Module** (`crates/wasm/`):
+  - Standalone `wasm-bindgen` crate for browser and Node.js environments.
+  - 13 exported functions: `aes_gcm_encrypt/decrypt`, `chacha20_encrypt/decrypt`,
+    `ed25519_keygen/sign/verify`, `x25519_keygen/dh`, `derive_key`, `sha256`,
+    `version`, `random_bytes`.
+  - Build script: `scripts/build-wasm.sh` (web/nodejs/bundler targets).
+
+- **Cross-Platform Packaging** (`scripts/package.sh`):
+  - Debian `.deb`, Fedora `.rpm`, Arch `PKGBUILD`.
+  - Portable AppImage for Linux.
+  - macOS `.app` bundle + DMG.
+  - Python wheel via maturin.
+
+### Sprint 5 — Advanced Cryptography
+
+- **Shamir's Secret Sharing** (`crates/core/src/shamir.rs`):
+  - Split secrets into N shares with configurable threshold T.
+  - Reconstruct with any T-of-N shares using GF(256) polynomial interpolation.
+  - CLI: `hb-zayfer shamir split`, `hb-zayfer shamir combine`.
+  - Python: `shamir_split()`, `shamir_combine()` (hex-encoded shares).
+  - Web API: `POST /shamir/split`, `POST /shamir/combine`.
+
+- **Steganography** (`crates/core/src/stego.rs`):
+  - LSB (Least Significant Bit) embedding into pixel data.
+  - `stego_embed()`, `stego_extract()`, `stego_capacity()`.
+  - Support for capacity checking before embedding.
+
+- **Secure Messaging View** (`python/hb_zayfer/gui/messaging_view.py`):
+  - GUI view for end-to-end encrypted message exchange.
+  - Contact selection, message encryption/decryption in one interface.
+
+### Sprint 4 — Security Features
+
+- **Secure File Shredding** (`crates/core/src/shred.rs`):
+  - Multi-pass overwrite (configurable passes) + unlink.
+  - File and recursive directory shredding.
+  - CLI: `hb-zayfer shred [--passes N] [--recursive]`.
+  - Python: `shred_file()`, `shred_directory()`.
+
+- **Password Generator** (`crates/core/src/passgen.rs`):
+  - Random password generation with configurable length and character exclusions.
+  - Diceware-style passphrase generation with configurable word count and separator.
+  - Entropy calculation for passwords and passphrases.
+  - CLI: `hb-zayfer passgen [--length N] [--words N] [--separator S] [--exclude CHARS]`.
+  - Python: `generate_password()`, `generate_passphrase()`, `password_entropy()`, `passphrase_entropy()`.
+  - Web API: `POST /passgen`.
+  - GUI **PassGen** view with real-time entropy display.
+
+- **Key Expiry Warnings**:
+  - `KeyExpiryStatus` enum: `Valid`, `ExpiresSoon`, `Expired`.
+  - Key metadata tracks expiry dates; CLI and GUI warn about expiring keys.
+
+- **Multi-Recipient Encryption**:
+  - HBZF format supports encrypting to multiple recipients in a single operation.
+  - CLI and GUI support specifying multiple `--recipient` flags.
+
+### Sprint 3 — Developer Experience & Features
+
+- **Compression Support** (`crates/core/src/compression.rs`):
+  - Optional flate2/deflate compression integrated into HBZF encryption pipeline.
+  - Automatic decompression on decrypt when compression flag is set.
+
+- **GUI Sign & Verify Views**:
+  - `sign_view.py`: Sign files or messages with Ed25519, RSA, or PGP keys.
+  - `verify_view.py`: Verify signatures with visual status feedback.
+
+- **Batch Directory Encryption**:
+  - CLI: `hb-zayfer encrypt-dir` and `hb-zayfer decrypt-dir`.
+  - Recursively encrypt/decrypt all files in a directory tree.
+
+- **Shell Completions**:
+  - CLI: `hb-zayfer completions [bash|zsh|fish|elvish|powershell]`.
+  - Generates shell-specific completion scripts via `clap_complete`.
+
+- **JSON Output Mode**:
+  - Global `--json` flag for machine-readable output.
+  - Supported on `keys list`, `passgen`, `shamir`, `shred` commands.
+
+- **Clipboard Auto-Clear** (`python/hb_zayfer/gui/clipboard.py`):
+  - Sensitive data copied to clipboard is automatically cleared after a timeout.
+
+### Sprint 2 — Interface Completeness
+
+- **CLI Configuration Commands**:
+  - `hb-zayfer config get/set/list/reset/path` for managing settings.
+
+- **Passphrase File Support**:
+  - `--passphrase-file` flag reads passphrase from a file (useful for scripting).
+
+- **HBZF Inspect Command**:
+  - `hb-zayfer inspect <file>`: displays HBZF header metadata
+    (algorithm, KDF, wrapping mode, plaintext size).
+
+- **GUI Audit Log Viewer** (`python/hb_zayfer/gui/audit_view.py`):
+  - Browse audit entries, verify integrity, export logs from the GUI.
+
+- **GUI Backup/Restore View** (`python/hb_zayfer/gui/backup_view.py`):
+  - Create, verify, and restore keystore backups from the GUI.
+
+- **Web File Encryption Endpoints**:
+  - `POST /api/encrypt/file` and `POST /api/decrypt/file` for file upload encryption.
+
+- **Web Audit, Backup & Config APIs**:
+  - `GET /api/audit/recent`, `GET /api/audit/verify`, `GET /api/audit/count`, `POST /api/audit/export`.
+  - `POST /api/backup/create`, `POST /api/backup/verify`, `POST /api/backup/restore`.
+  - `GET /api/config`, `GET /api/config/{key}`, `PUT /api/config/{key}`.
+
+### Sprint 1 — Security Hardening
+
+- **Timing-Safe Authentication**:
+  - Constant-time comparison for AEAD tag verification and API token checks.
+
+- **Rate Limiting**:
+  - Configurable rate limiting on password-based operations to slow brute-force.
+
+- **Configurable Chunk Size**:
+  - HBZF chunk size configurable (default 64 KiB) for performance tuning.
+
+- **Secure Memory** (`crates/core/src/secure_mem.rs`):
+  - `SecureBytes` wrapper with `Zeroize` + `ZeroizeOnDrop`.
+  - Used for all key material and derived keys.
+
+- **Compression Module** (`crates/core/src/compression.rs`):
+  - Flate2/deflate compression with configurable level.
+  - `compress()` / `decompress()` public API.
+
+- **Audit HMAC Integrity**:
+  - Audit log entries now include HMAC for tamper-evident chaining.
+
+- **Key Usage Constraints**:
+  - `KeyUsage` enum: `Signing`, `Encryption`, `KeyAgreement`, `Authentication`.
+  - Keys can be restricted to specific operations.
+
+### Desktop GUI — Professional UI Overhaul
+
+- Dark and light theme system with runtime toggle (`theme.py`).
+- Toast notification system with fade animations (`notifications.py`).
+- Persistent settings manager — saves window geometry, theme, preferences (`settings_manager.py`).
+- Custom status bar showing current view, item counts, and version (`statusbar.py`).
+- About dialog with dynamic version display (`about_dialog.py`).
+- Password strength meter with real-time feedback (`password_strength.py`).
+- Drag-and-drop file selection for encrypt and decrypt views (`dragdrop.py`).
+- Audit utilities for viewing security logs (`audit_utils.py`).
+- Background worker system using `QRunnable` / `QThreadPool` (`workers.py`).
+
+- **Encrypt View Enhancements**: Recipient autocomplete, copy-to-clipboard,
+  default cipher from settings, PGP User ID field visibility.
+- **Decrypt View**: Copy-to-clipboard, auto-detect wrapping mode.
+- **Key Gen**: Passphrase confirmation, show/hide toggle, strength meter.
+- **Keyring**: Search/filter, column sorting, right-click context menus, import.
+- **Contacts**: Search/filter, edit contacts, right-click menus.
+- **Settings**: Default algorithm persistence, keystore path, theme.
+
+### Keyboard Shortcuts
+
+- `Ctrl+Q` — Quit application.
+- `Alt+1` through `Alt+9` — Navigate to sidebar views.
+- `Ctrl+F` — Focus search box in Keyring or Contacts view.
+- `Ctrl+R` — Refresh current view.
+
+### Changed
+
+- Worker threads migrated from `QThread` to `QRunnable` / `QThreadPool`.
+- Sidebar styling with grouped visual sections and responsive hover/selection.
+- Window title dynamically includes version number.
+
+### Fixed
+
+- Double-delete crash in keyring view.
+- Version in About dialog reads dynamically from Rust core.
+- Toast notification positioning uses global coordinates.
+- Theme stylesheet caching to avoid redundant recompilation.
+- Drag-and-drop stylesheet deduplication.
+
+### Removed
+
+- Unused `DragDropZone` widget class.
+- Dead `__main__` blocks in GUI modules.
+- Unused imports and signals across GUI codebase.
+
+---
+
+## [0.1.0] — 2025-03-06
 
 ### Added
 

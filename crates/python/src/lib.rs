@@ -11,21 +11,47 @@
 use std::io::Cursor;
 use std::path::PathBuf;
 
-use pyo3::exceptions::PyValueError;
+use pyo3::exceptions::{
+    PyFileNotFoundError, PyOSError, PyPermissionError, PyRuntimeError, PyValueError,
+};
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
 
 use hb_zayfer_core::{
-    aes_gcm, chacha20, ed25519 as ed, error::HbError, format, kdf, keystore, openpgp,
-    rsa as hrsa, x25519 as x,
+    aes_gcm, audit, chacha20, ed25519 as ed, error::HbError, format, kdf, keystore, openpgp,
+    passgen, qr, rsa as hrsa, shamir, shred, stego, x25519 as x,
 };
 
 // ---------------------------------------------------------------------------
 // Error mapping
 // ---------------------------------------------------------------------------
 
+/// Map core `HbError` variants to semantically appropriate Python exceptions.
 fn to_py(e: HbError) -> PyErr {
-    PyValueError::new_err(e.to_string())
+    match &e {
+        // Wrong passphrase / auth failure → PermissionError
+        HbError::InvalidPassphrase | HbError::AuthenticationFailed => {
+            PyPermissionError::new_err(e.to_string())
+        }
+        // Key / contact not found → FileNotFoundError (lookup miss)
+        HbError::KeyNotFound(_) | HbError::ContactNotFound(_) => {
+            PyFileNotFoundError::new_err(e.to_string())
+        }
+        // I/O errors → OSError
+        HbError::Io(_) => PyOSError::new_err(e.to_string()),
+        // Invalid input data → ValueError
+        HbError::InvalidKeyFormat(_)
+        | HbError::InvalidFormat(_)
+        | HbError::UnsupportedVersion(_)
+        | HbError::UnsupportedAlgorithm(_)
+        | HbError::PassphraseRequired
+        | HbError::KeyAlreadyExists(_)
+        | HbError::ContactAlreadyExists(_)
+        | HbError::Config(_)
+        | HbError::Serialization(_) => PyValueError::new_err(e.to_string()),
+        // Crypto-internal failures → RuntimeError
+        _ => PyRuntimeError::new_err(e.to_string()),
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -454,6 +480,31 @@ fn pgp_user_id(armored_key: &str) -> PyResult<Option<String>> {
 /// For X25519 mode: provide `recipient_public_raw` (32 bytes).
 ///
 /// Returns the encrypted HBZF blob.
+/// Build KDF parameters from the Python-facing keyword arguments.
+fn build_kdf_params(
+    kdf: &str,
+    kdf_memory_kib: Option<u32>,
+    kdf_iterations: Option<u32>,
+    kdf_log_n: Option<u8>,
+    kdf_r: Option<u32>,
+    kdf_p: Option<u32>,
+) -> PyResult<kdf::KdfParams> {
+    match kdf {
+        "argon2id" | "argon2" => {
+            let mem = kdf_memory_kib.unwrap_or(64 * 1024);
+            let iters = kdf_iterations.unwrap_or(3);
+            Ok(kdf::KdfParams::argon2id(mem, iters, 1))
+        }
+        "scrypt" => {
+            let log_n = kdf_log_n.unwrap_or(15);
+            let r = kdf_r.unwrap_or(8);
+            let p = kdf_p.unwrap_or(1);
+            Ok(kdf::KdfParams::scrypt(log_n, r, p))
+        }
+        _ => Err(PyValueError::new_err("kdf must be 'argon2id' or 'scrypt'")),
+    }
+}
+
 #[pyfunction]
 #[pyo3(signature = (
     plaintext,
@@ -462,6 +513,12 @@ fn pgp_user_id(armored_key: &str) -> PyResult<Option<String>> {
     passphrase = None,
     recipient_public_pem = None,
     recipient_public_raw = None,
+    kdf = "argon2id",
+    kdf_memory_kib = None,
+    kdf_iterations = None,
+    kdf_log_n = None,
+    kdf_r = None,
+    kdf_p = None,
 ))]
 fn encrypt_data<'py>(
     py: Python<'py>,
@@ -471,6 +528,12 @@ fn encrypt_data<'py>(
     passphrase: Option<&[u8]>,
     recipient_public_pem: Option<&str>,
     recipient_public_raw: Option<&[u8]>,
+    kdf: &str,
+    kdf_memory_kib: Option<u32>,
+    kdf_iterations: Option<u32>,
+    kdf_log_n: Option<u8>,
+    kdf_r: Option<u32>,
+    kdf_p: Option<u32>,
 ) -> PyResult<Bound<'py, PyBytes>> {
     let algo = match algorithm {
         "aes" => format::SymmetricAlgorithm::Aes256Gcm,
@@ -486,7 +549,7 @@ fn encrypt_data<'py>(
             let pw = passphrase.ok_or_else(|| {
                 PyValueError::new_err("passphrase required for password mode")
             })?;
-            let kdf_params = kdf::KdfParams::default();
+            let kdf_params = build_kdf_params(kdf, kdf_memory_kib, kdf_iterations, kdf_log_n, kdf_r, kdf_p)?;
             let salt = kdf::generate_salt(16);
             let key = kdf::derive_key(pw, &salt, &kdf_params).map_err(to_py)?;
             format::EncryptParams {
@@ -497,6 +560,8 @@ fn encrypt_data<'py>(
                 kdf_salt: Some(salt),
                 wrapped_key: None,
                 ephemeral_public: None,
+                chunk_size: None,
+                compress: false,
             }
         }
         "rsa" => {
@@ -515,6 +580,8 @@ fn encrypt_data<'py>(
                 kdf_salt: None,
                 wrapped_key: Some(wrapped),
                 ephemeral_public: None,
+                chunk_size: None,
+                compress: false,
             }
         }
         "x25519" => {
@@ -532,6 +599,8 @@ fn encrypt_data<'py>(
                 kdf_salt: None,
                 wrapped_key: None,
                 ephemeral_public: Some(eph_bytes),
+                chunk_size: None,
+                compress: false,
             }
         }
         _ => {
@@ -645,6 +714,12 @@ fn decrypt_data<'py>(
     passphrase = None,
     recipient_public_pem = None,
     recipient_public_raw = None,
+    kdf = "argon2id",
+    kdf_memory_kib = None,
+    kdf_iterations = None,
+    kdf_log_n = None,
+    kdf_r = None,
+    kdf_p = None,
 ))]
 fn encrypt_file(
     py: Python<'_>,
@@ -655,6 +730,12 @@ fn encrypt_file(
     passphrase: Option<&[u8]>,
     recipient_public_pem: Option<&str>,
     recipient_public_raw: Option<&[u8]>,
+    kdf: &str,
+    kdf_memory_kib: Option<u32>,
+    kdf_iterations: Option<u32>,
+    kdf_log_n: Option<u8>,
+    kdf_r: Option<u32>,
+    kdf_p: Option<u32>,
 ) -> PyResult<u64> {
     let algo = match algorithm {
         "aes" => format::SymmetricAlgorithm::Aes256Gcm,
@@ -667,7 +748,7 @@ fn encrypt_file(
             let pw = passphrase.ok_or_else(|| {
                 PyValueError::new_err("passphrase required for password mode")
             })?;
-            let kdf_params = kdf::KdfParams::default();
+            let kdf_params = build_kdf_params(kdf, kdf_memory_kib, kdf_iterations, kdf_log_n, kdf_r, kdf_p)?;
             let salt = kdf::generate_salt(16);
             let key = kdf::derive_key(pw, &salt, &kdf_params).map_err(to_py)?;
             format::EncryptParams {
@@ -678,6 +759,8 @@ fn encrypt_file(
                 kdf_salt: Some(salt),
                 wrapped_key: None,
                 ephemeral_public: None,
+                chunk_size: None,
+                compress: false,
             }
         }
         "rsa" => {
@@ -695,6 +778,8 @@ fn encrypt_file(
                 kdf_salt: None,
                 wrapped_key: Some(wrapped),
                 ephemeral_public: None,
+                chunk_size: None,
+                compress: false,
             }
         }
         "x25519" => {
@@ -712,6 +797,8 @@ fn encrypt_file(
                 kdf_salt: None,
                 wrapped_key: None,
                 ephemeral_public: Some(eph_bytes),
+                chunk_size: None,
+                compress: false,
             }
         }
         _ => {
@@ -725,7 +812,7 @@ fn encrypt_file(
     let outp = output_path.to_string();
 
     py.detach(move || {
-        let metadata = std::fs::metadata(&inp).map_err(|e| HbError::Io(e))?;
+        let metadata = std::fs::metadata(&inp).map_err(|e| HbError::Io(e.to_string()))?;
         let file_len = metadata.len();
         let mut reader = std::fs::File::open(&inp)?;
         let mut writer = std::fs::File::create(&outp)?;
@@ -965,9 +1052,160 @@ impl PyKeyStore {
         self.inner.remove_contact(name).map_err(to_py)
     }
 
+    /// Update a contact's email and/or notes.
+    ///
+    /// Pass a string to set a new value, or omit to leave unchanged.
+    /// Python callers cannot clear a field to `None` via this method –
+    /// remove and re-add the contact if that is needed.
+    #[pyo3(signature = (name, email = None, notes = None))]
+    fn update_contact(
+        &mut self,
+        name: &str,
+        email: Option<&str>,
+        notes: Option<&str>,
+    ) -> PyResult<()> {
+        self.inner
+            .update_contact(
+                name,
+                email.map(|e| Some(e)),
+                notes.map(|n| Some(n)),
+            )
+            .map_err(to_py)
+    }
+
     /// Resolve a contact name or fingerprint prefix to key fingerprints.
     fn resolve_recipient(&self, name_or_fp: &str) -> Vec<String> {
         self.inner.resolve_recipient(name_or_fp)
+    }
+
+    /// Create an encrypted backup of the keystore.
+    #[pyo3(signature = (output_path, passphrase, label = None))]
+    fn create_backup(&self, output_path: &str, passphrase: &[u8], label: Option<String>) -> PyResult<()> {
+        self.inner
+            .create_backup(&PathBuf::from(output_path), passphrase, label)
+            .map_err(to_py)
+    }
+
+    /// Restore keystore from backup into this keystore path.
+    fn restore_backup(&self, backup_path: &str, passphrase: &[u8]) -> PyResult<PyBackupManifest> {
+        let manifest = keystore::KeyStore::restore_backup(
+            &PathBuf::from(backup_path),
+            passphrase,
+            self.inner.base_path(),
+        )
+        .map_err(to_py)?;
+        Ok(PyBackupManifest::from_manifest(&manifest))
+    }
+
+    /// Verify a backup file with passphrase.
+    fn verify_backup(&self, backup_path: &str, passphrase: &[u8]) -> PyResult<PyBackupManifest> {
+        let manifest = keystore::KeyStore::verify_backup(&PathBuf::from(backup_path), passphrase)
+            .map_err(to_py)?;
+        Ok(PyBackupManifest::from_manifest(&manifest))
+    }
+}
+
+/// Python representation of backup manifest.
+#[pyclass(name = "BackupManifest", from_py_object)]
+#[derive(Clone)]
+struct PyBackupManifest {
+    #[pyo3(get)]
+    created_at: String,
+    #[pyo3(get)]
+    private_key_count: usize,
+    #[pyo3(get)]
+    public_key_count: usize,
+    #[pyo3(get)]
+    contact_count: usize,
+    #[pyo3(get)]
+    version: u8,
+    #[pyo3(get)]
+    label: Option<String>,
+    #[pyo3(get)]
+    integrity_hash: String,
+}
+
+impl PyBackupManifest {
+    fn from_manifest(m: &hb_zayfer_core::BackupManifest) -> Self {
+        Self {
+            created_at: m.created_at.to_rfc3339(),
+            private_key_count: m.private_key_count,
+            public_key_count: m.public_key_count,
+            contact_count: m.contact_count,
+            version: m.version,
+            label: m.label.clone(),
+            integrity_hash: m.integrity_hash.clone(),
+        }
+    }
+}
+
+/// Python representation of an audit log entry.
+#[pyclass(name = "AuditEntry", from_py_object)]
+#[derive(Clone)]
+struct PyAuditEntry {
+    #[pyo3(get)]
+    timestamp: String,
+    #[pyo3(get)]
+    operation: String,
+    #[pyo3(get)]
+    prev_hash: Option<String>,
+    #[pyo3(get)]
+    entry_hash: String,
+    #[pyo3(get)]
+    note: Option<String>,
+}
+
+impl PyAuditEntry {
+    fn from_entry(e: &audit::AuditEntry) -> Self {
+        Self {
+            timestamp: e.timestamp.to_rfc3339(),
+            operation: format!("{:?}", e.operation),
+            prev_hash: e.prev_hash.clone(),
+            entry_hash: e.entry_hash.clone(),
+            note: e.note.clone(),
+        }
+    }
+}
+
+/// Python wrapper around audit logger.
+#[pyclass(name = "AuditLogger")]
+struct PyAuditLogger {
+    inner: audit::AuditLogger,
+}
+
+#[pymethods]
+impl PyAuditLogger {
+    /// Create audit logger (default path if not provided).
+    #[new]
+    #[pyo3(signature = (path = None))]
+    fn new(path: Option<&str>) -> PyResult<Self> {
+        let inner = match path {
+            Some(p) => audit::AuditLogger::new(PathBuf::from(p)),
+            None => audit::AuditLogger::default_location().map_err(to_py)?,
+        };
+        Ok(Self { inner })
+    }
+
+    /// Return recent audit entries.
+    #[pyo3(signature = (limit = 20))]
+    fn recent_entries(&self, limit: usize) -> PyResult<Vec<PyAuditEntry>> {
+        let entries = self.inner.recent_entries(limit).map_err(to_py)?;
+        Ok(entries.iter().map(PyAuditEntry::from_entry).collect())
+    }
+
+    /// Verify audit log integrity chain.
+    fn verify_integrity(&self) -> PyResult<bool> {
+        self.inner.verify_integrity().map_err(to_py)
+    }
+
+    /// Export audit log to destination path.
+    fn export(&self, destination: &str) -> PyResult<()> {
+        self.inner.export(&PathBuf::from(destination)).map_err(to_py)
+    }
+
+    /// Return total number of audit entries.
+    fn entry_count(&self) -> PyResult<usize> {
+        self.inner.entry_count().map_err(to_py)
     }
 }
 
@@ -1093,6 +1331,308 @@ fn detect_key_format(data: &[u8]) -> &'static str {
     }
 }
 
+#[pyfunction]
+#[pyo3(signature = (algorithm, fingerprint, note = None))]
+fn audit_log_key_generated(algorithm: &str, fingerprint: &str, note: Option<&str>) -> PyResult<()> {
+    let logger = audit::AuditLogger::default_location().map_err(to_py)?;
+    logger
+        .log(
+            audit::AuditOperation::KeyGenerated {
+                algorithm: algorithm.to_string(),
+                fingerprint: fingerprint.to_string(),
+            },
+            note.map(|n| n.to_string()),
+        )
+        .map_err(to_py)
+}
+
+#[pyfunction]
+#[pyo3(signature = (algorithm, filename = None, size_bytes = None, note = None))]
+fn audit_log_file_encrypted(
+    algorithm: &str,
+    filename: Option<&str>,
+    size_bytes: Option<u64>,
+    note: Option<&str>,
+) -> PyResult<()> {
+    let logger = audit::AuditLogger::default_location().map_err(to_py)?;
+    logger
+        .log(
+            audit::AuditOperation::FileEncrypted {
+                algorithm: algorithm.to_string(),
+                filename: filename.map(|s| s.to_string()),
+                size_bytes,
+            },
+            note.map(|n| n.to_string()),
+        )
+        .map_err(to_py)
+}
+
+#[pyfunction]
+#[pyo3(signature = (algorithm, filename = None, size_bytes = None, note = None))]
+fn audit_log_file_decrypted(
+    algorithm: &str,
+    filename: Option<&str>,
+    size_bytes: Option<u64>,
+    note: Option<&str>,
+) -> PyResult<()> {
+    let logger = audit::AuditLogger::default_location().map_err(to_py)?;
+    logger
+        .log(
+            audit::AuditOperation::FileDecrypted {
+                algorithm: algorithm.to_string(),
+                filename: filename.map(|s| s.to_string()),
+                size_bytes,
+            },
+            note.map(|n| n.to_string()),
+        )
+        .map_err(to_py)
+}
+
+#[pyfunction]
+#[pyo3(signature = (algorithm, fingerprint, note = None))]
+fn audit_log_data_signed(algorithm: &str, fingerprint: &str, note: Option<&str>) -> PyResult<()> {
+    let logger = audit::AuditLogger::default_location().map_err(to_py)?;
+    logger
+        .log(
+            audit::AuditOperation::DataSigned {
+                algorithm: algorithm.to_string(),
+                fingerprint: fingerprint.to_string(),
+            },
+            note.map(|n| n.to_string()),
+        )
+        .map_err(to_py)
+}
+
+#[pyfunction]
+#[pyo3(signature = (algorithm, fingerprint, valid, note = None))]
+fn audit_log_signature_verified(
+    algorithm: &str,
+    fingerprint: &str,
+    valid: bool,
+    note: Option<&str>,
+) -> PyResult<()> {
+    let logger = audit::AuditLogger::default_location().map_err(to_py)?;
+    logger
+        .log(
+            audit::AuditOperation::SignatureVerified {
+                algorithm: algorithm.to_string(),
+                fingerprint: fingerprint.to_string(),
+                valid,
+            },
+            note.map(|n| n.to_string()),
+        )
+        .map_err(to_py)
+}
+
+#[pyfunction]
+#[pyo3(signature = (name, note = None))]
+fn audit_log_contact_added(name: &str, note: Option<&str>) -> PyResult<()> {
+    let logger = audit::AuditLogger::default_location().map_err(to_py)?;
+    logger
+        .log(
+            audit::AuditOperation::ContactAdded {
+                name: name.to_string(),
+            },
+            note.map(|n| n.to_string()),
+        )
+        .map_err(to_py)
+}
+
+#[pyfunction]
+#[pyo3(signature = (name, note = None))]
+fn audit_log_contact_deleted(name: &str, note: Option<&str>) -> PyResult<()> {
+    let logger = audit::AuditLogger::default_location().map_err(to_py)?;
+    logger
+        .log(
+            audit::AuditOperation::ContactDeleted {
+                name: name.to_string(),
+            },
+            note.map(|n| n.to_string()),
+        )
+        .map_err(to_py)
+}
+
+#[pyfunction]
+#[pyo3(signature = (fingerprint, note = None))]
+fn audit_log_key_deleted(fingerprint: &str, note: Option<&str>) -> PyResult<()> {
+    let logger = audit::AuditLogger::default_location().map_err(to_py)?;
+    logger
+        .log(
+            audit::AuditOperation::KeyDeleted {
+                fingerprint: fingerprint.to_string(),
+            },
+            note.map(|n| n.to_string()),
+        )
+        .map_err(to_py)
+}
+
+// ---------------------------------------------------------------------------
+// Password / passphrase generation
+// ---------------------------------------------------------------------------
+
+/// Generate a random password.
+#[pyfunction]
+#[pyo3(signature = (length=20, uppercase=true, lowercase=true, digits=true, symbols=true, exclude=""))]
+fn generate_password(
+    length: usize,
+    uppercase: bool,
+    lowercase: bool,
+    digits: bool,
+    symbols: bool,
+    exclude: &str,
+) -> String {
+    let policy = passgen::PasswordPolicy {
+        length,
+        uppercase,
+        lowercase,
+        digits,
+        symbols,
+        exclude: exclude.to_string(),
+    };
+    passgen::generate_password(&policy)
+}
+
+/// Generate a diceware-style passphrase from a built-in word list.
+#[pyfunction]
+#[pyo3(signature = (words=6, separator="-"))]
+fn generate_passphrase(words: usize, separator: &str) -> String {
+    passgen::generate_passphrase(words, separator)
+}
+
+/// Estimate the entropy in bits of a password with the given policy.
+#[pyfunction]
+#[pyo3(signature = (length=20, uppercase=true, lowercase=true, digits=true, symbols=true))]
+fn password_entropy(
+    length: usize,
+    uppercase: bool,
+    lowercase: bool,
+    digits: bool,
+    symbols: bool,
+) -> f64 {
+    let policy = passgen::PasswordPolicy {
+        length,
+        uppercase,
+        lowercase,
+        digits,
+        symbols,
+        exclude: String::new(),
+    };
+    passgen::estimate_entropy(&policy)
+}
+
+/// Estimate the entropy in bits of a diceware passphrase.
+#[pyfunction]
+#[pyo3(signature = (word_count=6))]
+fn passphrase_entropy(word_count: usize) -> f64 {
+    passgen::passphrase_entropy(word_count)
+}
+
+// ---------------------------------------------------------------------------
+// Shamir's Secret Sharing
+// ---------------------------------------------------------------------------
+
+/// Split a secret into `n` shares requiring `k` to reconstruct.
+///
+/// Returns a list of hex-encoded share strings.
+#[pyfunction]
+fn shamir_split(py: Python<'_>, secret: &[u8], n: u8, k: u8) -> PyResult<Vec<String>> {
+    let secret_owned = secret.to_vec();
+    let shares = py
+        .detach(move || shamir::split(&secret_owned, n, k))
+        .map_err(to_py)?;
+    Ok(shares.iter().map(|s| hex::encode(shamir::encode_share(s))).collect())
+}
+
+/// Combine hex-encoded shares to reconstruct the secret.
+#[pyfunction]
+fn shamir_combine(py: Python<'_>, shares_hex: Vec<String>) -> PyResult<Py<PyBytes>> {
+    let shares: Vec<shamir::Share> = shares_hex
+        .iter()
+        .map(|s| {
+            let bytes = hex::decode(s).map_err(|e| HbError::InvalidFormat(e.to_string()))?;
+            shamir::decode_share(&bytes)
+        })
+        .collect::<Result<_, _>>()
+        .map_err(to_py)?;
+    let secret = py.detach(move || shamir::combine(&shares)).map_err(to_py)?;
+    Ok(PyBytes::new(py, &secret).unbind())
+}
+
+// ---------------------------------------------------------------------------
+// Steganography
+// ---------------------------------------------------------------------------
+
+/// Embed a payload into pixel data using LSB encoding.
+///
+/// `pixels` is a mutable copy of raw pixel bytes (e.g. RGBA).
+/// Returns the modified pixel bytes.
+#[pyfunction]
+fn stego_embed(py: Python<'_>, pixels: &[u8], payload: &[u8]) -> PyResult<Py<PyBytes>> {
+    let mut px = pixels.to_vec();
+    let payload_owned = payload.to_vec();
+    px = py
+        .detach(move || -> Result<Vec<u8>, HbError> {
+            stego::embed_in_pixels(&mut px, &payload_owned)?;
+            Ok(px)
+        })
+        .map_err(to_py)?;
+    Ok(PyBytes::new(py, &px).unbind())
+}
+
+/// Extract a previously embedded payload from pixel data.
+#[pyfunction]
+fn stego_extract(py: Python<'_>, pixels: &[u8]) -> PyResult<Py<PyBytes>> {
+    let px = pixels.to_vec();
+    let data = py
+        .detach(move || stego::extract_from_pixels(&px))
+        .map_err(to_py)?;
+    Ok(PyBytes::new(py, &data).unbind())
+}
+
+/// Return the maximum embeddable payload size for the given pixel buffer length.
+#[pyfunction]
+fn stego_capacity(pixel_len: usize) -> usize {
+    stego::capacity(pixel_len)
+}
+
+// ---------------------------------------------------------------------------
+// Secure file shredding
+// ---------------------------------------------------------------------------
+
+/// Securely shred (overwrite + delete) a single file.
+#[pyfunction]
+#[pyo3(signature = (path, passes=3))]
+fn shred_file(py: Python<'_>, path: &str, passes: u32) -> PyResult<()> {
+    let p = std::path::PathBuf::from(path);
+    py.detach(move || shred::shred_file(&p, passes)).map_err(to_py)
+}
+
+/// Securely shred all files in a directory recursively. Returns count of files shredded.
+#[pyfunction]
+#[pyo3(signature = (path, passes=3))]
+fn shred_directory(py: Python<'_>, path: &str, passes: u32) -> PyResult<usize> {
+    let p = std::path::PathBuf::from(path);
+    py.detach(move || shred::shred_directory(&p, passes)).map_err(to_py)
+}
+
+// ---------------------------------------------------------------------------
+// QR key exchange URIs
+// ---------------------------------------------------------------------------
+
+/// Encode a public key as a `hbzf-key://` URI suitable for QR codes.
+#[pyfunction]
+#[pyo3(signature = (algorithm, public_key, label=None))]
+fn qr_encode_key_uri(algorithm: &str, public_key: &[u8], label: Option<&str>) -> String {
+    qr::encode_key_uri(algorithm, public_key, label)
+}
+
+/// Decode a `hbzf-key://` URI into (algorithm, public_key_bytes, label).
+#[pyfunction]
+fn qr_decode_key_uri(py: Python<'_>, uri: &str) -> PyResult<(String, Py<PyBytes>, Option<String>)> {
+    let (algo, data, label) = qr::decode_key_uri(uri).map_err(to_py)?;
+    Ok((algo, PyBytes::new(py, &data).unbind(), label))
+}
+
 /// Return the library version string.
 #[pyfunction]
 fn version() -> &'static str {
@@ -1158,11 +1698,45 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Utilities
     m.add_function(wrap_pyfunction!(compute_fingerprint, m)?)?;
     m.add_function(wrap_pyfunction!(detect_key_format, m)?)?;
+    m.add_function(wrap_pyfunction!(audit_log_key_generated, m)?)?;
+    m.add_function(wrap_pyfunction!(audit_log_file_encrypted, m)?)?;
+    m.add_function(wrap_pyfunction!(audit_log_file_decrypted, m)?)?;
+    m.add_function(wrap_pyfunction!(audit_log_data_signed, m)?)?;
+    m.add_function(wrap_pyfunction!(audit_log_signature_verified, m)?)?;
+    m.add_function(wrap_pyfunction!(audit_log_contact_added, m)?)?;
+    m.add_function(wrap_pyfunction!(audit_log_contact_deleted, m)?)?;
+    m.add_function(wrap_pyfunction!(audit_log_key_deleted, m)?)?;
+
+    // Password generation
+    m.add_function(wrap_pyfunction!(generate_password, m)?)?;
+    m.add_function(wrap_pyfunction!(generate_passphrase, m)?)?;
+    m.add_function(wrap_pyfunction!(password_entropy, m)?)?;
+    m.add_function(wrap_pyfunction!(passphrase_entropy, m)?)?;
+
+    // Shamir's Secret Sharing
+    m.add_function(wrap_pyfunction!(shamir_split, m)?)?;
+    m.add_function(wrap_pyfunction!(shamir_combine, m)?)?;
+
+    // Steganography
+    m.add_function(wrap_pyfunction!(stego_embed, m)?)?;
+    m.add_function(wrap_pyfunction!(stego_extract, m)?)?;
+    m.add_function(wrap_pyfunction!(stego_capacity, m)?)?;
+
+    // Secure file shredding
+    m.add_function(wrap_pyfunction!(shred_file, m)?)?;
+    m.add_function(wrap_pyfunction!(shred_directory, m)?)?;
+
+    // QR key exchange
+    m.add_function(wrap_pyfunction!(qr_encode_key_uri, m)?)?;
+    m.add_function(wrap_pyfunction!(qr_decode_key_uri, m)?)?;
 
     // Classes
     m.add_class::<PyKeyStore>()?;
     m.add_class::<PyKeyMetadata>()?;
     m.add_class::<PyContact>()?;
+    m.add_class::<PyBackupManifest>()?;
+    m.add_class::<PyAuditEntry>()?;
+    m.add_class::<PyAuditLogger>()?;
 
     Ok(())
 }

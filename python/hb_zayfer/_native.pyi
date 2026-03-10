@@ -68,6 +68,12 @@ def encrypt_data(
     passphrase: Optional[bytes] = None,
     recipient_public_pem: Optional[str] = None,
     recipient_public_raw: Optional[bytes] = None,
+    kdf: str = "argon2id",
+    kdf_memory_kib: Optional[int] = None,
+    kdf_iterations: Optional[int] = None,
+    kdf_log_n: Optional[int] = None,
+    kdf_r: Optional[int] = None,
+    kdf_p: Optional[int] = None,
 ) -> bytes: ...
 def decrypt_data(
     data: bytes,
@@ -83,6 +89,12 @@ def encrypt_file(
     passphrase: Optional[bytes] = None,
     recipient_public_pem: Optional[str] = None,
     recipient_public_raw: Optional[bytes] = None,
+    kdf: str = "argon2id",
+    kdf_memory_kib: Optional[int] = None,
+    kdf_iterations: Optional[int] = None,
+    kdf_log_n: Optional[int] = None,
+    kdf_r: Optional[int] = None,
+    kdf_p: Optional[int] = None,
 ) -> int: ...
 def decrypt_file(
     input_path: str,
@@ -95,6 +107,67 @@ def decrypt_file(
 # -- Utilities --
 def compute_fingerprint(public_key_bytes: bytes) -> str: ...
 def detect_key_format(data: bytes) -> str: ...
+
+# -- Password generation --
+def generate_password(
+    length: int = 20,
+    uppercase: bool = True,
+    lowercase: bool = True,
+    digits: bool = True,
+    symbols: bool = True,
+    exclude: str = "",
+) -> str: ...
+def generate_passphrase(words: int = 6, separator: str = "-") -> str: ...
+def password_entropy(
+    length: int = 20,
+    uppercase: bool = True,
+    lowercase: bool = True,
+    digits: bool = True,
+    symbols: bool = True,
+) -> float: ...
+def passphrase_entropy(word_count: int = 6) -> float: ...
+
+# -- Shamir's Secret Sharing --
+def shamir_split(secret: bytes, n: int, k: int) -> list[str]: ...
+def shamir_combine(shares_hex: list[str]) -> bytes: ...
+
+# -- Steganography --
+def stego_embed(pixels: bytes, payload: bytes) -> bytes: ...
+def stego_extract(pixels: bytes) -> bytes: ...
+def stego_capacity(pixel_len: int) -> int: ...
+
+# -- Secure file shredding --
+def shred_file(path: str, passes: int = 3) -> None: ...
+def shred_directory(path: str, passes: int = 3) -> int: ...
+
+# -- QR key exchange --
+def qr_encode_key_uri(algorithm: str, public_key: bytes, label: Optional[str] = None) -> str: ...
+def qr_decode_key_uri(uri: str) -> tuple[str, bytes, Optional[str]]: ...
+
+# -- Audit logging --
+def audit_log_key_generated(algorithm: str, fingerprint: str, note: Optional[str] = None) -> None: ...
+def audit_log_file_encrypted(
+    algorithm: str,
+    filename: Optional[str] = None,
+    size_bytes: Optional[int] = None,
+    note: Optional[str] = None,
+) -> None: ...
+def audit_log_file_decrypted(
+    algorithm: str,
+    filename: Optional[str] = None,
+    size_bytes: Optional[int] = None,
+    note: Optional[str] = None,
+) -> None: ...
+def audit_log_data_signed(algorithm: str, fingerprint: str, note: Optional[str] = None) -> None: ...
+def audit_log_signature_verified(
+    algorithm: str,
+    fingerprint: str,
+    valid: bool,
+    note: Optional[str] = None,
+) -> None: ...
+def audit_log_contact_added(name: str, note: Optional[str] = None) -> None: ...
+def audit_log_contact_deleted(name: str, note: Optional[str] = None) -> None: ...
+def audit_log_key_deleted(fingerprint: str, note: Optional[str] = None) -> None: ...
 
 # -- Classes --
 class KeyMetadata:
@@ -149,4 +222,36 @@ class KeyStore:
     def get_contact(self, name: str) -> Optional[Contact]: ...
     def list_contacts(self) -> list[Contact]: ...
     def remove_contact(self, name: str) -> None: ...
+    def update_contact(
+        self,
+        name: str,
+        email: Optional[str] = None,
+        notes: Optional[str] = None,
+    ) -> None: ...
     def resolve_recipient(self, name_or_fp: str) -> list[str]: ...
+    def create_backup(self, output_path: str, passphrase: bytes, label: Optional[str] = None) -> None: ...
+    def restore_backup(self, backup_path: str, passphrase: bytes) -> BackupManifest: ...
+    def verify_backup(self, backup_path: str, passphrase: bytes) -> BackupManifest: ...
+
+class BackupManifest:
+    created_at: str
+    private_key_count: int
+    public_key_count: int
+    contact_count: int
+    version: int
+    label: Optional[str]
+    integrity_hash: str
+
+class AuditEntry:
+    timestamp: str
+    operation: str
+    prev_hash: Optional[str]
+    entry_hash: str
+    note: Optional[str]
+
+class AuditLogger:
+    def __init__(self, path: Optional[str] = None) -> None: ...
+    def recent_entries(self, limit: int = 20) -> list[AuditEntry]: ...
+    def verify_integrity(self) -> bool: ...
+    def export(self, destination: str) -> None: ...
+    def entry_count(self) -> int: ...

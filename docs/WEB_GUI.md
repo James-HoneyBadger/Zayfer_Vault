@@ -1,329 +1,267 @@
-# Web & GUI Interfaces
+# Web & Desktop GUI Reference
 
-HB_Zayfer includes a **desktop GUI** (PySide6/Qt) and a **browser-based web
-UI** (FastAPI + vanilla JS). Both interfaces wrap the same `hb_zayfer` Python
-API.
+**HB Zayfer v1.0.0**
+
+HB Zayfer provides two graphical interfaces:
+
+- **Desktop GUI** — PySide6 (Qt 6) native application with 13 sidebar views
+- **Web GUI** — FastAPI server with 30 REST API endpoints and a
+  browser-based dashboard (static HTML/JS/CSS)
 
 ---
 
 ## Desktop GUI
 
-### Installation
+### Launching
 
 ```bash
-pip install -e ".[gui]"
-```
-
-Requires PySide6 ≥ 6.5.
-
-### Launch
-
-```bash
+# Via CLI entry point
 hb-zayfer-gui
+
+# Via Python module
+python -m hb_zayfer.gui
+
+# Direct launch
+python python/hb_zayfer/gui/app.py
 ```
 
-### Overview
+### Views (13)
 
-The main window features a sidebar with six views:
+| # | View | Icon | Shortcut | Description |
+|---|------|------|----------|-------------|
+| 1 | Encrypt | 🔐 | Alt+1 | Encrypt files or text (AES/ChaCha, password/RSA/X25519 wrapping) |
+| 2 | Decrypt | 🔓 | Alt+2 | Decrypt `.hbzf` files or text blobs |
+| 3 | Key Gen | 🔑 | Alt+3 | Generate RSA, Ed25519, X25519, and OpenPGP key pairs |
+| 4 | Keyring | 📦 | Alt+4 | Browse, search, import, export, and delete stored keys |
+| 5 | Contacts | 👥 | Alt+5 | Manage contacts and link public keys |
+| 6 | Sign | ✍️ | Alt+6 | Sign files or messages with Ed25519, RSA-PSS, or PGP |
+| 7 | Verify | ✔️ | Alt+7 | Verify signatures against stored or pasted public keys |
+| 8 | PassGen | 🔐 | Alt+8 | Random password & diceware passphrase generator with entropy meter |
+| 9 | Messaging | 💬 | Alt+9 | End-to-end encrypted message composition & reading |
+| 10 | QR Exchange | 📱 | — | Encode/scan `hbzf-key://` URIs for contactless key exchange |
+| 11 | Settings | ⚙️ | — | Theme, font size, default algorithm, KDF preset, confirm-shred toggle |
+| 12 | Audit Log | 📋 | Alt+0 | Browse, verify, and export the tamper-evident audit trail |
+| 13 | Backup | 💾 | — | Create, verify, and restore encrypted keystore backups |
 
-| View | Icon | Description |
-|------|------|-------------|
-| **Encrypt** | 🔐 | Select file or enter text, choose algorithm (AES / ChaCha), select wrapping mode (password / recipient), encrypt |
-| **Decrypt** | 🔓 | Select encrypted file, auto-detect wrapping mode, enter passphrase or select key, decrypt |
-| **Key Generation** | 🔑 | Choose algorithm (RSA-2048/4096, Ed25519, X25519, PGP), set label, generate & store |
-| **Keyring** | 📦 | Browse all stored keys, view metadata, export public keys, delete keys |
-| **Contacts** | 👥 | Add/remove contacts, associate keys with contacts, search by name |
-| **Settings** | ⚙️ | Configure default symmetric algorithm, KDF parameters, keystore path |
+### Source Files
 
-### Architecture
+| File | Purpose |
+|------|---------|
+| `gui/app.py` | Application entry point and `QApplication` setup |
+| `gui/main_window.py` | Main window, sidebar, stacked widget, keyboard shortcuts |
+| `gui/encrypt_view.py` | Encrypt view |
+| `gui/decrypt_view.py` | Decrypt view |
+| `gui/keygen_view.py` | Key generation view |
+| `gui/keyring_view.py` | Keyring management view |
+| `gui/contacts_view.py` | Contacts view |
+| `gui/password_strength.py` | Password entropy bar widget |
+| `gui/settings_view.py` | Settings/preferences view |
+| `gui/audit_utils.py` | Audit log helpers and formatters |
+| `gui/dragdrop.py` | Drag-and-drop file handling |
+| `gui/workers.py` | `QThread` workers for long-running crypto ops |
+| `gui/theme.py` | Dark/light/auto theme definitions |
 
-- **Main window**: `main_window.py` — `QMainWindow` with `QStackedWidget`.
-- **Views**: `encrypt_view.py`, `decrypt_view.py`, `keygen_view.py`,
-  `keyring_view.py`, `contacts_view.py`, `settings_view.py`.
-- **Workers**: `workers.py` — `QThread`-based workers for long-running
-  operations (key generation, encryption, decryption) to keep the UI
-  responsive.
+### GUI Features
 
-### Workflow: Encrypt a File
-
-1. Navigate to the **Encrypt** view.
-2. Click "Browse" to select an input file (or type text directly).
-3. Choose the symmetric algorithm (AES-256-GCM or ChaCha20-Poly1305).
-4. Select wrapping mode:
-   - **Password**: enter and confirm a passphrase.
-   - **Recipient**: pick a contact or enter a fingerprint prefix.
-5. Click "Encrypt". Progress is shown in the status bar.
-6. The output file is saved as `<filename>.hbzf`.
-
-### Workflow: Decrypt a File
-
-1. Navigate to the **Decrypt** view.
-2. Select the `.hbzf` file.
-3. The header is read to determine the wrapping mode.
-4. Provide the passphrase or select the appropriate private key.
-5. Click "Decrypt". The output file is created.
+- **Drag & Drop** — Drop files onto Encrypt/Decrypt views to populate paths
+- **Background Workers** — All cryptographic operations run in `QThread`
+  workers so the UI remains responsive
+- **Password Strength Meter** — Real-time entropy bar with strength labels
+- **Dark / Light / Auto Themes** — Switch in Settings or auto-detect OS
+- **Keyboard Shortcuts** — Alt+1 through Alt+9 and Alt+0 for quick navigation
 
 ---
 
-## Web Interface
+## Web GUI
 
-### Installation
-
-```bash
-pip install -e ".[web]"
-```
-
-Requires FastAPI ≥ 0.100, uvicorn, and python-multipart.
-
-### Launch
+### Launching
 
 ```bash
-hb-zayfer-web
+# Via CLI
+hb-zayfer-web              # starts on http://127.0.0.1:8000
+hb-zayfer-web --port 9000  # custom port
+
+# Via Python module
+python -m hb_zayfer.web
+
+# Via uvicorn
+uvicorn hb_zayfer.web.app:app --reload
 ```
 
-Opens at **http://127.0.0.1:8000** by default.
+### Environment Variables
 
-### Static Frontend
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `HB_ZAYFER_API_TOKEN` | *(unset)* | Bearer token for API authentication. When set, all requests must include `Authorization: Bearer <token>`. |
+| `HB_ZAYFER_RATE_LIMIT` | `60` | Maximum requests per client IP per window. |
+| `HB_ZAYFER_RATE_WINDOW` | `60` | Rate-limit window duration in seconds. |
+| `HB_ZAYFER_PORT` | `8000` | Default port for the web server (overridden by `--port`). |
+| `HB_ZAYFER_HOME` | `~/.hb_zayfer` | Data directory for keys, contacts, audit logs, and config. |
 
-A single-page application served from `python/hb_zayfer/web/static/`:
+### Dashboard
 
-- `index.html` — main page with tabs for encrypt, decrypt, keys, contacts
-- `style.css` — styling
-- `app.js` — vanilla JavaScript calling the REST API
+The web server serves a single-page dashboard at `/` with:
 
-### REST API Endpoints
+- Encrypt / Decrypt forms (text & file upload)
+- Key generation panel
+- Key list with export/delete
+- Contact management
+- Audit log viewer
+- Backup controls
+- Interactive API docs at `/docs` (Swagger UI) and `/redoc`
 
-All API endpoints are prefixed with `/api`.
+### Static Assets
 
-#### Info
+Static files are served from `python/hb_zayfer/web/static/`:
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/api/version` | Returns `{"version": "0.1.0"}` |
+| File | Purpose |
+|------|---------|
+| `style.css` | Dashboard CSS |
+| `app.js` | Frontend JS (fetch-based API calls) |
 
-#### Text Encryption / Decryption
+---
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `POST` | `/api/encrypt/text` | Encrypt text with password |
-| `POST` | `/api/decrypt/text` | Decrypt text with password |
+## REST API Reference
 
-**Encrypt request:**
+Base path: `/api`
 
-```json
-{
-  "plaintext": "Hello, World!",
-  "passphrase": "my-secret",
-  "algorithm": "aes"
-}
-```
+### General
 
-**Encrypt response:**
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/version` | Library version |
 
-```json
-{
-  "ciphertext_b64": "SEJC..."
-}
-```
+### Encryption & Decryption
 
-**Decrypt request:**
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/encrypt/text` | Encrypt text (JSON body) |
+| `POST` | `/api/decrypt/text` | Decrypt text (JSON body) |
+| `POST` | `/api/encrypt/file` | Encrypt uploaded file (multipart) |
+| `POST` | `/api/decrypt/file` | Decrypt uploaded file (multipart) |
 
-```json
-{
-  "ciphertext_b64": "SEJC...",
-  "passphrase": "my-secret"
-}
-```
+### Key Management
 
-**Decrypt response:**
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/keygen` | Generate key pair |
+| `GET` | `/api/keys` | List all keys |
+| `DELETE` | `/api/keys/{fingerprint}` | Delete a key |
+| `GET` | `/api/keys/{fingerprint}/public` | Export public key |
 
-```json
-{
-  "plaintext": "Hello, World!"
-}
-```
+### Contacts
 
-#### Key Generation
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/contacts` | List contacts |
+| `POST` | `/api/contacts` | Add contact |
+| `DELETE` | `/api/contacts/{name}` | Remove contact |
+| `POST` | `/api/contacts/link` | Link key to contact |
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `POST` | `/api/keygen` | Generate and store a key pair |
+### Signing & Verification
 
-**Request:**
-
-```json
-{
-  "algorithm": "ed25519",
-  "label": "my-key",
-  "passphrase": "secure-pw",
-  "user_id": null
-}
-```
-
-**Response:**
-
-```json
-{
-  "fingerprint": "a1b2c3d4...",
-  "algorithm": "ed25519",
-  "label": "my-key"
-}
-```
-
-Supported `algorithm` values: `rsa2048`, `rsa4096`, `ed25519`, `x25519`, `pgp`.
-
-#### Signing & Verification
-
-| Method | Path | Description |
-|--------|------|-------------|
+| Method | Endpoint | Description |
+|--------|----------|-------------|
 | `POST` | `/api/sign` | Sign a message |
 | `POST` | `/api/verify` | Verify a signature |
 
-**Sign request:**
+### Audit Log
 
-```json
-{
-  "message_b64": "SGVsbG8=",
-  "fingerprint": "a1b2c3d4...",
-  "passphrase": "key-pw",
-  "algorithm": "ed25519"
-}
-```
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/audit/recent` | Recent entries (query: `?limit=50`) |
+| `GET` | `/api/audit/verify` | Verify hash-chain integrity |
+| `GET` | `/api/audit/count` | Total entry count |
+| `POST` | `/api/audit/export` | Export log (query: `?destination=path`) |
 
-**Sign response:**
+### Backup
 
-```json
-{
-  "signature_b64": "..."
-}
-```
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/backup/create` | Create encrypted backup |
+| `POST` | `/api/backup/verify` | Verify backup integrity |
+| `POST` | `/api/backup/restore` | Restore from backup |
 
-**Verify request:**
+### Configuration
 
-```json
-{
-  "message_b64": "SGVsbG8=",
-  "signature_b64": "...",
-  "fingerprint": "a1b2c3d4...",
-  "algorithm": "ed25519"
-}
-```
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/config` | Get full configuration |
+| `GET` | `/api/config/{key}` | Get a single setting |
+| `PUT` | `/api/config/{key}` | Update a setting |
 
-**Verify response:**
+### Password Generation
 
-```json
-{
-  "valid": true
-}
-```
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/passgen` | Generate password or passphrase |
 
-#### Key Management
+### Shamir's Secret Sharing
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/api/keys` | List all keys |
-| `DELETE` | `/api/keys/{fingerprint}` | Delete a key |
-| `GET` | `/api/keys/{fingerprint}/public` | Export public key (base64) |
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/shamir/split` | Split secret into shares |
+| `POST` | `/api/shamir/combine` | Reconstruct from shares |
 
-**List keys response:**
+### QR Key Exchange
 
-```json
-[
-  {
-    "fingerprint": "a1b2c3d4...",
-    "algorithm": "ed25519",
-    "label": "my-key",
-    "created_at": "2026-03-06T12:00:00Z",
-    "has_private": true,
-    "has_public": true
-  }
-]
-```
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/qr/encode` | Encode public key as `hbzf-key://` URI |
+| `POST` | `/api/qr/decode` | Decode `hbzf-key://` URI |
 
-#### Contact Management
+---
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/api/contacts` | List all contacts |
-| `POST` | `/api/contacts` | Add a contact |
-| `DELETE` | `/api/contacts/{name}` | Remove a contact |
-| `POST` | `/api/contacts/link` | Associate a key with a contact |
+## API Examples
 
-**Add contact request:**
-
-```json
-{
-  "name": "Alice",
-  "email": "alice@example.com",
-  "notes": "Work colleague"
-}
-```
-
-**Link key request:**
-
-```json
-{
-  "contact_name": "Alice",
-  "fingerprint": "a1b2c3d4..."
-}
-```
-
-### Authentication
-
-Set the `HB_ZAYFER_API_TOKEN` environment variable to require bearer-token
-authentication on all `/api/*` endpoints:
+### Encrypt Text
 
 ```bash
-export HB_ZAYFER_API_TOKEN="my-secret-token"
-hb-zayfer-web
+curl -X POST http://127.0.0.1:8000/api/encrypt/text \
+  -H "Content-Type: application/json" \
+  -d '{"plaintext": "Hello!", "passphrase": "s3cret", "algorithm": "aes"}'
 ```
 
-Clients must include:
+### Generate Key
 
+```bash
+curl -X POST http://127.0.0.1:8000/api/keygen \
+  -H "Content-Type: application/json" \
+  -d '{"algorithm": "ed25519", "label": "my-key"}'
 ```
-Authorization: Bearer my-secret-token
+
+### Encrypt File (multipart)
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/encrypt/file \
+  -F "file=@document.pdf" \
+  -F "passphrase=s3cret" \
+  -F "algorithm=chacha" \
+  --output document.pdf.hbzf
 ```
 
-Static files (`/static/*`), the root page (`/`), and OpenAPI docs
-(`/docs`, `/openapi.json`) are always accessible without authentication.
+### Generate Password
 
-If `HB_ZAYFER_API_TOKEN` is unset, the API is openly accessible (suitable
-for local-only use on `127.0.0.1`).
+```bash
+curl -X POST http://127.0.0.1:8000/api/passgen \
+  -H "Content-Type: application/json" \
+  -d '{"length": 24, "exclude": "0O1lI"}'
+```
 
-### CORS Policy
+### Split Secret (Shamir)
 
-Cross-origin requests are allowed from:
+```bash
+curl -X POST http://127.0.0.1:8000/api/shamir/split \
+  -H "Content-Type: application/json" \
+  -d '{"secret": "bXktc2VjcmV0", "shares": 5, "threshold": 3}'
+```
 
-- `http://localhost:8000`
-- `http://127.0.0.1:8000`
+### Audit Log
 
-All HTTP methods and headers are permitted for these origins.
+```bash
+# Recent 10 entries
+curl http://127.0.0.1:8000/api/audit/recent?limit=10
 
-### OpenAPI Documentation
-
-FastAPI auto-generates interactive API docs:
-
-- **Swagger UI**: http://127.0.0.1:8000/docs
-- **ReDoc**: http://127.0.0.1:8000/redoc
-- **OpenAPI JSON**: http://127.0.0.1:8000/openapi.json
-
-### Programmatic Usage
-
-```python
-import httpx
-
-# Encrypt text
-resp = httpx.post("http://127.0.0.1:8000/api/encrypt/text", json={
-    "plaintext": "secret data",
-    "passphrase": "pw",
-    "algorithm": "aes",
-})
-ct_b64 = resp.json()["ciphertext_b64"]
-
-# Decrypt text
-resp = httpx.post("http://127.0.0.1:8000/api/decrypt/text", json={
-    "ciphertext_b64": ct_b64,
-    "passphrase": "pw",
-})
-assert resp.json()["plaintext"] == "secret data"
+# Verify integrity
+curl http://127.0.0.1:8000/api/audit/verify
 ```

@@ -1,8 +1,7 @@
 # Contributing Guide
 
-Thank you for your interest in contributing to HB_Zayfer! This document covers
-the development environment, build process, coding standards, and testing
-workflow.
+Thank you for your interest in contributing to **HB Zayfer**! This guide
+covers project setup, code standards, testing, and the pull-request workflow.
 
 ---
 
@@ -10,274 +9,220 @@ workflow.
 
 | Tool | Minimum Version | Purpose |
 |------|----------------|---------|
-| **Rust** | 1.75 (stable) | Core library + CLI |
-| **Python** | 3.10 | Bindings, CLI, GUI, Web |
-| **Maturin** | 1.0 | Build PyO3 → wheel |
-| **pkg-config** | — | Locate system libraries |
-| **libssl-dev** | — | OpenSSL headers (Linux) |
-| **nettle-dev** | — | Sequoia cryptography backend (Linux) |
-
-### Quick Setup
-
-```bash
-# Clone the repository
-git clone https://github.com/James-HoneyBadger/HB_Zayfer.git
-cd HB_Zayfer
-
-# Install Rust (if not already)
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-
-# Install Python dependencies
-pip install maturin
-pip install -e ".[all]"
-```
+| Rust | 1.75+ | Core library & CLI |
+| Python | 3.10+ | Bindings, GUI, web, tests |
+| Maturin | 1.0+ | Build Python ↔ Rust bridge |
+| wasm-pack | 0.12+ | WASM build (optional) |
+| Node.js | 18+ | WASM tests (optional) |
 
 ---
 
-## Repository Structure
+## Repository Layout
 
 ```
 HB_Zayfer/
-├── Cargo.toml              # Workspace root
-├── pyproject.toml           # Python / Maturin config
+├── Cargo.toml                # Workspace root
+├── pyproject.toml             # Maturin / Python packaging
 ├── crates/
-│   ├── core/                # hb_zayfer_core — Rust crypto library
-│   ├── cli/                 # hb_zayfer_cli — Rust binary
-│   └── python/              # PyO3 cdylib → hb_zayfer._native
+│   ├── core/                  # hb_zayfer_core — 20 Rust modules
+│   │   ├── src/
+│   │   │   ├── lib.rs
+│   │   │   ├── aes_gcm.rs        # AES-256-GCM
+│   │   │   ├── chacha20.rs       # ChaCha20-Poly1305
+│   │   │   ├── rsa.rs            # RSA-2048/4096
+│   │   │   ├── ed25519.rs        # Ed25519 signatures
+│   │   │   ├── x25519.rs         # X25519 key agreement
+│   │   │   ├── openpgp.rs        # OpenPGP (Sequoia)
+│   │   │   ├── kdf.rs            # Argon2id & scrypt
+│   │   │   ├── format.rs         # HBZF container
+│   │   │   ├── keystore.rs       # Key + contact storage
+│   │   │   ├── audit.rs          # Audit logging
+│   │   │   ├── backup.rs         # Backup/restore
+│   │   │   ├── config.rs         # Configuration
+│   │   │   ├── compression.rs    # Deflate layer
+│   │   │   ├── secure_mem.rs     # mlock secure memory
+│   │   │   ├── shred.rs          # Secure file shredding
+│   │   │   ├── passgen.rs        # Password generation
+│   │   │   ├── shamir.rs         # Shamir's Secret Sharing
+│   │   │   ├── stego.rs          # LSB steganography
+│   │   │   ├── qr.rs             # QR key exchange URIs
+│   │   │   └── error.rs          # Error types
+│   │   ├── tests/
+│   │   │   └── integration.rs    # Integration tests
+│   │   └── benches/
+│   │       └── crypto_benches.rs
+│   ├── cli/                   # hb_zayfer_cli — Clap CLI
+│   │   └── src/main.rs
+│   ├── python/                # hb_zayfer_python — PyO3 bindings
+│   │   └── src/lib.rs
+│   └── wasm/                  # hb_zayfer_wasm — wasm-bindgen
+│       └── src/lib.rs
 ├── python/
-│   └── hb_zayfer/           # Python package (CLI, GUI, Web)
+│   └── hb_zayfer/             # Python package
+│       ├── __init__.py
+│       ├── _native.pyi        # Type stubs
+│       ├── cli.py             # Click CLI
+│       ├── gui/               # PySide6 desktop GUI (13 views)
+│       └── web/               # FastAPI web server
+├── scripts/
+│   ├── build-wasm.sh          # WASM build script
+│   └── package.sh             # Multi-platform packaging
 ├── tests/
-│   └── python/              # Python integration tests
-└── docs/                    # Documentation (this directory)
+│   └── python/
+│       ├── test_crypto.py     # Cryptographic tests
+│       └── test_web.py        # Web API tests
+└── docs/                      # Documentation
 ```
 
 ---
 
-## Building
+## Development Setup
 
-### Rust Only
+The quickest way:
 
 ```bash
-# Check everything compiles
-cargo build --workspace
-
-# Build in release mode
-cargo build --workspace --release
+git clone https://github.com/<owner>/HB_Zayfer.git
+cd HB_Zayfer
+./run.sh build    # Creates venv, installs deps, builds native extension
 ```
 
-### Python Extension Module
+Or manually:
 
 ```bash
-# Development build (editable, debug)
-maturin develop
+# 1. Clone
+git clone https://github.com/<owner>/HB_Zayfer.git
+cd HB_Zayfer
 
-# Development build (release-optimized)
-maturin develop --release
+# 2. Create virtual environment
+python -m venv .venv
+source .venv/bin/activate
 
-# Build a distributable wheel
-maturin build --release
-# Output: target/wheels/hb_zayfer-*.whl
-```
+# 3. Install in development mode
+pip install -e ".[all]"
 
-### Full Stack
+# 4. Build the native extension
+maturin develop --release -m crates/python/Cargo.toml
 
-```bash
-# Build Rust + Python in one go
-maturin develop --release && pip install -e ".[all]"
-```
-
----
-
-## Development Workflow
-
-### 1. Format Code
-
-**Rust:**
-
-```bash
-cargo fmt --all
-```
-
-**Python:**
-
-```bash
-# If you have ruff or black installed
-ruff format python/ tests/
-```
-
-### 2. Lint
-
-**Rust:**
-
-```bash
-cargo clippy --workspace -- -W warnings
-```
-
-**Python:**
-
-```bash
-ruff check python/ tests/
-```
-
-### 3. Run Tests
-
-**Rust tests** (unit + integration):
-
-```bash
-cargo test --workspace
-```
-
-This runs:
-- Unit tests in each module (`#[cfg(test)]` blocks)
-- Integration tests in `crates/core/tests/integration.rs`
-
-**Python tests** (requires `maturin develop` first):
-
-```bash
-pytest tests/python/ -v
-```
-
-This runs:
-- `test_crypto.py` — exercises all `hb_zayfer` API functions
-- `test_web.py` — FastAPI route tests via httpx
-
-### 4. Run the Full CI Pipeline Locally
-
-```bash
-cargo fmt --all --check
-cargo clippy --workspace -- -W warnings
-cargo test --workspace
-maturin develop --release
-pytest tests/python/ -v
+# 5. Verify
+python -c "import hb_zayfer; print(hb_zayfer.version())"
 ```
 
 ---
 
-## Adding New Functionality
-
-### Adding a New Crypto Algorithm
-
-1. **Create the Rust module** in `crates/core/src/<algo>.rs`.
-2. **Add `pub mod <algo>;`** to `crates/core/src/lib.rs`.
-3. **Add unit tests** in the module's `#[cfg(test)]` block.
-4. **Add integration tests** to `crates/core/tests/integration.rs`.
-5. **Add PyO3 bindings** in `crates/python/src/lib.rs`:
-   - Create `#[pyfunction]` wrappers.
-   - Register in the `#[pymodule]` function.
-6. **Update type stubs** in `python/hb_zayfer/_native.pyi`.
-7. **Re-export** from `python/hb_zayfer/__init__.py`.
-8. **Add Python tests** in `tests/python/test_crypto.py`.
-9. **Update documentation** in `docs/`.
-
-### Adding a New CLI Command
-
-**Python CLI** (`python/hb_zayfer/cli.py`):
-- Add a new `@cli.command()` or `@cli.group()`.
-
-**Rust CLI** (`crates/cli/src/main.rs`):
-- Add a variant to the `Commands` enum.
-- Implement the handler function (`cmd_<name>`).
-
-### Adding a New Web API Endpoint
-
-1. Add request/response models to `python/hb_zayfer/web/routes.py`.
-2. Add the route handler to the `router`.
-3. Add tests to `tests/python/test_web.py`.
-
----
-
-## Code Conventions
+## Code Standards
 
 ### Rust
 
-- **Edition**: 2021.
-- **Error handling**: return `HbResult<T>` from all fallible functions;
-  use `HbError` variants with descriptive messages.
-- **Key material security**: wrap secret bytes in types that implement
-  `Zeroize` / `ZeroizeOnDrop`. Never log key material.
-- **Doc comments**: `///` on all public items.
-- **No `unsafe`**: the core library avoids `unsafe` code.
+- **Edition**: 2021
+- **Formatting**: `cargo fmt` (default rustfmt config)
+- **Linting**: `cargo clippy -- -D warnings`
+- **Documentation**: All public items must have `///` doc comments
+- **Error handling**: Return `HbResult<T>`, never `unwrap()` in library code
+- **Unsafe**: No `unsafe` in the core crate
 
 ### Python
 
-- **Type hints**: all function signatures should have type annotations.
-- **Docstrings**: all public functions and classes.
-- **Imports**: `from __future__ import annotations` at the top of every file.
-- **`ValueError`**: all errors from the native layer surface as `ValueError`.
+- **Type hints**: Required for all function signatures
+- **Formatting**: PEP 8, enforced by the project style
+- **Imports**: Standard → third-party → local, grouped with blank lines
 
 ---
 
-## Release Process
+## Testing
 
-1. Bump version in `Cargo.toml` (`[workspace.package] version`) and
-   `pyproject.toml` (`[project] version`).
-2. Update `CHANGELOG.md`.
-3. Run the full test suite.
-4. Tag the release: `git tag v0.2.0 && git push --tags`.
-5. CI builds and publishes wheels.
+### Running Tests
+
+```bash
+# Rust unit + integration tests
+cargo test --workspace
+
+# Python tests
+pytest tests/python/ -v
+
+# Web API tests
+pytest tests/python/test_web.py -v
+
+# Benchmarks
+cargo bench -p hb_zayfer_core
+```
+
+### Test Counts
+
+| Suite | Count |
+|-------|-------|
+| Rust unit tests | ~85 |
+| Rust integration tests | ~41 |
+| Rust doc tests | ~7 |
+| Python tests | ~42 |
+| Web API tests | ~8 |
+| **Total** | **~238** |
+
+### Writing Tests
+
+- **Rust**: Add `#[test]` functions in the same module or in `tests/integration.rs`
+- **Python**: Add tests in `tests/python/test_crypto.py`
+- **Web**: Add tests in `tests/python/test_web.py` (uses `TestClient` from Starlette)
+
+Every new feature should include tests. Aim for:
+
+- ✅ Happy path
+- ✅ Error / edge cases
+- ✅ Round-trip (encrypt → decrypt, sign → verify, split → combine)
 
 ---
 
-## CI (GitHub Actions)
+## Adding a New Rust Module
 
-The CI pipeline runs on every push and pull request to `main`:
-
-### Rust Job
-
-1. `cargo fmt --all --check`
-2. `cargo clippy --workspace -- -W warnings`
-3. `cargo test --workspace`
-4. `cargo build --release`
-
-Matrix: Linux (x86_64), macOS (x86_64 + aarch64), Windows (x86_64).
-
-### Python Job
-
-1. `maturin develop --release`
-2. `pytest tests/python/ -v`
-
-Matrix: Linux + macOS, Python 3.11 + 3.12.
+1. Create `crates/core/src/newmodule.rs`
+2. Add `pub mod newmodule;` to `crates/core/src/lib.rs`
+3. Add public re-exports to `lib.rs` if needed
+4. Write unit tests in `newmodule.rs` (`#[cfg(test)]`)
+5. Add integration tests to `crates/core/tests/integration.rs`
+6. Add Python bindings in `crates/python/src/lib.rs`
+7. Add CLI commands in `crates/cli/src/main.rs`
+8. Add web routes in `python/hb_zayfer/web/routes.py`
+9. Update type stubs in `python/hb_zayfer/_native.pyi`
+10. Update documentation
 
 ---
 
-## Troubleshooting
+## Adding a GUI View
 
-### `nettle-dev` not found (Linux)
+1. Create `python/hb_zayfer/gui/newview.py` with a `QWidget` subclass
+2. Import in `main_window.py` and add to the sidebar list
+3. Use `workers.py` for background crypto operations
+4. Follow existing view patterns (form layout, status bar feedback)
 
-```bash
-# Debian/Ubuntu
-sudo apt install nettle-dev
+---
 
-# Fedora
-sudo dnf install nettle-devel
+## Pull Request Workflow
 
-# Arch
-sudo pacman -S nettle
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feat/my-feature`
+3. Make your changes with tests
+4. Run the full test suite: `cargo test --workspace && pytest tests/python/ -v`
+5. Run lints: `cargo fmt --check && cargo clippy -- -D warnings`
+6. Commit with a descriptive message
+7. Open a pull request against `main`
+
+### Commit Message Format
+
+```
+<type>: <short description>
+
+<optional body>
 ```
 
-### Maturin build fails with "missing Python.h"
+Types: `feat`, `fix`, `docs`, `refactor`, `test`, `ci`, `chore`
 
-Ensure you have Python development headers:
+---
 
-```bash
-# Debian/Ubuntu
-sudo apt install python3-dev
+## Release Checklist
 
-# Fedora
-sudo dnf install python3-devel
-```
-
-### `cargo test` hangs on RSA key generation
-
-RSA key generation (especially 4096-bit) can be slow on CI runners. The
-test suite uses 2048-bit keys by default for speed.
-
-### Import errors after `maturin develop`
-
-Make sure you're using the same Python environment:
-
-```bash
-which python
-maturin develop --release
-python -c "import hb_zayfer; print(hb_zayfer.version())"
-```
+1. Update version in `Cargo.toml` (workspace), `pyproject.toml`, and `CHANGELOG.md`
+2. Run full test suite
+3. Build wheels: `maturin build --release -m crates/python/Cargo.toml`
+4. Build WASM: `./scripts/build-wasm.sh`
+5. Build packages: `./scripts/package.sh`
+6. Tag: `git tag v<version>`
+7. Push tag and create GitHub release

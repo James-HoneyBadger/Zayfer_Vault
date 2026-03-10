@@ -21,12 +21,14 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{HbError, HbResult};
 use crate::kdf::{self, KdfAlgorithm, KdfParams, Argon2Params, ScryptParams};
-use crate::{aes_gcm as aes, chacha20 as chacha};
+use crate::{aes_gcm as aes, chacha20 as chacha, compression};
 
 /// Magic bytes identifying an HBZF file.
 pub const MAGIC: &[u8; 4] = b"HBZF";
 /// Current format version.
 pub const VERSION: u8 = 0x01;
+/// Bit flag for compression in the version byte.
+const COMPRESS_FLAG: u8 = 0x80;
 /// Default chunk size for streaming encryption (64 KiB).
 pub const CHUNK_SIZE: usize = 64 * 1024;
 
@@ -35,6 +37,12 @@ pub const CHUNK_SIZE: usize = 64 * 1024;
 pub enum SymmetricAlgorithm {
     Aes256Gcm,
     ChaCha20Poly1305,
+}
+
+impl Default for SymmetricAlgorithm {
+    fn default() -> Self {
+        SymmetricAlgorithm::Aes256Gcm
+    }
 }
 
 impl SymmetricAlgorithm {
@@ -101,6 +109,13 @@ pub struct EncryptParams {
     pub wrapped_key: Option<Vec<u8>>,
     /// For X25519 mode: the ephemeral public key (32 bytes).
     pub ephemeral_public: Option<Vec<u8>>,
+    /// Chunk size for streaming encryption (default: [`CHUNK_SIZE`]).
+    /// Valid range: 4 KiB .. 16 MiB.
+    pub chunk_size: Option<usize>,
+    /// Enable transparent compression of each chunk before encryption.
+    /// Compressed chunks carry a 1-byte magic prefix and are automatically
+    /// detected during decryption.
+    pub compress: bool,
 }
 
 /// File header parsed from an HBZF file.
@@ -116,13 +131,16 @@ pub struct FileHeader {
     pub ephemeral_public: Option<Vec<u8>>,
     pub base_nonce: [u8; 12],
     pub plaintext_len: u64,
+    /// Whether chunks were compressed before encryption.
+    pub compressed: bool,
 }
 
 /// Write the HBZF header to a writer.
 fn write_header<W: Write>(writer: &mut W, params: &EncryptParams, base_nonce: &[u8; 12], plaintext_len: u64) -> HbResult<()> {
-    // Magic + version
+    // Magic + version (high bit = compression flag)
     writer.write_all(MAGIC)?;
-    writer.write_all(&[VERSION])?;
+    let version_byte = if params.compress { VERSION | COMPRESS_FLAG } else { VERSION };
+    writer.write_all(&[version_byte])?;
 
     // Algorithm + KDF + wrapping
     writer.write_all(&[params.algorithm.id()])?;
@@ -197,11 +215,13 @@ pub fn read_header<R: Read>(reader: &mut R) -> HbResult<FileHeader> {
         return Err(HbError::InvalidFormat("Not an HBZF file (wrong magic)".into()));
     }
 
-    // Version
+    // Version (low 7 bits = version, high bit = compression flag)
     let mut version = [0u8; 1];
     reader.read_exact(&mut version)?;
-    if version[0] != VERSION {
-        return Err(HbError::UnsupportedVersion(version[0]));
+    let compressed = version[0] & COMPRESS_FLAG != 0;
+    let ver = version[0] & !COMPRESS_FLAG;
+    if ver != VERSION {
+        return Err(HbError::UnsupportedVersion(ver));
     }
 
     // Algorithm, KDF, wrapping
@@ -280,6 +300,7 @@ pub fn read_header<R: Read>(reader: &mut R) -> HbResult<FileHeader> {
         ephemeral_public,
         base_nonce,
         plaintext_len,
+        compressed,
     })
 }
 
@@ -303,8 +324,11 @@ pub fn encrypt_stream<R: Read, W: Write>(
     // AAD for all chunks: the header fields (algorithm + wrapping mode)
     let aad = [params.algorithm.id(), params.wrapping.id()];
 
+    // Resolve chunk size (use override from EncryptParams, else default constant)
+    let effective_chunk_size = params.chunk_size.unwrap_or(CHUNK_SIZE);
+
     // Stream encrypt in chunks
-    let mut chunk_buf = vec![0u8; CHUNK_SIZE];
+    let mut chunk_buf = vec![0u8; effective_chunk_size];
     let mut chunk_index: u64 = 0;
     let mut total_read: u64 = 0;
 
@@ -315,7 +339,15 @@ pub fn encrypt_stream<R: Read, W: Write>(
         }
         total_read += bytes_read as u64;
 
-        let chunk = &chunk_buf[..bytes_read];
+        let raw_chunk = &chunk_buf[..bytes_read];
+        // Optionally compress the chunk before encryption
+        let chunk_data;
+        let chunk: &[u8] = if params.compress {
+            chunk_data = compression::compress(raw_chunk)?;
+            &chunk_data
+        } else {
+            raw_chunk
+        };
         let encrypted = match params.algorithm {
             SymmetricAlgorithm::Aes256Gcm => {
                 aes::encrypt_chunk(&params.symmetric_key, &base_nonce, chunk_index, chunk, &aad)?
@@ -354,9 +386,10 @@ pub fn decrypt_stream<R: Read, W: Write>(
     let mut chunk_index: u64 = 0;
     let mut total_written: u64 = 0;
 
-    // Maximum allowed encrypted chunk size = CHUNK_SIZE + 16 (AEAD tag).
-    // Reject anything larger to prevent OOM from malicious files.
-    const MAX_CHUNK_LEN: usize = CHUNK_SIZE + 16;
+    // Maximum allowed encrypted chunk size.
+    // We accept up to 16 MiB plaintext chunks (the config max) plus 16 bytes AEAD tag.
+    // This ensures files encrypted with any valid chunk_size can be decrypted.
+    const MAX_CHUNK_LEN: usize = 16 * 1024 * 1024 + 16;
 
     loop {
         // Read chunk length
@@ -388,8 +421,14 @@ pub fn decrypt_stream<R: Read, W: Write>(
             }
         };
 
-        writer.write_all(&decrypted)?;
-        total_written += decrypted.len() as u64;
+        // Decompress if the file was encrypted with compression enabled
+        let final_data = if header.compressed {
+            compression::decompress(&decrypted)?
+        } else {
+            decrypted
+        };
+        writer.write_all(&final_data)?;
+        total_written += final_data.len() as u64;
         chunk_index += 1;
 
         if let Some(ref mut cb) = progress_callback {
@@ -450,6 +489,107 @@ pub fn decrypt_bytes(
     }
 }
 
+/// Describes one recipient for multi-recipient encryption.
+pub struct RecipientInfo {
+    /// Label or fingerprint for identification.
+    pub label: String,
+    /// Key wrapping mode for this recipient.
+    pub wrapping: KeyWrapping,
+    /// For RSA-OAEP: the RSA-encrypted symmetric key.
+    pub wrapped_key: Option<Vec<u8>>,
+    /// For X25519: the ephemeral public key (32 bytes).
+    pub ephemeral_public: Option<Vec<u8>>,
+}
+
+/// Encrypt a plaintext buffer to multiple recipients.
+///
+/// Returns a `Vec<(label, encrypted_bytes)>` — one HBZF blob per recipient,
+/// all sharing the same random symmetric key but with independent key wrapping.
+///
+/// The caller is responsible for wrapping the symmetric key for each recipient
+/// (e.g., via RSA-OAEP or X25519-ECDH) and providing the results in
+/// `recipients`.
+///
+/// The `symmetric_key` parameter is the randomly generated 32-byte key used
+/// to encrypt the actual data.
+pub fn multi_recipient_encrypt<R: Read>(
+    reader: &mut R,
+    algorithm: SymmetricAlgorithm,
+    symmetric_key: &[u8],
+    recipients: &[RecipientInfo],
+    plaintext_len: u64,
+    compress: bool,
+) -> HbResult<Vec<(String, Vec<u8>)>> {
+    if recipients.is_empty() {
+        return Err(HbError::InvalidFormat("At least one recipient required".into()));
+    }
+
+    // First, encrypt the data once for the first recipient to get the ciphertext.
+    // We'll capture the base nonce and reuse it for subsequent copies.
+    // Actually, for a cleaner implementation: encrypt the content once, then
+    // re-write headers for each recipient wrapping the same symmetric key.
+
+    // Read all input
+    let mut plaintext = Vec::new();
+    reader.read_to_end(&mut plaintext).map_err(|e| HbError::Io(e.to_string()))?;
+
+    // Encrypt once to get the canonical encrypted output
+    let first = &recipients[0];
+    let first_params = EncryptParams {
+        algorithm,
+        wrapping: first.wrapping,
+        symmetric_key: symmetric_key.to_vec(),
+        kdf_params: None,
+        kdf_salt: None,
+        wrapped_key: first.wrapped_key.clone(),
+        ephemeral_public: first.ephemeral_public.clone(),
+        chunk_size: None,
+        compress,
+    };
+
+    let mut first_output = Vec::new();
+    {
+        let mut cursor = io::Cursor::new(&plaintext);
+        encrypt_stream(&mut cursor, &mut first_output, &first_params, plaintext_len, None)?;
+    }
+
+    let mut results = Vec::with_capacity(recipients.len());
+    results.push((first.label.clone(), first_output.clone()));
+
+    // For remaining recipients, read back the encrypted chunks from
+    // the first output and re-write with a new header.
+    if recipients.len() > 1 {
+        // Parse the first output to extract the header data
+        let mut first_cursor = io::Cursor::new(&first_output);
+        let header = read_header(&mut first_cursor)?;
+
+        // Remaining bytes after header are the encrypted chunks
+        let header_end = first_cursor.position() as usize;
+        let chunk_bytes = &first_output[header_end..];
+
+        for recipient in &recipients[1..] {
+            let params = EncryptParams {
+                algorithm,
+                wrapping: recipient.wrapping,
+                symmetric_key: symmetric_key.to_vec(),
+                kdf_params: None,
+                kdf_salt: None,
+                wrapped_key: recipient.wrapped_key.clone(),
+                ephemeral_public: recipient.ephemeral_public.clone(),
+                chunk_size: None,
+                compress,
+            };
+
+            let mut output = Vec::new();
+            write_header(&mut output, &params, &header.base_nonce, plaintext_len)?;
+            output.extend_from_slice(chunk_bytes);
+            results.push((recipient.label.clone(), output));
+        }
+    }
+
+    Ok(results)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -472,6 +612,8 @@ mod tests {
             kdf_salt: Some(salt.clone()),
             wrapped_key: None,
             ephemeral_public: None,
+            chunk_size: None,
+            compress: false,
         };
 
         write_header(&mut buf, &params, &base_nonce, 1024).unwrap();
@@ -500,6 +642,8 @@ mod tests {
             kdf_salt: None,
             wrapped_key: None,
             ephemeral_public: None,
+            chunk_size: None,
+            compress: false,
         };
 
         // Encrypt

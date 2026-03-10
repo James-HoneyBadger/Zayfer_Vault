@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from PySide6.QtCore import Qt, QSize
-from PySide6.QtGui import QIcon, QAction
+from PySide6.QtGui import QIcon, QAction, QKeySequence
 from PySide6.QtWidgets import (
     QMainWindow,
     QWidget,
@@ -23,7 +25,18 @@ from hb_zayfer.gui.decrypt_view import DecryptView
 from hb_zayfer.gui.keygen_view import KeygenView
 from hb_zayfer.gui.keyring_view import KeyringView
 from hb_zayfer.gui.contacts_view import ContactsView
+from hb_zayfer.gui.sign_view import SignView
+from hb_zayfer.gui.verify_view import VerifyView
+from hb_zayfer.gui.passgen_view import PasswordGenView
+from hb_zayfer.gui.messaging_view import MessagingView
+from hb_zayfer.gui.qr_view import QRExchangeView
+from hb_zayfer.gui.audit_view import AuditView
+from hb_zayfer.gui.backup_view import BackupView
 from hb_zayfer.gui.settings_view import SettingsView
+from hb_zayfer.gui.statusbar import StatusBar
+from hb_zayfer.gui.notifications import NotificationManager
+from hb_zayfer.gui.settings_manager import SettingsManager
+from hb_zayfer.gui.about_dialog import AboutDialog
 import hb_zayfer as hbz
 
 
@@ -32,13 +45,34 @@ class MainWindow(QMainWindow):
 
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle(f"HB_Zayfer Encryption Suite v{hbz.version()}")
+        
+        # Initialize settings manager
+        config_dir = Path.home() / ".hb_zayfer"
+        self.settings = SettingsManager(config_dir)
+        
+        # Initialize notification manager
+        self.notifications = NotificationManager(self)
+        
+        self.setWindowTitle(f"HB Zayfer Encryption Suite v{hbz.version()}")
         self.setMinimumSize(900, 600)
-        self.resize(1100, 700)
+        
+        # Restore window geometry from settings
+        width = self.settings.get("window.width", 1100)
+        height = self.settings.get("window.height", 700)
+        self.resize(width, height)
+        
+        x = self.settings.get("window.x")
+        y = self.settings.get("window.y")
+        if x is not None and y is not None:
+            self.move(x, y)
+        
+        if self.settings.get("window.maximized", False):
+            self.showMaximized()
 
         self._setup_menu()
         self._setup_ui()
         self._setup_statusbar()
+        self._setup_shortcuts()
 
     # ---------------------------------------------------------------
     # Menu bar
@@ -48,7 +82,22 @@ class MainWindow(QMainWindow):
         menu = self.menuBar()
 
         file_menu = menu.addMenu("&File")
-        file_menu.addAction("E&xit", self.close)
+        file_menu.addAction("E&xit", self.close, "Ctrl+Q")
+
+        view_menu = menu.addMenu("&View")
+        view_menu.addAction("&Encrypt", lambda: self.sidebar.setCurrentRow(0), "Alt+1")
+        view_menu.addAction("&Decrypt", lambda: self.sidebar.setCurrentRow(1), "Alt+2")
+        view_menu.addAction("Key &Generation", lambda: self.sidebar.setCurrentRow(2), "Alt+3")
+        view_menu.addAction("&Keyring", lambda: self.sidebar.setCurrentRow(3), "Alt+4")
+        view_menu.addAction("&Contacts", lambda: self.sidebar.setCurrentRow(4), "Alt+5")
+        view_menu.addAction("S&ign", lambda: self.sidebar.setCurrentRow(5), "Alt+6")
+        view_menu.addAction("&Verify", lambda: self.sidebar.setCurrentRow(6), "Alt+7")
+        view_menu.addAction("&Password Gen", lambda: self.sidebar.setCurrentRow(7), "Alt+8")
+        view_menu.addAction("&Messaging", lambda: self.sidebar.setCurrentRow(8), "Alt+9")
+        view_menu.addAction("Q&R Exchange", lambda: self.sidebar.setCurrentRow(9))
+        view_menu.addAction("&Settings", lambda: self.sidebar.setCurrentRow(10))
+        view_menu.addAction("&Audit Log", lambda: self.sidebar.setCurrentRow(11), "Alt+0")
+        view_menu.addAction("&Backup", lambda: self.sidebar.setCurrentRow(12))
 
         help_menu = menu.addMenu("&Help")
         about_action = QAction("&About", self)
@@ -56,15 +105,8 @@ class MainWindow(QMainWindow):
         help_menu.addAction(about_action)
 
     def _show_about(self) -> None:
-        QMessageBox.about(
-            self,
-            "About HB_Zayfer",
-            f"<h3>HB_Zayfer Encryption Suite</h3>"
-            f"<p>Version {hbz.version()}</p>"
-            f"<p>A full-featured encryption/decryption suite powered by Rust.</p>"
-            f"<p>Supports AES-256-GCM, ChaCha20-Poly1305, RSA, Ed25519,<br>"
-            f"X25519, OpenPGP, Argon2id, and scrypt.</p>",
-        )
+        dialog = AboutDialog(self)
+        dialog.exec()
 
     # ---------------------------------------------------------------
     # Central UI
@@ -81,25 +123,32 @@ class MainWindow(QMainWindow):
         # Sidebar
         self.sidebar = QListWidget()
         self.sidebar.setObjectName("sidebar")
-        self.sidebar.setFixedWidth(200)
-        self.sidebar.setIconSize(QSize(20, 20))
-        self.sidebar.setSpacing(0)
+        self.sidebar.setFixedWidth(180)
+        self.sidebar.setIconSize(QSize(18, 18))
+        self.sidebar.setSpacing(2)
         self.sidebar.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.sidebar.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
         pages = [
-            ("\U0001f510  Encrypt", "Encrypt files or text"),
-            ("\U0001f513  Decrypt", "Decrypt files or text"),
-            ("\U0001f511  Key Generation", "Generate key pairs"),
-            ("\U0001f4e6  Keyring", "Manage stored keys"),
-            ("\U0001f465  Contacts", "Manage contacts"),
-            ("\u2699\ufe0f  Settings", "Application settings"),
+            ("🔐 Encrypt", "Encrypt files or text"),
+            ("🔓 Decrypt", "Decrypt files or text"),
+            ("🔑 Key Gen", "Generate key pairs"),
+            ("📦 Keyring", "Manage stored keys"),
+            ("👥 Contacts", "Manage contacts"),
+            ("✍️ Sign", "Sign files or messages"),
+            ("✔️ Verify", "Verify signatures"),
+            ("🔐 PassGen", "Password & passphrase generator"),
+            ("💬 Messaging", "Secure encrypted messaging"),
+            ("📱 QR Exchange", "Share keys via QR codes"),
+            ("⚙️ Settings", "Application settings"),
+            ("📋 Audit Log", "View audit trail"),
+            ("💾 Backup", "Backup & restore keys"),
         ]
 
         for name, tooltip in pages:
             item = QListWidgetItem(name)
             item.setToolTip(tooltip)
-            item.setSizeHint(QSize(190, 44))
+            item.setSizeHint(QSize(178, 38))
             item.setFlags(
                 Qt.ItemFlag.ItemIsSelectable
                 | Qt.ItemFlag.ItemIsEnabled
@@ -108,9 +157,6 @@ class MainWindow(QMainWindow):
 
         self.sidebar.setCurrentRow(0)
         self.sidebar.currentRowChanged.connect(self._on_page_changed)
-        self.sidebar.itemClicked.connect(
-            lambda item: self._on_page_changed(self.sidebar.row(item))
-        )
 
         # Stacked widget (views)
         self.stack = QStackedWidget()
@@ -119,29 +165,133 @@ class MainWindow(QMainWindow):
         self.keygen_view = KeygenView()
         self.keyring_view = KeyringView()
         self.contacts_view = ContactsView()
+        self.sign_view = SignView()
+        self.verify_view = VerifyView()
+        self.passgen_view = PasswordGenView()
+        self.messaging_view = MessagingView()
+        self.qr_view = QRExchangeView()
         self.settings_view = SettingsView()
+        self.audit_view = AuditView()
+        self.backup_view = BackupView()
 
         self.stack.addWidget(self.encrypt_view)
         self.stack.addWidget(self.decrypt_view)
         self.stack.addWidget(self.keygen_view)
         self.stack.addWidget(self.keyring_view)
         self.stack.addWidget(self.contacts_view)
+        self.stack.addWidget(self.sign_view)
+        self.stack.addWidget(self.verify_view)
+        self.stack.addWidget(self.passgen_view)
+        self.stack.addWidget(self.messaging_view)
+        self.stack.addWidget(self.qr_view)
         self.stack.addWidget(self.settings_view)
+        self.stack.addWidget(self.audit_view)
+        self.stack.addWidget(self.backup_view)
 
         layout.addWidget(self.sidebar)
         layout.addWidget(self.stack, 1)
 
     def _on_page_changed(self, index: int) -> None:
         self.stack.setCurrentIndex(index)
-        # Refresh data views when switching
-        if index == 3:
+        # Refresh data views when switching and update status bar
+        view_names = ["Encrypt", "Decrypt", "Key Generation", "Keyring", "Contacts", "Sign", "Verify", "Password Gen", "Messaging", "QR Exchange", "Settings", "Audit Log", "Backup"]
+        if index < len(view_names):
+            self.status_bar.set_message(f"Viewing: {view_names[index]}")
+        
+        if index == 0:  # Encrypt - apply default cipher from settings
+            self._apply_settings_to_encrypt()
+            self.status_bar.clear_count()
+        elif index == 3:  # Keyring
             self.keyring_view.refresh()
-        elif index == 4:
+            if hasattr(self.keyring_view, 'all_keys'):
+                self.status_bar.set_count("Keys", len(self.keyring_view.all_keys))
+        elif index == 4:  # Contacts
             self.contacts_view.refresh()
+            if hasattr(self.contacts_view, 'all_contacts'):
+                self.status_bar.set_count("Contacts", len(self.contacts_view.all_contacts))
+        elif index == 11:  # Audit Log
+            self.audit_view.refresh()
+            self.status_bar.clear_count()
+        else:
+            self.status_bar.clear_count()
 
     # ---------------------------------------------------------------
     # Status bar
     # ---------------------------------------------------------------
 
     def _setup_statusbar(self) -> None:
-        self.statusBar().showMessage("Ready")
+        self.status_bar = StatusBar()
+        self.setStatusBar(self.status_bar)
+        self.status_bar.set_message("Ready")
+    
+    # ---------------------------------------------------------------
+    # Keyboard Shortcuts
+    # ---------------------------------------------------------------
+    
+    def _setup_shortcuts(self) -> None:
+        """Setup additional keyboard shortcuts."""
+        # Ctrl+F for search (when in keyring or contacts)
+        search_shortcut = QKeySequence("Ctrl+F")
+        search_action = QAction(self)
+        search_action.setShortcut(search_shortcut)
+        search_action.triggered.connect(self._focus_search)
+        self.addAction(search_action)
+        
+        # Ctrl+R for refresh
+        refresh_shortcut = QKeySequence("Ctrl+R")
+        refresh_action = QAction(self)
+        refresh_action.setShortcut(refresh_shortcut)
+        refresh_action.triggered.connect(self._refresh_current_view)
+        self.addAction(refresh_action)
+    
+    def _focus_search(self) -> None:
+        """Focus search box in current view if available."""
+        current_index = self.stack.currentIndex()
+        if current_index == 3:  # Keyring
+            self.keyring_view.search_input.setFocus()
+            self.keyring_view.search_input.selectAll()
+        elif current_index == 4:  # Contacts
+            self.contacts_view.search_input.setFocus()
+            self.contacts_view.search_input.selectAll()
+    
+    def _apply_settings_to_encrypt(self) -> None:
+        """Apply default cipher from settings to encrypt view."""
+        from hb_zayfer.gui.settings_view import _load_config
+        cfg = _load_config()
+        cipher = cfg.get("cipher", "AES-256-GCM")
+        idx = self.encrypt_view.algo_combo.findText(cipher)
+        if idx >= 0:
+            self.encrypt_view.algo_combo.setCurrentIndex(idx)
+        idx2 = self.encrypt_view.text_algo.findText(cipher)
+        if idx2 >= 0:
+            self.encrypt_view.text_algo.setCurrentIndex(idx2)
+    
+    def _refresh_current_view(self) -> None:
+        """Refresh current view if supported."""
+        current_index = self.stack.currentIndex()
+        if current_index == 3:  # Keyring
+            self.keyring_view.refresh()
+            self.notifications.show_info("Keyring refreshed")
+        elif current_index == 4:  # Contacts
+            self.contacts_view.refresh()
+            self.notifications.show_info("Contacts refreshed")
+    
+    # ---------------------------------------------------------------
+    # Window events
+    # ---------------------------------------------------------------
+    
+    def closeEvent(self, event) -> None:
+        """Save settings before closing."""
+        # Save window geometry
+        self.settings.set("window.width", self.width())
+        self.settings.set("window.height", self.height())
+        self.settings.set("window.x", self.x())
+        self.settings.set("window.y", self.y())
+        self.settings.set("window.maximized", self.isMaximized())
+        
+        # Save theme
+        from .theme import Theme
+        self.settings.set("theme", "dark" if Theme.is_dark_mode() else "light")
+        
+        self.settings.save()
+        event.accept()

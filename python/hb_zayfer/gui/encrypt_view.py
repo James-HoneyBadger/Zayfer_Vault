@@ -18,10 +18,65 @@ from PySide6.QtWidgets import (
     QProgressBar,
     QMessageBox,
     QTabWidget,
+    QCheckBox,
+    QCompleter,
+    QApplication,
 )
 
 import hb_zayfer as hbz
+from hb_zayfer.gui.clipboard import secure_copy
 from hb_zayfer.gui.workers import CryptoWorker
+from hb_zayfer.gui.password_strength import PasswordStrengthMeter
+from hb_zayfer.gui.dragdrop import DragDropFileInput
+from hb_zayfer.gui.audit_utils import log_file_encrypted
+from hb_zayfer.gui.theme import Theme
+
+
+def _load_kdf_settings() -> dict:
+    """Load KDF params from config.json for encrypt operations."""
+    import json
+    from pathlib import Path
+    try:
+        ks = hbz.KeyStore()
+        p = Path(ks.base_path) / "config.json"
+        if p.exists():
+            with open(p, encoding="utf-8") as f:
+                cfg = json.load(f)
+            kdf_name = cfg.get("kdf", "Argon2id")
+            if kdf_name.lower() == "scrypt":
+                return {
+                    "kdf": "scrypt",
+                    "kdf_log_n": cfg.get("scrypt_log_n", 15),
+                    "kdf_r": cfg.get("scrypt_r", 8),
+                    "kdf_p": cfg.get("scrypt_p", 1),
+                }
+            else:
+                mem = cfg.get("argon2_memory_mib", 64)
+                iters = cfg.get("argon2_iterations", 3)
+                return {
+                    "kdf": "argon2id",
+                    "kdf_memory_kib": mem * 1024,
+                    "kdf_iterations": iters,
+                }
+    except Exception:
+        pass
+    return {}
+
+
+def _load_default_cipher() -> str:
+    """Load default cipher from config.json. Returns combo-box text value."""
+    import json
+    from pathlib import Path
+    try:
+        ks = hbz.KeyStore()
+        p = Path(ks.base_path) / "config.json"
+        if p.exists():
+            with open(p, encoding="utf-8") as f:
+                cfg = json.load(f)
+            return cfg.get("cipher", "AES-256-GCM")
+    except Exception:
+        pass
+    return "AES-256-GCM"
 
 
 class EncryptView(QWidget):
@@ -33,10 +88,8 @@ class EncryptView(QWidget):
 
     def _setup_ui(self) -> None:
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 20, 20, 20)
-
-        title = QLabel("<h2>Encrypt</h2>")
-        layout.addWidget(title)
+        layout.setContentsMargins(16, 12, 16, 12)
+        layout.setSpacing(12)
 
         # Tabs: File / Text
         self.tabs = QTabWidget()
@@ -56,48 +109,59 @@ class EncryptView(QWidget):
     def _build_file_tab(self) -> QWidget:
         w = QWidget()
         layout = QVBoxLayout(w)
+        layout.setSpacing(10)
 
         # Input file
         row = QHBoxLayout()
-        row.addWidget(QLabel("Input:"))
-        self.file_input = QLineEdit()
-        self.file_input.setPlaceholderText("Select file to encrypt...")
+        row.setSpacing(8)
+        row.addWidget(QLabel("Input file:"))
+        self.file_input = DragDropFileInput(placeholder="Drop file or browse...")
         row.addWidget(self.file_input, 1)
-        browse = QPushButton("Browse...")
+        browse = QPushButton("Browse")
+        browse.setMaximumWidth(80)
         browse.clicked.connect(self._browse_input)
         row.addWidget(browse)
         layout.addLayout(row)
 
         # Output file
         row2 = QHBoxLayout()
-        row2.addWidget(QLabel("Output:"))
+        row2.setSpacing(8)
+        row2.addWidget(QLabel("Output file:"))
         self.file_output = QLineEdit()
-        self.file_output.setPlaceholderText("Output path (default: <input>.hbzf)")
+        self.file_output.setPlaceholderText("Auto: input.hbzf")
         row2.addWidget(self.file_output, 1)
-        browse2 = QPushButton("Browse...")
+        browse2 = QPushButton("Browse")
+        browse2.setMaximumWidth(80)
         browse2.clicked.connect(self._browse_output)
         row2.addWidget(browse2)
         layout.addLayout(row2)
 
         # Options
-        opts = QGroupBox("Options")
+        opts = QGroupBox("Encryption Options")
         opts_layout = QVBoxLayout(opts)
+        opts_layout.setSpacing(10)
 
         # Algorithm
         algo_row = QHBoxLayout()
-        algo_row.addWidget(QLabel("Cipher:"))
+        algo_row.setSpacing(8)
+        algo_row.addWidget(QLabel("Algorithm:"))
         self.algo_combo = QComboBox()
         self.algo_combo.addItems(["AES-256-GCM", "ChaCha20-Poly1305"])
+        _default_cipher = _load_default_cipher()
+        _idx = self.algo_combo.findText(_default_cipher)
+        if _idx >= 0:
+            self.algo_combo.setCurrentIndex(_idx)
         algo_row.addWidget(self.algo_combo)
         algo_row.addStretch()
         opts_layout.addLayout(algo_row)
 
         # Wrapping mode
         wrap_row = QHBoxLayout()
+        wrap_row.setSpacing(8)
         self.wrap_password = QRadioButton("Password")
         self.wrap_password.setChecked(True)
-        self.wrap_recipient = QRadioButton("Recipient key")
-        wrap_row.addWidget(QLabel("Mode:"))
+        self.wrap_recipient = QRadioButton("Public key")
+        wrap_row.addWidget(QLabel("Encrypt with:"))
         wrap_row.addWidget(self.wrap_password)
         wrap_row.addWidget(self.wrap_recipient)
         wrap_row.addStretch()
@@ -111,6 +175,30 @@ class EncryptView(QWidget):
         pw_row.addWidget(self.passphrase_input, 1)
         opts_layout.addLayout(pw_row)
 
+        # Passphrase confirmation
+        pw_confirm_row = QHBoxLayout()
+        pw_confirm_row.addWidget(QLabel("Confirm:"))
+        self.passphrase_confirm = QLineEdit()
+        self.passphrase_confirm.setEchoMode(QLineEdit.EchoMode.Password)
+        self.passphrase_confirm.setPlaceholderText("Re-enter passphrase")
+        pw_confirm_row.addWidget(self.passphrase_confirm, 1)
+        opts_layout.addLayout(pw_confirm_row)
+
+        # Password strength meter for file encryption
+        self.file_strength_meter = PasswordStrengthMeter()
+        opts_layout.addWidget(self.file_strength_meter)
+        self.passphrase_input.textChanged.connect(lambda: self.file_strength_meter.update_strength(self.passphrase_input.text()))
+        
+        # Match indicator
+        self.match_label = QLabel("")
+        opts_layout.addWidget(self.match_label)
+        self.passphrase_confirm.textChanged.connect(self._check_passphrase_match)
+
+        # Show password toggle
+        self.show_password_check = QCheckBox("Show passphrases")
+        self.show_password_check.stateChanged.connect(self._toggle_password_visibility)
+        opts_layout.addWidget(self.show_password_check)
+
         # Recipient
         rcpt_row = QHBoxLayout()
         rcpt_row.addWidget(QLabel("Recipient:"))
@@ -119,15 +207,21 @@ class EncryptView(QWidget):
         self.recipient_input.setEnabled(False)
         rcpt_row.addWidget(self.recipient_input, 1)
         opts_layout.addLayout(rcpt_row)
+        
+        # Populate recipient autocomplete from contacts and keyring
+        self._setup_recipient_completer()
 
         self.wrap_password.toggled.connect(lambda c: self.passphrase_input.setEnabled(c))
+        self.wrap_password.toggled.connect(lambda c: self.passphrase_confirm.setEnabled(c))
+        self.wrap_password.toggled.connect(lambda c: self.file_strength_meter.setVisible(c))
+        self.wrap_password.toggled.connect(lambda c: self.match_label.setVisible(c))
         self.wrap_password.toggled.connect(lambda c: self.recipient_input.setEnabled(not c))
 
         layout.addWidget(opts)
 
         # Encrypt button
         self.encrypt_btn = QPushButton("Encrypt File")
-        self.encrypt_btn.setStyleSheet("QPushButton { background-color: #007acc; font-weight: bold; font-size: 14px; padding: 10px; }")
+        self.encrypt_btn.setStyleSheet(Theme.get_primary_button_style())
         self.encrypt_btn.clicked.connect(self._do_encrypt_file)
         layout.addWidget(self.encrypt_btn)
 
@@ -152,16 +246,43 @@ class EncryptView(QWidget):
         pw_row.addWidget(self.text_passphrase, 1)
         layout.addLayout(pw_row)
 
+        # Confirmation for text
+        pw_confirm_row = QHBoxLayout()
+        pw_confirm_row.addWidget(QLabel("Confirm:"))
+        self.text_passphrase_confirm = QLineEdit()
+        self.text_passphrase_confirm.setEchoMode(QLineEdit.EchoMode.Password)
+        self.text_passphrase_confirm.setPlaceholderText("Re-enter passphrase")
+        pw_confirm_row.addWidget(self.text_passphrase_confirm, 1)
+        layout.addLayout(pw_confirm_row)
+
+        # Password strength meter for text encryption
+        self.text_strength_meter = PasswordStrengthMeter()
+        layout.addWidget(self.text_strength_meter)
+        self.text_passphrase.textChanged.connect(lambda: self.text_strength_meter.update_strength(self.text_passphrase.text()))
+        
+        # Match indicator for text tab
+        self.text_match_label = QLabel("")
+        layout.addWidget(self.text_match_label)
+        self.text_passphrase_confirm.textChanged.connect(self._check_text_passphrase_match)
+
+        # Show password toggle for text tab
+        self.show_text_password_check = QCheckBox("Show passphrases")
+        self.show_text_password_check.stateChanged.connect(self._toggle_text_password_visibility)
+        layout.addWidget(self.show_text_password_check)
+
         algo_row = QHBoxLayout()
         algo_row.addWidget(QLabel("Cipher:"))
         self.text_algo = QComboBox()
         self.text_algo.addItems(["AES-256-GCM", "ChaCha20-Poly1305"])
+        _idx2 = self.text_algo.findText(_load_default_cipher())
+        if _idx2 >= 0:
+            self.text_algo.setCurrentIndex(_idx2)
         algo_row.addWidget(self.text_algo)
         algo_row.addStretch()
         layout.addLayout(algo_row)
 
         btn = QPushButton("Encrypt Text")
-        btn.setStyleSheet("QPushButton { background-color: #007acc; font-weight: bold; }")
+        btn.setStyleSheet(Theme.get_primary_button_style())
         btn.clicked.connect(self._do_encrypt_text)
         layout.addWidget(btn)
 
@@ -170,9 +291,86 @@ class EncryptView(QWidget):
         self.text_output.setReadOnly(True)
         layout.addWidget(self.text_output, 1)
 
+        # Copy output button
+        copy_btn = QPushButton("📋 Copy Output")
+        copy_btn.clicked.connect(self._copy_encrypted_output)
+        layout.addWidget(copy_btn)
+
         return w
 
     # ---- Actions ----
+
+    def _toggle_password_visibility(self, state: int) -> None:
+        """Toggle visibility of file tab passphrases."""
+        mode = QLineEdit.EchoMode.Normal if state else QLineEdit.EchoMode.Password
+        self.passphrase_input.setEchoMode(mode)
+        self.passphrase_confirm.setEchoMode(mode)
+
+    def _toggle_text_password_visibility(self, state: int) -> None:
+        """Toggle visibility of text tab passphrases."""
+        mode = QLineEdit.EchoMode.Normal if state else QLineEdit.EchoMode.Password
+        self.text_passphrase.setEchoMode(mode)
+        self.text_passphrase_confirm.setEchoMode(mode)
+
+    def _check_passphrase_match(self) -> None:
+        """Check if passphrase and confirmation match."""
+        self._update_match_label(
+            self.passphrase_input.text(),
+            self.passphrase_confirm.text(),
+            self.match_label,
+        )
+
+    def _check_text_passphrase_match(self) -> None:
+        """Check if text passphrase and confirmation match."""
+        self._update_match_label(
+            self.text_passphrase.text(),
+            self.text_passphrase_confirm.text(),
+            self.text_match_label,
+        )
+
+    @staticmethod
+    def _update_match_label(pw: str, confirm: str, label: QLabel) -> None:
+        """Update a match indicator label."""
+        if not confirm:
+            label.setText("")
+            return
+        if pw == confirm:
+            label.setText("✓ Passphrases match")
+            label.setStyleSheet("color: #28a745;")
+        else:
+            label.setText("✗ Passphrases do not match")
+            label.setStyleSheet("color: #dc3545;")
+
+    def _setup_recipient_completer(self) -> None:
+        """Populate recipient autocomplete from contacts and keyring."""
+        completions: list[str] = []
+        try:
+            ks = hbz.KeyStore()
+            for c in ks.list_contacts():
+                completions.append(c.name)
+                if c.email:
+                    completions.append(c.email)
+            for k in ks.list_keys():
+                if k.has_public:
+                    completions.append(f"{k.label} ({k.fingerprint[:16]}...)")
+        except Exception:
+            pass
+        completer = QCompleter(completions, self)
+        completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+        completer.setFilterMode(Qt.MatchFlag.MatchContains)
+        self.recipient_input.setCompleter(completer)
+
+    def _notify(self, method: str, message: str) -> None:
+        """Show a notification via the main window's toast system."""
+        w = self.window()
+        if hasattr(w, "notifications"):
+            getattr(w.notifications, method)(message)
+            return
+        # Fallback to message box
+        if method == "show_error":
+            QMessageBox.critical(self, "Error", message)
+        else:
+            QMessageBox.information(self, "Info", message)
 
     def _browse_input(self) -> None:
         path, _ = QFileDialog.getOpenFileName(self, "Select file to encrypt")
@@ -200,9 +398,14 @@ class EncryptView(QWidget):
             if not pw:
                 QMessageBox.warning(self, "Error", "Please enter a passphrase.")
                 return
+            confirm = self.passphrase_confirm.text()
+            if pw != confirm:
+                QMessageBox.warning(self, "Error", "Passphrases do not match.")
+                return
             worker = CryptoWorker(
                 hbz.encrypt_file, inp, out,
                 algorithm=algo, wrapping="password", passphrase=pw.encode("utf-8"),
+                **_load_kdf_settings(),
             )
         else:
             rcpt = self.recipient_input.text().strip()
@@ -247,10 +450,28 @@ class EncryptView(QWidget):
         QThreadPool.globalInstance().start(worker)
 
     def _on_encrypt_done(self, path: str) -> None:
-        QMessageBox.information(self, "Success", f"File encrypted:\n{path}")
+        inp = self.file_input.text().strip()
+        algo = "AES-256-GCM" if self.algo_combo.currentIndex() == 0 else "ChaCha20-Poly1305"
+        size = None
+        try:
+            from pathlib import Path
+            if inp:
+                size = Path(inp).stat().st_size
+        except Exception:
+            pass
+        if inp:
+            log_file_encrypted(algo, inp, size)
+        
+        self._notify("show_success", f"File encrypted: {path}")
+        # Clear form after success
+        self.file_input.clear()
+        self.file_output.clear()
+        self.passphrase_input.clear()
+        self.passphrase_confirm.clear()
+        self.match_label.clear()
 
     def _on_encrypt_error(self, error: str) -> None:
-        QMessageBox.critical(self, "Encryption Error", error)
+        self._notify("show_error", f"Encryption error: {error}")
 
     def _do_encrypt_text(self) -> None:
         import base64
@@ -263,16 +484,41 @@ class EncryptView(QWidget):
         if not pw:
             QMessageBox.warning(self, "Error", "Please enter a passphrase.")
             return
+        confirm = self.text_passphrase_confirm.text()
+        if pw != confirm:
+            QMessageBox.warning(self, "Error", "Passphrases do not match.")
+            return
 
         algo = "aes" if self.text_algo.currentIndex() == 0 else "chacha"
+        kdf_kw = _load_kdf_settings()
+        text_bytes = text.encode("utf-8")
+        pw_bytes = pw.encode("utf-8")
 
-        try:
-            encrypted = hbz.encrypt_data(
-                text.encode("utf-8"),
-                algorithm=algo,
-                wrapping="password",
-                passphrase=pw.encode("utf-8"),
+        def _encrypt_text_work():
+            return hbz.encrypt_data(
+                text_bytes, algorithm=algo, wrapping="password",
+                passphrase=pw_bytes, **kdf_kw,
             )
-            self.text_output.setPlainText(base64.b64encode(encrypted).decode())
-        except Exception as e:
-            QMessageBox.critical(self, "Error", str(e))
+
+        worker = CryptoWorker(_encrypt_text_work)
+        worker.signals.result.connect(
+            lambda encrypted: self._on_text_encrypt_done(base64.b64encode(encrypted).decode())
+        )
+        worker.signals.error.connect(lambda err: QMessageBox.critical(self, "Error", err))
+        QThreadPool.globalInstance().start(worker)
+
+    def _on_text_encrypt_done(self, b64_output: str) -> None:
+        self.text_output.setPlainText(b64_output)
+        self._notify("show_success", "Text encrypted successfully")
+        self.text_passphrase.clear()
+        self.text_passphrase_confirm.clear()
+        self.text_match_label.clear()
+
+    def _copy_encrypted_output(self) -> None:
+        """Copy encrypted output to clipboard."""
+        text = self.text_output.toPlainText()
+        if not text:
+            self._notify("show_warning", "Nothing to copy")
+            return
+        secure_copy(text)
+        self._notify("show_success", "Encrypted output copied to clipboard")

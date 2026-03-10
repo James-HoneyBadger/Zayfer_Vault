@@ -17,10 +17,16 @@ from PySide6.QtWidgets import (
     QProgressBar,
     QMessageBox,
     QTabWidget,
+    QCheckBox,
+    QApplication,
 )
 
 import hb_zayfer as hbz
+from hb_zayfer.gui.clipboard import secure_copy
 from hb_zayfer.gui.workers import CryptoWorker
+from hb_zayfer.gui.dragdrop import DragDropFileInput
+from hb_zayfer.gui.audit_utils import log_file_decrypted
+from hb_zayfer.gui.theme import Theme
 
 
 class DecryptView(QWidget):
@@ -32,10 +38,8 @@ class DecryptView(QWidget):
 
     def _setup_ui(self) -> None:
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 20, 20, 20)
-
-        title = QLabel("<h2>Decrypt</h2>")
-        layout.addWidget(title)
+        layout.setContentsMargins(16, 12, 16, 12)
+        layout.setSpacing(12)
 
         self.tabs = QTabWidget()
         self.tabs.addTab(self._build_file_tab(), "File")
@@ -53,37 +57,42 @@ class DecryptView(QWidget):
     def _build_file_tab(self) -> QWidget:
         w = QWidget()
         layout = QVBoxLayout(w)
+        layout.setSpacing(10)
 
         # Input file
         row = QHBoxLayout()
-        row.addWidget(QLabel("Input:"))
-        self.file_input = QLineEdit()
-        self.file_input.setPlaceholderText("Select HBZF file to decrypt...")
+        row.setSpacing(8)
+        row.addWidget(QLabel("Input file:"))
+        self.file_input = DragDropFileInput(placeholder="Drop .hbzf file or browse...")
         row.addWidget(self.file_input, 1)
-        browse = QPushButton("Browse...")
+        browse = QPushButton("Browse")
+        browse.setMaximumWidth(80)
         browse.clicked.connect(self._browse_input)
         row.addWidget(browse)
         layout.addLayout(row)
 
         # Output file
         row2 = QHBoxLayout()
-        row2.addWidget(QLabel("Output:"))
+        row2.setSpacing(8)
+        row2.addWidget(QLabel("Output file:"))
         self.file_output = QLineEdit()
-        self.file_output.setPlaceholderText("Output path (auto-detected)")
+        self.file_output.setPlaceholderText("Auto-detected from input")
         row2.addWidget(self.file_output, 1)
-        browse2 = QPushButton("Browse...")
+        browse2 = QPushButton("Browse")
+        browse2.setMaximumWidth(80)
         browse2.clicked.connect(self._browse_output)
         row2.addWidget(browse2)
         layout.addLayout(row2)
 
         # Header info
         self.header_label = QLabel("")
-        self.header_label.setStyleSheet("color: #8888aa; font-style: italic;")
+        self.header_label.setStyleSheet("color: palette(mid); font-style: italic; font-size: 11px;")
         layout.addWidget(self.header_label)
 
         # Key material
         opts = QGroupBox("Decryption Key")
         opts_layout = QVBoxLayout(opts)
+        opts_layout.setSpacing(10)
 
         pw_row = QHBoxLayout()
         pw_row.addWidget(QLabel("Passphrase:"))
@@ -93,17 +102,28 @@ class DecryptView(QWidget):
         opts_layout.addLayout(pw_row)
 
         key_row = QHBoxLayout()
-        key_row.addWidget(QLabel("Key (fingerprint):"))
-        self.key_input = QLineEdit()
-        self.key_input.setPlaceholderText("For RSA/X25519 modes — fingerprint prefix")
-        key_row.addWidget(self.key_input, 1)
+        key_row.addWidget(QLabel("Private key:"))
+        self.key_combo = QComboBox()
+        self.key_combo.setPlaceholderText("Select key for RSA/X25519 encrypted files")
+        self.key_combo.setVisible(False)
+        key_row.addWidget(self.key_combo, 1)
         opts_layout.addLayout(key_row)
+
+        self.key_warning = QLabel("⚠ No key selected - file will not decrypt")
+        self.key_warning.setStyleSheet("color: #dc3545; font-weight: bold;")
+        self.key_warning.setVisible(False)
+        opts_layout.addWidget(self.key_warning)
+
+        # Show password toggle
+        self.show_password_check = QCheckBox("Show passphrase")
+        self.show_password_check.stateChanged.connect(self._toggle_password_visibility)
+        opts_layout.addWidget(self.show_password_check)
 
         layout.addWidget(opts)
 
         # Decrypt button
         self.decrypt_btn = QPushButton("Decrypt File")
-        self.decrypt_btn.setStyleSheet("QPushButton { background-color: #28a745; font-weight: bold; font-size: 14px; padding: 10px; }")
+        self.decrypt_btn.setStyleSheet(Theme.get_success_button_style())
         self.decrypt_btn.clicked.connect(self._do_decrypt_file)
         layout.addWidget(self.decrypt_btn)
 
@@ -127,8 +147,13 @@ class DecryptView(QWidget):
         pw_row.addWidget(self.text_passphrase, 1)
         layout.addLayout(pw_row)
 
+        # Show password toggle for text tab
+        self.show_text_password_check = QCheckBox("Show passphrase")
+        self.show_text_password_check.stateChanged.connect(self._toggle_text_password_visibility)
+        layout.addWidget(self.show_text_password_check)
+
         btn = QPushButton("Decrypt Text")
-        btn.setStyleSheet("QPushButton { background-color: #28a745; font-weight: bold; }")
+        btn.setStyleSheet(Theme.get_success_button_style())
         btn.clicked.connect(self._do_decrypt_text)
         layout.addWidget(btn)
 
@@ -137,9 +162,24 @@ class DecryptView(QWidget):
         self.text_output.setReadOnly(True)
         layout.addWidget(self.text_output, 1)
 
+        # Copy output button
+        copy_btn = QPushButton("📋 Copy Output")
+        copy_btn.clicked.connect(self._copy_decrypted_output)
+        layout.addWidget(copy_btn)
+
         return w
 
     # ---- Actions ----
+
+    def _toggle_password_visibility(self, state: int) -> None:
+        """Toggle visibility of file tab passphrase."""
+        mode = QLineEdit.EchoMode.Normal if state else QLineEdit.EchoMode.Password
+        self.passphrase_input.setEchoMode(mode)
+
+    def _toggle_text_password_visibility(self, state: int) -> None:
+        """Toggle visibility of text tab passphrase."""
+        mode = QLineEdit.EchoMode.Normal if state else QLineEdit.EchoMode.Password
+        self.text_passphrase.setEchoMode(mode)
 
     def _browse_input(self) -> None:
         path, _ = QFileDialog.getOpenFileName(self, "Select HBZF file", filter="HBZF files (*.hbzf);;All files (*)")
@@ -161,14 +201,46 @@ class DecryptView(QWidget):
                 head = f.read(8)
             if len(head) < 8 or head[:4] != b"HBZF":
                 self.header_label.setText("Not a valid HBZF file")
+                self.key_combo.setVisible(False)
+                self.key_warning.setVisible(False)
                 return
             algos = {0x01: "AES-256-GCM", 0x02: "ChaCha20-Poly1305"}
             wraps = {0x00: "Password", 0x01: "RSA-OAEP", 0x02: "X25519-ECDH"}
             algo = algos.get(head[5], f"0x{head[5]:02x}")
             wrap = wraps.get(head[7], f"0x{head[7]:02x}")
             self.header_label.setText(f"Format: HBZF v{head[4]}  |  Cipher: {algo}  |  Mode: {wrap}")
+            
+            # If asymmetric, populate key selector
+            if head[7] in (0x01, 0x02):  # RSA or X25519
+                self.key_combo.setVisible(True)
+                self.key_combo.clear()
+                try:
+                    ks = hbz.KeyStore()
+                    all_keys = [k for k in ks.list_keys() if k.has_private]
+                    if head[7] == 0x01:  # RSA
+                        keys = [k for k in all_keys if k.algorithm in ("RSA-2048", "RSA-4096")]
+                    else:  # X25519
+                        keys = [k for k in all_keys if k.algorithm == "X25519"]
+                    
+                    if not keys:
+                        self.key_combo.addItem("No suitable keys found")
+                        self.key_warning.setText(f"⚠ No {wrap} private keys in keyring")
+                        self.key_warning.setVisible(True)
+                    else:
+                        for k in keys:
+                            fp_short = k.fingerprint[:16]
+                            self.key_combo.addItem(f"{k.label} ({fp_short}...)", k.fingerprint)
+                        self.key_warning.setVisible(False)
+                except Exception:
+                    self.key_combo.addItem("Error loading keys")
+                    self.key_warning.setVisible(True)
+            else:
+                self.key_combo.setVisible(False)
+                self.key_warning.setVisible(False)
         except Exception:
             self.header_label.setText("")
+            self.key_combo.setVisible(False)
+            self.key_warning.setVisible(False)
 
     def _do_decrypt_file(self) -> None:
         inp = self.file_input.text().strip()
@@ -198,22 +270,22 @@ class DecryptView(QWidget):
                 return
             worker = CryptoWorker(hbz.decrypt_file, inp, out, passphrase=pw.encode("utf-8"))
         elif wrapping_id in (0x01, 0x02):  # RSA or X25519
-            fp_hint = self.key_input.text().strip()
             pw = self.passphrase_input.text()
             if not pw:
                 QMessageBox.warning(self, "Error", "Enter the key passphrase.")
                 return
+            
+            # Get selected key fingerprint
+            if self.key_combo.currentIndex() < 0:
+                QMessageBox.warning(self, "Error", "Please select a private key.")
+                return
+            fp = self.key_combo.currentData()
+            if not fp:
+                QMessageBox.warning(self, "Error", "No suitable key selected.")
+                return
+            
             try:
                 ks = hbz.KeyStore()
-                fps = ks.resolve_recipient(fp_hint) if fp_hint else []
-                if not fps:
-                    # List all private keys
-                    all_keys = [k for k in ks.list_keys() if k.has_private]
-                    if not all_keys:
-                        QMessageBox.warning(self, "Error", "No private keys found in keyring.")
-                        return
-                    fps = [all_keys[0].fingerprint]
-                fp = fps[0]
                 priv_data = ks.load_private_key(fp, pw.encode("utf-8"))
                 if wrapping_id == 0x01:
                     worker = CryptoWorker(hbz.decrypt_file, inp, out, private_pem=priv_data.decode())
@@ -237,10 +309,36 @@ class DecryptView(QWidget):
         QThreadPool.globalInstance().start(worker)
 
     def _on_decrypt_done(self, path: str) -> None:
-        QMessageBox.information(self, "Success", f"File decrypted:\n{path}")
+        inp = self.file_input.text().strip()
+        algo = "UNKNOWN"
+        try:
+            with open(inp, "rb") as f:
+                head = f.read(8)
+            if len(head) >= 6:
+                algo = {0x01: "AES-256-GCM", 0x02: "ChaCha20-Poly1305"}.get(head[5], "UNKNOWN")
+        except Exception:
+            pass
+
+        size = None
+        try:
+            from pathlib import Path
+            size = Path(path).stat().st_size
+        except Exception:
+            pass
+        if inp:
+            log_file_decrypted(algo, inp, size)
+        
+        self._notify("show_success", f"File decrypted: {path}")
+        # Clear form after success
+        self.file_input.clear()
+        self.file_output.clear()
+        self.passphrase_input.clear()
+        self.header_label.clear()
+        self.key_combo.setVisible(False)
+        self.key_warning.setVisible(False)
 
     def _on_decrypt_error(self, error: str) -> None:
-        QMessageBox.critical(self, "Decryption Error", error)
+        self._notify("show_error", f"Decryption error: {error}")
 
     def _do_decrypt_text(self) -> None:
         import base64
@@ -254,9 +352,41 @@ class DecryptView(QWidget):
             QMessageBox.warning(self, "Error", "Enter the passphrase.")
             return
 
-        try:
-            data = base64.b64decode(b64)
-            plaintext = hbz.decrypt_data(data, passphrase=pw.encode("utf-8"))
-            self.text_output.setPlainText(plaintext.decode("utf-8", errors="replace"))
-        except Exception as e:
-            QMessageBox.critical(self, "Error", str(e))
+        data = base64.b64decode(b64)
+        pw_bytes = pw.encode("utf-8")
+
+        def _decrypt_text_work():
+            return hbz.decrypt_data(data, passphrase=pw_bytes)
+
+        from hb_zayfer.gui.workers import CryptoWorker
+        worker = CryptoWorker(_decrypt_text_work)
+        worker.signals.result.connect(
+            lambda pt: self._on_text_decrypt_done(pt.decode("utf-8", errors="replace"))
+        )
+        worker.signals.error.connect(lambda err: QMessageBox.critical(self, "Error", err))
+        QThreadPool.globalInstance().start(worker)
+
+    def _on_text_decrypt_done(self, plaintext: str) -> None:
+        self.text_output.setPlainText(plaintext)
+        self._notify("show_success", "Text decrypted successfully")
+        self.text_passphrase.clear()
+
+    def _copy_decrypted_output(self) -> None:
+        """Copy decrypted output to clipboard."""
+        text = self.text_output.toPlainText()
+        if not text:
+            self._notify("show_warning", "Nothing to copy")
+            return
+        secure_copy(text)
+        self._notify("show_success", "Decrypted text copied to clipboard")
+
+    def _notify(self, method: str, message: str) -> None:
+        """Show a notification via the main window's toast system."""
+        w = self.window()
+        if hasattr(w, "notifications"):
+            getattr(w.notifications, method)(message)
+            return
+        if method == "show_error":
+            QMessageBox.critical(self, "Error", message)
+        else:
+            QMessageBox.information(self, "Info", message)

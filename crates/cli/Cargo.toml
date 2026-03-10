@@ -13,6 +13,7 @@ path = "src/main.rs"
 [dependencies]
 hb_zayfer_core = { path = "../core" }
 clap.workspace = true
+clap_complete = "4"
 anyhow.workspace = true
 dialoguer.workspace = true
 indicatif.workspace = true

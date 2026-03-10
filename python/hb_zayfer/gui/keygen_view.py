@@ -15,10 +15,14 @@ from PySide6.QtWidgets import (
     QProgressBar,
     QMessageBox,
     QTextEdit,
+    QCheckBox,
 )
 
 import hb_zayfer as hbz
 from hb_zayfer.gui.workers import CryptoWorker
+from hb_zayfer.gui.password_strength import PasswordStrengthMeter
+from hb_zayfer.gui.audit_utils import log_key_generated
+from hb_zayfer.gui.theme import Theme
 
 
 class KeygenView(QWidget):
@@ -30,10 +34,8 @@ class KeygenView(QWidget):
 
     def _setup_ui(self) -> None:
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 20, 20, 20)
-
-        title = QLabel("<h2>Key Generation</h2>")
-        layout.addWidget(title)
+        layout.setContentsMargins(16, 12, 16, 12)
+        layout.setSpacing(12)
 
         # Options
         opts = QGroupBox("Key Parameters")
@@ -56,13 +58,19 @@ class KeygenView(QWidget):
         label_row.addWidget(self.label_input, 1)
         opts_layout.addLayout(label_row)
 
-        # User ID (PGP)
-        uid_row = QHBoxLayout()
+        # User ID (PGP only)
+        self.uid_row_widget = QWidget()
+        uid_row = QHBoxLayout(self.uid_row_widget)
+        uid_row.setContentsMargins(0, 0, 0, 0)
         uid_row.addWidget(QLabel("User ID:"))
         self.uid_input = QLineEdit()
-        self.uid_input.setPlaceholderText("Name <email@example.com> (PGP only)")
+        self.uid_input.setPlaceholderText("Name <email@example.com>")
         uid_row.addWidget(self.uid_input, 1)
-        opts_layout.addLayout(uid_row)
+        self.uid_row_widget.setVisible(False)  # Hidden until PGP selected
+        opts_layout.addWidget(self.uid_row_widget)
+        
+        # Show/hide UID based on algorithm
+        self.algo_combo.currentIndexChanged.connect(self._on_algo_changed)
 
         # Passphrase
         pw_row = QHBoxLayout()
@@ -80,13 +88,27 @@ class KeygenView(QWidget):
         pw2_row.addWidget(self.pw2_input, 1)
         opts_layout.addLayout(pw2_row)
 
+        # Password strength meter
+        self.strength_meter = PasswordStrengthMeter()
+        opts_layout.addWidget(self.strength_meter)
+        self.pw_input.textChanged.connect(lambda: self.strength_meter.update_strength(self.pw_input.text()))
+
+        # Show password toggle
+        self.show_password_check = QCheckBox("Show passphrases")
+        self.show_password_check.stateChanged.connect(self._toggle_password_visibility)
+        opts_layout.addWidget(self.show_password_check)
+
         layout.addWidget(opts)
 
         # Generate button
+        gen_btn_layout = QHBoxLayout()
         self.gen_btn = QPushButton("Generate Key Pair")
-        self.gen_btn.setStyleSheet("QPushButton { background-color: #007acc; font-weight: bold; font-size: 14px; padding: 10px; }")
+        self.gen_btn.setMinimumWidth(150)
+        self.gen_btn.setStyleSheet(Theme.get_primary_button_style())
         self.gen_btn.clicked.connect(self._do_generate)
-        layout.addWidget(self.gen_btn)
+        gen_btn_layout.addWidget(self.gen_btn)
+        gen_btn_layout.addStretch()
+        layout.addLayout(gen_btn_layout)
 
         # Progress
         self.progress = QProgressBar()
@@ -101,6 +123,17 @@ class KeygenView(QWidget):
         layout.addWidget(self.result_text)
 
         layout.addStretch()
+
+    def _on_algo_changed(self, index: int) -> None:
+        """Show/hide PGP User ID field based on algorithm."""
+        is_pgp = index == 4  # PGP/GPG is index 4
+        self.uid_row_widget.setVisible(is_pgp)
+
+    def _toggle_password_visibility(self, state: int) -> None:
+        """Toggle visibility of passphrases."""
+        mode = QLineEdit.EchoMode.Normal if state else QLineEdit.EchoMode.Password
+        self.pw_input.setEchoMode(mode)
+        self.pw2_input.setEchoMode(mode)
 
     def _do_generate(self) -> None:
         label = self.label_input.text().strip()
@@ -166,8 +199,36 @@ class KeygenView(QWidget):
 
     def _on_gen_done(self, info: object) -> None:
         self.result_text.setVisible(True)
-        self.result_text.setPlainText(str(info))
-        QMessageBox.information(self, "Success", "Key pair generated and stored.")
+        info_text = str(info)
+        self.result_text.setPlainText(info_text)
+        fp = ""
+        algo = ""
+        for line in info_text.splitlines():
+            if line.startswith("Fingerprint:"):
+                fp = line.split(":", 1)[1].strip()
+            if line.startswith("Algorithm:"):
+                algo = line.split(":", 1)[1].strip()
+        if fp:
+            log_key_generated(algo or "KEY", fp)
+        
+        self._notify("show_success", "Key pair generated and stored")
+        # Clear form after success
+        self.label_input.clear()
+        self.uid_input.clear()
+        self.pw_input.clear()
+        self.pw2_input.clear()
+        self.strength_meter.update_strength("")
 
     def _on_gen_error(self, error: str) -> None:
-        QMessageBox.critical(self, "Key Generation Error", error)
+        self._notify("show_error", f"Key generation error: {error}")
+
+    def _notify(self, method: str, message: str) -> None:
+        """Show a notification via the main window's toast system."""
+        w = self.window()
+        if hasattr(w, "notifications"):
+            getattr(w.notifications, method)(message)
+            return
+        if method == "show_error":
+            QMessageBox.critical(self, "Error", message)
+        else:
+            QMessageBox.information(self, "Info", message)

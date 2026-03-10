@@ -21,7 +21,6 @@ use sha2::{Digest, Sha256};
 use crate::error::{HbError, HbResult};
 use crate::kdf::{self, KdfParams};
 use crate::aes_gcm;
-use crate::format::SymmetricAlgorithm;
 
 /// Algorithm type for a stored key.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -54,6 +53,66 @@ pub struct KeyMetadata {
     pub created_at: DateTime<Utc>,
     pub has_private: bool,
     pub has_public: bool,
+    /// Allowed usage constraints for this key.
+    /// If empty or `None`, the key can be used for any operation its algorithm
+    /// supports. When set, operations not in the list are rejected.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub allowed_usages: Option<Vec<KeyUsage>>,
+    /// Optional expiry date. The key should be rejected after this timestamp.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expires_at: Option<DateTime<Utc>>,
+}
+
+/// Permitted key usage operations.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum KeyUsage {
+    /// Key may be used for encryption / key wrapping.
+    Encrypt,
+    /// Key may be used for decryption / key unwrapping.
+    Decrypt,
+    /// Key may be used for digital signatures.
+    Sign,
+    /// Key may be used for signature verification.
+    Verify,
+    /// Key may be used for Diffie-Hellman key agreement.
+    KeyAgreement,
+}
+
+/// Status returned by [`KeyStore::check_expiring_keys`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KeyExpiryStatus {
+    /// The key has already passed its expiry date.
+    Expired,
+    /// The key will expire within the configured warning window.
+    ExpiringSoon { days_left: u32 },
+}
+
+impl KeyMetadata {
+    /// Returns `Ok(())` if the key is allowed for the given `usage`, or an
+    /// error describing why it is not.
+    pub fn check_usage(&self, usage: KeyUsage) -> HbResult<()> {
+        // Check expiry first
+        if let Some(exp) = self.expires_at {
+            if Utc::now() > exp {
+                return Err(HbError::Config(format!(
+                    "Key '{}' expired on {}",
+                    self.fingerprint,
+                    exp.to_rfc3339()
+                )));
+            }
+        }
+        // Check usage constraints
+        if let Some(ref usages) = self.allowed_usages {
+            if !usages.contains(&usage) {
+                return Err(HbError::Config(format!(
+                    "Key '{}' is not permitted for {:?} (allowed: {:?})",
+                    self.fingerprint, usage, usages
+                )));
+            }
+        }
+        Ok(())
+    }
 }
 
 /// A contact in the address book.
@@ -78,24 +137,6 @@ pub struct ContactsStore {
     pub contacts: HashMap<String, Contact>,
 }
 
-/// Application configuration.
-#[derive(Debug, Serialize, Deserialize)]
-pub struct AppConfig {
-    pub default_symmetric_algorithm: SymmetricAlgorithm,
-    pub default_kdf: KdfParams,
-    pub keyring_path: Option<String>,
-}
-
-impl Default for AppConfig {
-    fn default() -> Self {
-        Self {
-            default_symmetric_algorithm: SymmetricAlgorithm::Aes256Gcm,
-            default_kdf: KdfParams::default(),
-            keyring_path: None,
-        }
-    }
-}
-
 /// The KeyStore manages all key operations on disk.
 pub struct KeyStore {
     base_path: PathBuf,
@@ -112,7 +153,7 @@ impl KeyStore {
             return Self::open(PathBuf::from(custom));
         }
         let home = dirs::home_dir()
-            .ok_or_else(|| HbError::Io(io::Error::new(io::ErrorKind::NotFound, "Home directory not found")))?;
+            .ok_or_else(|| HbError::Io("Home directory not found".into()))?;
         Self::open(home.join(".hb_zayfer"))
     }
 
@@ -255,6 +296,8 @@ impl KeyStore {
             created_at: Utc::now(),
             has_private: false,
             has_public: false,
+            allowed_usages: None,
+            expires_at: None,
         });
         entry.has_private = true;
         entry.algorithm = algorithm;
@@ -284,6 +327,8 @@ impl KeyStore {
             created_at: Utc::now(),
             has_private: false,
             has_public: false,
+            allowed_usages: None,
+            expires_at: None,
         });
         entry.has_public = true;
         entry.algorithm = algorithm;
@@ -379,12 +424,16 @@ impl KeyStore {
     }
 
     /// Delete a key (both private and public).
+    ///
+    /// Private key files are securely shredded (overwritten before deletion)
+    /// to prevent recovery of key material from disk.
     pub fn delete_key(&mut self, fingerprint: &str) -> HbResult<()> {
         let priv_path = self.base_path.join("keys/private").join(format!("{fingerprint}.key"));
         let pub_path = self.base_path.join("keys/public").join(format!("{fingerprint}.pub"));
 
         if priv_path.exists() {
-            fs::remove_file(&priv_path)?;
+            // Securely shred private key files to prevent recovery
+            crate::shred::shred_file(&priv_path, crate::shred::DEFAULT_PASSES)?;
         }
         if pub_path.exists() {
             fs::remove_file(&pub_path)?;
@@ -400,6 +449,74 @@ impl KeyStore {
         self.save_contacts()?;
 
         Ok(())
+    }
+
+    /// Set the allowed key usage constraints for a key.
+    ///
+    /// Pass `None` to remove all constraints (allow any usage).
+    pub fn set_key_usage(
+        &mut self,
+        fingerprint: &str,
+        usages: Option<Vec<KeyUsage>>,
+    ) -> HbResult<()> {
+        let meta = self
+            .index
+            .keys
+            .get_mut(fingerprint)
+            .ok_or_else(|| HbError::KeyNotFound(fingerprint.to_string()))?;
+        meta.allowed_usages = usages;
+        self.save_index()?;
+        Ok(())
+    }
+
+    /// Set the expiry date for a key.
+    ///
+    /// Pass `None` to remove the expiry.
+    pub fn set_key_expiry(
+        &mut self,
+        fingerprint: &str,
+        expires_at: Option<DateTime<Utc>>,
+    ) -> HbResult<()> {
+        let meta = self
+            .index
+            .keys
+            .get_mut(fingerprint)
+            .ok_or_else(|| HbError::KeyNotFound(fingerprint.to_string()))?;
+        meta.expires_at = expires_at;
+        self.save_index()?;
+        Ok(())
+    }
+
+    /// Return keys that have already expired or will expire within the given
+    /// number of days.
+    ///
+    /// Each result is `(metadata, status)` where `status` is:
+    /// - `KeyExpiryStatus::Expired` for keys past their expiry date
+    /// - `KeyExpiryStatus::ExpiringSoon { days_left }` for keys expiring within
+    ///   `warning_days`
+    pub fn check_expiring_keys(&self, warning_days: u32) -> Vec<(&KeyMetadata, KeyExpiryStatus)> {
+        let now = Utc::now();
+        let warning_horizon = now + chrono::Duration::days(warning_days as i64);
+        let mut results = Vec::new();
+
+        for meta in self.index.keys.values() {
+            if let Some(exp) = meta.expires_at {
+                if exp <= now {
+                    results.push((meta, KeyExpiryStatus::Expired));
+                } else if exp <= warning_horizon {
+                    let days_left = (exp - now).num_days().max(0) as u32;
+                    results.push((meta, KeyExpiryStatus::ExpiringSoon { days_left }));
+                }
+            }
+        }
+
+        // Sort: expired first, then by days remaining
+        results.sort_by_key(|(_, status)| match status {
+            KeyExpiryStatus::Expired => 0,
+            KeyExpiryStatus::ExpiringSoon { days_left } => *days_left + 1,
+        });
+
+        results
     }
 
     // -- Contact management --
@@ -462,6 +579,31 @@ impl KeyStore {
         Ok(())
     }
 
+    /// Update a contact's email and/or notes.
+    ///
+    /// Only fields that are `Some` are updated; `None` leaves the existing
+    /// value unchanged.
+    pub fn update_contact(
+        &mut self,
+        name: &str,
+        email: Option<Option<&str>>,
+        notes: Option<Option<&str>>,
+    ) -> HbResult<()> {
+        let contact = self
+            .contacts
+            .contacts
+            .get_mut(name)
+            .ok_or_else(|| HbError::ContactNotFound(name.to_string()))?;
+        if let Some(new_email) = email {
+            contact.email = new_email.map(String::from);
+        }
+        if let Some(new_notes) = notes {
+            contact.notes = new_notes.map(String::from);
+        }
+        self.save_contacts()?;
+        Ok(())
+    }
+
     /// Resolve a contact name to their public key fingerprints.
     pub fn resolve_recipient(&self, name_or_fp: &str) -> Vec<String> {
         // Try as a contact name first
@@ -516,12 +658,9 @@ pub enum KeyFormat {
     OpenSsh,
 }
 
-use std::io;
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::env;
 
     fn temp_keystore() -> (tempfile::TempDir, KeyStore) {
         let dir = tempfile::tempdir().unwrap();

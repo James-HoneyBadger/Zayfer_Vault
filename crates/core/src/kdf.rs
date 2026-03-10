@@ -89,6 +89,18 @@ impl KdfParams {
             KdfParams::Scrypt(_) => KdfAlgorithm::Scrypt,
         }
     }
+
+    pub fn argon2id(m_cost: u32, t_cost: u32, p_cost: u32) -> Self {
+        KdfParams::Argon2id(Argon2Params {
+            m_cost,
+            t_cost,
+            p_cost,
+        })
+    }
+
+    pub fn scrypt(log_n: u8, r: u32, p: u32) -> Self {
+        KdfParams::Scrypt(ScryptParams { log_n, r, p })
+    }
 }
 
 impl Default for KdfParams {

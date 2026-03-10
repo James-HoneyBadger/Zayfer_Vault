@@ -2,7 +2,6 @@ use hkdf::Hkdf;
 use rand_core::OsRng;
 use sha2::{Digest, Sha256};
 use x25519_dalek::{EphemeralSecret, PublicKey, StaticSecret};
-use zeroize::Zeroize;
 
 use crate::error::{HbError, HbResult};
 
@@ -16,9 +15,10 @@ pub struct X25519KeyPair {
 
 impl Drop for X25519KeyPair {
     fn drop(&mut self) {
-        // Overwrite the secret key bytes
-        let mut bytes = self.secret_key.to_bytes();
-        bytes.zeroize();
+        // Replace the secret key with all-zeros to overwrite internal state.
+        // `x25519_dalek::StaticSecret` does not expose mutable access to its bytes,
+        // so we overwrite the struct field entirely.
+        self.secret_key = StaticSecret::from([0u8; 32]);
     }
 }
 
@@ -32,19 +32,44 @@ pub fn generate_keypair() -> X25519KeyPair {
     }
 }
 
+/// The all-zero shared secret produced when a small-order point is used.
+const ZERO_SHARED_SECRET: [u8; 32] = [0u8; 32];
+
+/// Validate that a DH shared secret is not the all-zero value.
+///
+/// X25519 can produce an all-zero output when the peer sends a small-order
+/// (low-contribution) public key.  Accepting such a secret would make the
+/// derived key predictable, so we reject it.
+fn validate_shared_secret(secret: &[u8; 32]) -> HbResult<()> {
+    if secret == &ZERO_SHARED_SECRET {
+        return Err(HbError::X25519(
+            "Invalid peer public key (small-order point produced zero shared secret)".into(),
+        ));
+    }
+    Ok(())
+}
+
 /// Generate an ephemeral X25519 key pair (for one-shot key agreement).
 /// Returns (ephemeral_public_key, shared_secret_with_recipient).
-pub fn ephemeral_key_agreement(their_public: &PublicKey) -> (PublicKey, [u8; 32]) {
+///
+/// Returns an error if the peer's public key is a small-order point.
+pub fn ephemeral_key_agreement(their_public: &PublicKey) -> HbResult<(PublicKey, [u8; 32])> {
     let ephemeral_secret = EphemeralSecret::random_from_rng(OsRng);
     let ephemeral_public = PublicKey::from(&ephemeral_secret);
     let shared_secret = ephemeral_secret.diffie_hellman(their_public);
-    (ephemeral_public, *shared_secret.as_bytes())
+    let bytes = *shared_secret.as_bytes();
+    validate_shared_secret(&bytes)?;
+    Ok((ephemeral_public, bytes))
 }
 
 /// Perform a static Diffie-Hellman key agreement.
-pub fn key_agreement(our_secret: &StaticSecret, their_public: &PublicKey) -> [u8; 32] {
+///
+/// Returns an error if the peer's public key is a small-order point.
+pub fn key_agreement(our_secret: &StaticSecret, their_public: &PublicKey) -> HbResult<[u8; 32]> {
     let shared_secret = our_secret.diffie_hellman(their_public);
-    *shared_secret.as_bytes()
+    let bytes = *shared_secret.as_bytes();
+    validate_shared_secret(&bytes)?;
+    Ok(bytes)
 }
 
 /// Derive a symmetric key from a DH shared secret using HKDF-SHA256.
@@ -69,7 +94,7 @@ pub fn derive_symmetric_key(
 /// Performs ephemeral ECDH and derives a 32-byte symmetric key.
 /// Returns (ephemeral_public_key, derived_symmetric_key).
 pub fn encrypt_key_agreement(their_public: &PublicKey) -> HbResult<(PublicKey, [u8; 32])> {
-    let (eph_pub, shared_secret) = ephemeral_key_agreement(their_public);
+    let (eph_pub, shared_secret) = ephemeral_key_agreement(their_public)?;
     let symmetric_key = derive_symmetric_key(
         &shared_secret,
         b"HB_Zayfer X25519 encryption key",
@@ -84,7 +109,7 @@ pub fn decrypt_key_agreement(
     our_secret: &StaticSecret,
     ephemeral_public: &PublicKey,
 ) -> HbResult<[u8; 32]> {
-    let shared_secret = key_agreement(our_secret, ephemeral_public);
+    let shared_secret = key_agreement(our_secret, ephemeral_public)?;
     derive_symmetric_key(
         &shared_secret,
         b"HB_Zayfer X25519 encryption key",
@@ -143,8 +168,8 @@ mod tests {
         let alice = generate_keypair();
         let bob = generate_keypair();
 
-        let alice_shared = key_agreement(&alice.secret_key, &bob.public_key);
-        let bob_shared = key_agreement(&bob.secret_key, &alice.public_key);
+        let alice_shared = key_agreement(&alice.secret_key, &bob.public_key).unwrap();
+        let bob_shared = key_agreement(&bob.secret_key, &alice.public_key).unwrap();
         assert_eq!(alice_shared, bob_shared);
     }
 

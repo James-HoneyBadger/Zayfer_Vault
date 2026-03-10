@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 
 from PySide6.QtCore import QObject, QRunnable, Signal, Slot
 
@@ -13,7 +13,6 @@ class WorkerSignals(QObject):
     finished = Signal()
     error = Signal(str)
     result = Signal(object)
-    progress = Signal(int)  # 0-100
 
 
 class CryptoWorker(QRunnable):

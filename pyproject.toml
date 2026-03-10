@@ -4,12 +4,13 @@ build-backend = "maturin"
 
 [project]
 name = "hb_zayfer"
-version = "0.1.0"
+version = "1.0.0"
 description = "A full-featured encryption/decryption suite with GUI, CLI, and web interfaces"
 license = { text = "MIT" }
+authors = [{name = "James Temple", email = "james@honey-badger.org"}]
 requires-python = ">=3.10"
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
     "Intended Audience :: End Users/Desktop",
     "License :: OSI Approved :: MIT License",
@@ -30,7 +31,7 @@ all = ["hb_zayfer[gui,web,cli,dev]"]
 
 [project.scripts]
 hb-zayfer = "hb_zayfer.cli:main"
-hb-zayfer-gui = "hb_zayfer.gui:main"
+hb-zayfer-gui = "hb_zayfer.gui.app:main"
 hb-zayfer-web = "hb_zayfer.web:main"
 
 [tool.maturin]

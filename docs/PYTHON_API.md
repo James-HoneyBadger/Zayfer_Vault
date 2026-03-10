@@ -1,7 +1,9 @@
 # Python API Reference
 
+**HB Zayfer v1.0.0**
+
 Complete reference for the `hb_zayfer` Python package — the public API exposed
-via PyO3 bindings to the Rust core.
+via PyO3 bindings to the Rust core. **55+ functions** and **6 classes**.
 
 All heavy cryptographic operations release the GIL and run in native Rust.
 
@@ -11,7 +13,7 @@ All heavy cryptographic operations release the GIL and run in native Rust.
 
 ```bash
 # Build from source (requires Rust ≥ 1.75 + Maturin)
-maturin develop --release
+maturin develop --release -m crates/python/Cargo.toml
 
 # Install with extras
 pip install -e ".[all]"       # CLI + GUI + Web + dev
@@ -40,7 +42,7 @@ import hb_zayfer as hbz
 hbz.version() → str
 ```
 
-Returns the library version string (e.g. `"0.1.0"`).
+Returns the library version string (e.g. `"1.0.0"`).
 
 ---
 
@@ -124,14 +126,6 @@ hbz.derive_key_scrypt(
 
 Derive a 32-byte key using scrypt.
 
-**Example:**
-
-```python
-salt = hbz.generate_salt(32)
-key = hbz.derive_key_argon2(b"my passphrase", salt)
-assert len(key) == 32
-```
-
 ---
 
 ## RSA (2048 / 4096)
@@ -152,8 +146,6 @@ hbz.rsa_encrypt(public_pem: str, plaintext: bytes) → bytes
 hbz.rsa_decrypt(private_pem: str, ciphertext: bytes) → bytes
 ```
 
-Suitable for encrypting small payloads (e.g., symmetric keys up to ~190/446 bytes).
-
 ### Sign & Verify (RSA-PSS SHA-256)
 
 ```python
@@ -168,18 +160,6 @@ hbz.rsa_fingerprint(public_pem: str) → str
 ```
 
 SHA-256 of DER-encoded public key, hex-encoded (64 characters).
-
-**Example:**
-
-```python
-priv_pem, pub_pem = hbz.rsa_generate(4096)
-ct = hbz.rsa_encrypt(pub_pem, b"secret")
-pt = hbz.rsa_decrypt(priv_pem, ct)
-assert pt == b"secret"
-
-sig = hbz.rsa_sign(priv_pem, b"document")
-assert hbz.rsa_verify(pub_pem, b"document", sig)
-```
 
 ---
 
@@ -196,9 +176,7 @@ Returns `(signing_pem, verifying_pem)` as PKCS#8 PEM strings.
 ### Sign & Verify
 
 ```python
-hbz.ed25519_sign(signing_pem: str, message: bytes) → bytes
-# Returns 64-byte signature
-
+hbz.ed25519_sign(signing_pem: str, message: bytes) → bytes  # 64-byte signature
 hbz.ed25519_verify(verifying_pem: str, message: bytes, signature: bytes) → bool
 ```
 
@@ -206,14 +184,6 @@ hbz.ed25519_verify(verifying_pem: str, message: bytes, signature: bytes) → boo
 
 ```python
 hbz.ed25519_fingerprint(verifying_pem: str) → str
-```
-
-**Example:**
-
-```python
-sk, vk = hbz.ed25519_generate()
-sig = hbz.ed25519_sign(sk, b"Hello Ed25519")
-assert hbz.ed25519_verify(vk, b"Hello Ed25519", sig)
 ```
 
 ---
@@ -226,7 +196,7 @@ assert hbz.ed25519_verify(vk, b"Hello Ed25519", sig)
 hbz.x25519_generate() → tuple[bytes, bytes]
 ```
 
-Returns `(secret_raw_32, public_raw_32)` as raw 32-byte `bytes` objects.
+Returns `(secret_raw_32, public_raw_32)` as raw 32-byte `bytes`.
 
 ### Key Agreement (Encrypt Side)
 
@@ -234,8 +204,7 @@ Returns `(secret_raw_32, public_raw_32)` as raw 32-byte `bytes` objects.
 hbz.x25519_encrypt_key_agreement(their_public: bytes) → tuple[bytes, bytes]
 ```
 
-Performs ephemeral ECDH + HKDF derivation. Returns
-`(ephemeral_public_32, symmetric_key_32)`.
+Returns `(ephemeral_public_32, symmetric_key_32)`.
 
 ### Key Agreement (Decrypt Side)
 
@@ -251,17 +220,6 @@ Returns the same 32-byte symmetric key.
 hbz.x25519_fingerprint(public_raw: bytes) → str
 ```
 
-**Example:**
-
-```python
-sk_a, pk_a = hbz.x25519_generate()
-sk_b, pk_b = hbz.x25519_generate()
-
-eph_pub, sym_a = hbz.x25519_encrypt_key_agreement(pk_b)
-sym_b = hbz.x25519_decrypt_key_agreement(sk_b, eph_pub)
-assert sym_a == sym_b  # Both derive same symmetric key
-```
-
 ---
 
 ## OpenPGP
@@ -272,14 +230,12 @@ assert sym_a == sym_b  # Both derive same symmetric key
 hbz.pgp_generate(user_id: str) → tuple[str, str]
 ```
 
-Generate a PGP certificate. Returns `(public_armored, secret_armored)`.
+Returns `(public_armored, secret_armored)`.
 
 ### Encrypt & Decrypt
 
 ```python
 hbz.pgp_encrypt(plaintext: bytes, recipient_public_keys: list[str]) → bytes
-# Encrypts to all given recipient public keys (ASCII-armored)
-
 hbz.pgp_decrypt(ciphertext: bytes, secret_key_armored: str) → bytes
 ```
 
@@ -287,10 +243,7 @@ hbz.pgp_decrypt(ciphertext: bytes, secret_key_armored: str) → bytes
 
 ```python
 hbz.pgp_sign(message: bytes, secret_key_armored: str) → bytes
-# Returns signed message (inline signature, armored)
-
 hbz.pgp_verify(signed_message: bytes, public_key_armored: str) → tuple[bytes, bool]
-# Returns (extracted_message, is_valid)
 ```
 
 ### Metadata
@@ -298,15 +251,6 @@ hbz.pgp_verify(signed_message: bytes, public_key_armored: str) → tuple[bytes, 
 ```python
 hbz.pgp_fingerprint(armored_key: str) → str
 hbz.pgp_user_id(armored_key: str) → Optional[str]
-```
-
-**Example:**
-
-```python
-pub_arm, sec_arm = hbz.pgp_generate("Alice <alice@example.com>")
-ct = hbz.pgp_encrypt(b"PGP message", [pub_arm])
-pt = hbz.pgp_decrypt(ct, sec_arm)
-assert pt == b"PGP message"
 ```
 
 ---
@@ -337,25 +281,18 @@ hbz.decrypt_data(
 
 ```python
 hbz.encrypt_file(
-    input_path: str,
-    output_path: str,
-    algorithm: str = "aes",
-    wrapping: str = "password",
-    passphrase: Optional[bytes] = None,
-    recipient_public_pem: Optional[str] = None,
-    recipient_public_raw: Optional[bytes] = None,
+    input_path: str, output_path: str,
+    algorithm: str = "aes", wrapping: str = "password",
+    passphrase=None, recipient_public_pem=None, recipient_public_raw=None,
 ) → int  # bytes written
 
 hbz.decrypt_file(
-    input_path: str,
-    output_path: str,
-    passphrase: Optional[bytes] = None,
-    private_pem: Optional[str] = None,
-    secret_raw: Optional[bytes] = None,
+    input_path: str, output_path: str,
+    passphrase=None, private_pem=None, secret_raw=None,
 ) → int  # bytes written
 ```
 
-**Parameters for wrapping modes:**
+**Wrapping modes:**
 
 | `wrapping` | Required parameter |
 |------------|-------------------|
@@ -363,29 +300,226 @@ hbz.decrypt_file(
 | `"rsa"` | `recipient_public_pem` (encrypt) / `private_pem` (decrypt) |
 | `"x25519"` | `recipient_public_raw` (encrypt) / `secret_raw` (decrypt) |
 
+---
+
+## Password Generation
+
+### `generate_password`
+
+```python
+hbz.generate_password(
+    length: int = 20,
+    exclude: Optional[str] = None,
+) → str
+```
+
+Generate a random password using alphanumeric + symbol characters.
+Optionally exclude specific characters (e.g., `"0O1lI"` for ambiguous chars).
+
+### `generate_passphrase`
+
+```python
+hbz.generate_passphrase(
+    words: int = 6,
+    separator: str = " ",
+) → str
+```
+
+Generate a Diceware-style passphrase with `words` random words.
+
+### `password_entropy`
+
+```python
+hbz.password_entropy(length: int) → float
+```
+
+Calculate the entropy (in bits) of a random password of the given length.
+
+### `passphrase_entropy`
+
+```python
+hbz.passphrase_entropy(words: int) → float
+```
+
+Calculate the entropy (in bits) of a random passphrase with the given word count.
+
 **Example:**
 
 ```python
-# Password-based
-hbz.encrypt_file("secret.pdf", "secret.pdf.hbzf",
-                  algorithm="aes", wrapping="password",
-                  passphrase=b"hunter2")
-hbz.decrypt_file("secret.pdf.hbzf", "recovered.pdf",
-                  passphrase=b"hunter2")
+# Random password
+pw = hbz.generate_password(length=24, exclude="0O1lI")
+print(f"Password: {pw}")
 
-# RSA public-key encryption
-priv_pem, pub_pem = hbz.rsa_generate(4096)
-hbz.encrypt_file("data.bin", "data.hbzf",
-                  wrapping="rsa", recipient_public_pem=pub_pem)
-hbz.decrypt_file("data.hbzf", "data.bin",
-                  private_pem=priv_pem)
+# Diceware passphrase
+phrase = hbz.generate_passphrase(words=6, separator="-")
+print(f"Passphrase: {phrase}")
 
-# X25519 ECDH
-sk, pk = hbz.x25519_generate()
-hbz.encrypt_file("msg.txt", "msg.hbzf",
-                  wrapping="x25519", recipient_public_raw=pk)
-hbz.decrypt_file("msg.hbzf", "msg.txt",
-                  secret_raw=sk)
+# Entropy
+print(f"24-char password: {hbz.password_entropy(24):.1f} bits")
+print(f"6-word passphrase: {hbz.passphrase_entropy(6):.1f} bits")
+```
+
+---
+
+## Shamir's Secret Sharing
+
+### `shamir_split`
+
+```python
+hbz.shamir_split(
+    secret: bytes,
+    shares: int,
+    threshold: int,
+) → list[str]
+```
+
+Split a secret into `shares` shares, requiring `threshold` to reconstruct.
+Returns a list of hex-encoded share strings.
+
+### `shamir_combine`
+
+```python
+hbz.shamir_combine(shares: list[str]) → bytes
+```
+
+Reconstruct the original secret from hex-encoded shares.
+Must provide at least `threshold` shares.
+
+**Example:**
+
+```python
+# Split a secret
+secret = b"master-passphrase-123"
+shares = hbz.shamir_split(secret, 5, 3)  # 5 shares, need 3
+print(f"Created {len(shares)} shares")
+
+# Reconstruct with any 3 shares
+recovered = hbz.shamir_combine(shares[:3])
+assert recovered == secret
+
+# Different subset works too
+recovered2 = hbz.shamir_combine([shares[1], shares[3], shares[4]])
+assert recovered2 == secret
+```
+
+---
+
+## Steganography
+
+### `stego_embed`
+
+```python
+hbz.stego_embed(image_data: bytes, message: bytes) → bytes
+```
+
+Embed a message into image pixel data using LSB (Least Significant Bit)
+encoding. Returns the modified image data.
+
+### `stego_extract`
+
+```python
+hbz.stego_extract(stego_data: bytes) → bytes
+```
+
+Extract a hidden message from stego image data.
+
+### `stego_capacity`
+
+```python
+hbz.stego_capacity(image_data: bytes) → int
+```
+
+Calculate the maximum message size (in bytes) that can be embedded.
+
+**Example:**
+
+```python
+# Embed a secret message
+with open("photo.raw", "rb") as f:
+    image_data = f.read()
+
+stego = hbz.stego_embed(image_data, b"Hidden message!")
+with open("photo_stego.raw", "wb") as f:
+    f.write(stego)
+
+# Extract the message
+extracted = hbz.stego_extract(stego)
+assert extracted == b"Hidden message!"
+
+# Check capacity
+cap = hbz.stego_capacity(image_data)
+print(f"Can embed up to {cap} bytes")
+```
+
+---
+
+## Secure File Shredding
+
+### `shred_file`
+
+```python
+hbz.shred_file(path: str, passes: int = 3) → None
+```
+
+Securely overwrite a file with random data for `passes` passes, then delete it.
+
+### `shred_directory`
+
+```python
+hbz.shred_directory(path: str, passes: int = 3) → None
+```
+
+Recursively shred all files in a directory, then remove the directory.
+
+**Example:**
+
+```python
+# Securely delete a file
+hbz.shred_file("/tmp/secret.txt", passes=3)
+
+# Recursively shred a directory
+hbz.shred_directory("/tmp/sensitive-data/", passes=5)
+```
+
+---
+
+## QR Code Key Exchange
+
+### `qr_encode_key_uri`
+
+```python
+hbz.qr_encode_key_uri(
+    algorithm: str,
+    public_key: bytes,
+    label: Optional[str] = None,
+) → str
+```
+
+Encode a public key as an `hbzf-key://` URI suitable for QR codes.
+The `public_key` parameter accepts raw key bytes (hex-encoded in the URI).
+
+### `qr_decode_key_uri`
+
+```python
+hbz.qr_decode_key_uri(uri: str) → tuple[str, bytes, Optional[str]]
+```
+
+Decode an `hbzf-key://` URI. Returns `(algorithm, public_key, label)`
+where `public_key` is raw bytes.
+
+**Example:**
+
+```python
+# Create a key URI
+pub_key = bytes.fromhex("a1b2c3d4")
+uri = hbz.qr_encode_key_uri("ed25519", pub_key, "Alice")
+print(uri)  # hbzf-key://ed25519/a1b2c3d4?label=Alice
+
+# Decode a key URI
+algo, pk, label = hbz.qr_decode_key_uri(uri)
+assert algo == "ed25519"
+assert pk == pub_key
+assert label == "Alice"
 ```
 
 ---
@@ -414,33 +548,13 @@ ks = hbz.KeyStore(path: Optional[str] = None)
 
 If `path` is `None`, uses `$HB_ZAYFER_HOME` or `~/.hb_zayfer/`.
 
-### Properties
-
-```python
-ks.base_path → str
-```
-
 ### Key Operations
 
 ```python
-ks.store_private_key(
-    fingerprint: str,
-    key_bytes: bytes,
-    passphrase: bytes,
-    algorithm: str,          # "rsa2048", "rsa4096", "ed25519", "x25519", "pgp"
-    label: str,
-) → None
-
-ks.store_public_key(
-    fingerprint: str,
-    key_bytes: bytes,
-    algorithm: str,
-    label: str,
-) → None
-
+ks.store_private_key(fingerprint, key_bytes, passphrase, algorithm, label) → None
+ks.store_public_key(fingerprint, key_bytes, algorithm, label) → None
 ks.load_private_key(fingerprint: str, passphrase: bytes) → bytes
 ks.load_public_key(fingerprint: str) → bytes
-
 ks.list_keys() → list[KeyMetadata]
 ks.get_key_metadata(fingerprint: str) → Optional[KeyMetadata]
 ks.find_keys_by_label(query: str) → list[KeyMetadata]
@@ -450,16 +564,21 @@ ks.delete_key(fingerprint: str) → None
 ### Contact Operations
 
 ```python
-ks.add_contact(name: str, email: Optional[str] = None, notes: Optional[str] = None) → None
-ks.associate_key_with_contact(contact_name: str, fingerprint: str) → None
-ks.get_contact(name: str) → Optional[Contact]
+ks.add_contact(name, email=None, notes=None) → None
+ks.associate_key_with_contact(contact_name, fingerprint) → None
+ks.get_contact(name) → Optional[Contact]
 ks.list_contacts() → list[Contact]
-ks.remove_contact(name: str) → None
-ks.resolve_recipient(name_or_fp: str) → list[str]
+ks.remove_contact(name) → None
+ks.resolve_recipient(name_or_fp) → list[str]
 ```
 
-`resolve_recipient` tries to match as a contact name first, then as a
-fingerprint prefix. Returns matching fingerprint(s).
+### Backup Operations
+
+```python
+ks.create_backup(output_path, passphrase, label=None) → None
+ks.restore_backup(backup_path, passphrase) → BackupManifest
+ks.verify_backup(backup_path, passphrase) → BackupManifest
+```
 
 ### KeyMetadata
 
@@ -482,24 +601,54 @@ fingerprint prefix. Returns matching fingerprint(s).
 | `notes` | `Optional[str]` | Free-form notes |
 | `created_at` | `str` | ISO 8601 timestamp |
 
-**Example:**
+### BackupManifest
+
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| `created_at` | `str` | ISO 8601 timestamp |
+| `private_key_count` | `int` | Number of private keys |
+| `public_key_count` | `int` | Number of public keys |
+| `contact_count` | `int` | Number of contacts |
+| `version` | `int` | Backup format version |
+| `label` | `Optional[str]` | User-provided label |
+| `integrity_hash` | `str` | SHA-256 integrity hash |
+
+---
+
+## Audit Logging
+
+### Logging Functions
 
 ```python
-ks = hbz.KeyStore()
-
-# Generate & store a key
-sk, vk = hbz.ed25519_generate()
-fp = hbz.ed25519_fingerprint(vk)
-ks.store_public_key(fp, vk.encode(), "ed25519", "my-key")
-ks.store_private_key(fp, sk.encode(), b"passphrase", "ed25519", "my-key")
-
-# Manage contacts
-ks.add_contact("Alice", email="alice@example.com")
-ks.associate_key_with_contact("Alice", fp)
-
-# Resolve for encryption
-fps = ks.resolve_recipient("Alice")
+hbz.audit_log_key_generated(algorithm, fingerprint, note=None) → None
+hbz.audit_log_file_encrypted(algorithm, filename=None, size_bytes=None, note=None) → None
+hbz.audit_log_file_decrypted(algorithm, filename=None, size_bytes=None, note=None) → None
+hbz.audit_log_data_signed(algorithm, fingerprint, note=None) → None
+hbz.audit_log_signature_verified(algorithm, fingerprint, valid, note=None) → None
+hbz.audit_log_contact_added(name, note=None) → None
+hbz.audit_log_contact_deleted(name, note=None) → None
+hbz.audit_log_key_deleted(fingerprint, note=None) → None
 ```
+
+### `AuditLogger`
+
+```python
+logger = hbz.AuditLogger(path: Optional[str] = None)
+logger.recent_entries(limit: int = 20) → list[AuditEntry]
+logger.verify_integrity() → bool
+logger.export(destination: str) → None
+logger.entry_count() → int
+```
+
+### `AuditEntry`
+
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| `timestamp` | `str` | ISO 8601 timestamp |
+| `operation` | `str` | Operation type |
+| `prev_hash` | `Optional[str]` | Hash of previous entry |
+| `entry_hash` | `str` | SHA-256 hash of this entry |
+| `note` | `Optional[str]` | Optional context note |
 
 ---
 
@@ -515,3 +664,28 @@ try:
 except ValueError as e:
     print(f"Decryption failed: {e}")
 ```
+
+---
+
+## Complete Function Index
+
+| Category | Functions |
+|----------|-----------|
+| Version | `version` |
+| AES-256-GCM | `aes_encrypt`, `aes_decrypt` |
+| ChaCha20-Poly1305 | `chacha_encrypt`, `chacha_decrypt` |
+| KDF | `generate_salt`, `derive_key_argon2`, `derive_key_scrypt` |
+| RSA | `rsa_generate`, `rsa_encrypt`, `rsa_decrypt`, `rsa_sign`, `rsa_verify`, `rsa_fingerprint` |
+| Ed25519 | `ed25519_generate`, `ed25519_sign`, `ed25519_verify`, `ed25519_fingerprint` |
+| X25519 | `x25519_generate`, `x25519_encrypt_key_agreement`, `x25519_decrypt_key_agreement`, `x25519_fingerprint` |
+| OpenPGP | `pgp_generate`, `pgp_encrypt`, `pgp_decrypt`, `pgp_sign`, `pgp_verify`, `pgp_fingerprint`, `pgp_user_id` |
+| HBZF Format | `encrypt_data`, `decrypt_data`, `encrypt_file`, `decrypt_file` |
+| Utilities | `compute_fingerprint`, `detect_key_format` |
+| Audit | `audit_log_key_generated`, `audit_log_file_encrypted`, `audit_log_file_decrypted`, `audit_log_data_signed`, `audit_log_signature_verified`, `audit_log_contact_added`, `audit_log_contact_deleted`, `audit_log_key_deleted` |
+| Password Gen | `generate_password`, `generate_passphrase`, `password_entropy`, `passphrase_entropy` |
+| Shamir SSS | `shamir_split`, `shamir_combine` |
+| Steganography | `stego_embed`, `stego_extract`, `stego_capacity` |
+| Secure Shred | `shred_file`, `shred_directory` |
+| QR Exchange | `qr_encode_key_uri`, `qr_decode_key_uri` |
+
+**Classes**: `KeyStore`, `KeyMetadata`, `Contact`, `BackupManifest`, `AuditEntry`, `AuditLogger`

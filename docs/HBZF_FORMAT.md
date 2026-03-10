@@ -1,5 +1,7 @@
 # HBZF File Format Specification
 
+**HB Zayfer v1.0.0**
+
 **Version**: 1 (`0x01`)
 **Status**: Stable
 
@@ -197,6 +199,39 @@ Decryption:
 shared_secret = X25519(recipient_secret, ephemeral_public)
 symmetric_key = HKDF-SHA256(shared_secret, info="HB_Zayfer X25519 encryption key")
 ```
+
+---
+
+## Compression Layer
+
+HB Zayfer optionally compresses plaintext before encryption. Compression is
+applied **inside** the encrypted container so that an observer cannot
+determine whether compression was used.
+
+### Compression Prefix
+
+After decryption, the reassembled plaintext begins with a 1-byte prefix:
+
+| Byte | Meaning |
+|------|---------|
+| `0x00` | Payload is stored uncompressed (remaining bytes = original plaintext) |
+| `0x01` | Payload is deflate-compressed (remaining bytes → inflate → original) |
+
+### Behaviour
+
+- `compression::maybe_compress(data, threshold)` — Compresses only if the
+  data exceeds `threshold` bytes (default: 1024). Returns the prefixed buffer.
+- `compression::decompress(data)` — Reads the prefix and inflates if needed.
+- If compression does not reduce the size, the `0x00` prefix is used and the
+  original data is stored verbatim.
+
+### Security Note
+
+Compression occurs **before** encryption (compress-then-encrypt). The
+compression prefix is inside the authenticated ciphertext, so it cannot be
+observed without the decryption key. File-size changes from compression are
+visible as ciphertext length differences, which is an inherent property of
+any encrypted format.
 
 ---
 

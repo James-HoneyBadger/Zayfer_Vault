@@ -37,11 +37,9 @@ pub struct RsaKeyPair {
 
 impl Drop for RsaKeyPair {
     fn drop(&mut self) {
-        // RsaPrivateKey stores primes internally;
-        // calling zeroize on individual BigUint fields is not directly
-        // accessible, but we overwrite what we can.
-        // The `rsa` crate's RsaPrivateKey is backed by `zeroize`-enabled
-        // big integers when the feature is on.
+        // The `rsa` crate depends on `zeroize` transitively; RsaPrivateKey's
+        // internal BigUint fields implement ZeroizeOnDrop automatically.
+        // Dropping the struct is sufficient — no manual action needed.
     }
 }
 

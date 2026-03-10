@@ -1,565 +1,702 @@
-# Rust Core API Reference
+# Rust API Reference
 
-Complete reference for the `hb_zayfer_core` crate, which provides all
-cryptographic primitives, the HBZF file format, and key management.
+**`hb_zayfer_core` v1.0.0**
 
----
-
-## Table of Contents
-
-- [Error Types (`error`)](#error-types)
-- [AES-256-GCM (`aes_gcm`)](#aes-256-gcm)
-- [ChaCha20-Poly1305 (`chacha20`)](#chacha20-poly1305)
-- [RSA (`rsa`)](#rsa)
-- [Ed25519 (`ed25519`)](#ed25519)
-- [X25519 ECDH (`x25519`)](#x25519-ecdh)
-- [OpenPGP (`openpgp`)](#openpgp)
-- [Key Derivation (`kdf`)](#key-derivation)
-- [HBZF File Format (`format`)](#hbzf-file-format)
-- [Key Store (`keystore`)](#key-store)
+Complete reference for the Rust core library. **20 public modules**, organised
+into symmetric crypto, asymmetric crypto, format/container, key management,
+advanced features, and utilities.
 
 ---
 
-## Error Types
+## Crate Layout
 
-### `HbError`
+```
+hb_zayfer_core
+├── aes_gcm        # AES-256-GCM AEAD
+├── chacha20       # ChaCha20-Poly1305 AEAD
+├── rsa            # RSA-2048/4096 OAEP + PSS
+├── ed25519        # Ed25519 signing
+├── x25519         # X25519 ECDH key agreement
+├── openpgp        # OpenPGP (Sequoia-based)
+├── kdf            # Argon2id & scrypt
+├── format         # HBZF container format
+├── keystore       # Key + contact storage
+├── audit          # Tamper-evident audit log
+├── backup         # Encrypted backup/restore
+├── config         # TOML configuration
+├── compression    # Deflate compression layer
+├── secure_mem     # mlock-backed secure memory
+├── shred          # Secure file shredding
+├── passgen        # Password/passphrase generation
+├── shamir         # Shamir's Secret Sharing
+├── stego          # LSB steganography
+├── qr             # QR key exchange URIs
+└── error          # Error types
+```
 
-Unified error enum for every failure mode in the crate.
+---
 
-| Variant | Description |
-|---------|-------------|
-| `Rsa(String)` | RSA operation failed |
-| `AesGcm(String)` | AES-GCM error |
-| `ChaCha20(String)` | ChaCha20-Poly1305 error |
-| `Ed25519(String)` | Ed25519 operation error |
-| `X25519(String)` | X25519 / HKDF error |
-| `OpenPgp(String)` | OpenPGP / Sequoia error |
-| `Kdf(String)` | Key derivation error |
-| `KeyNotFound(String)` | Key fingerprint not in keystore |
-| `KeyAlreadyExists(String)` | Duplicate key fingerprint |
-| `InvalidKeyFormat(String)` | Malformed key material |
-| `PassphraseRequired` | Operation needs a passphrase |
-| `InvalidPassphrase` | Passphrase decryption failed |
-| `InvalidFormat(String)` | Malformed HBZF or data format |
-| `UnsupportedVersion(u8)` | HBZF version not recognized |
-| `UnsupportedAlgorithm(String)` | Unknown algorithm ID |
-| `AuthenticationFailed` | AEAD tag verification failed |
-| `Io(std::io::Error)` | I/O error (via `From`) |
-| `Serialization(String)` | JSON / TOML parse error |
-| `ContactNotFound(String)` | Contact name not in store |
-| `ContactAlreadyExists(String)` | Duplicate contact name |
+## Quick Start
 
-### `HbResult<T>`
+```toml
+# Cargo.toml
+[dependencies]
+hb_zayfer_core = { path = "crates/core" }
+```
 
 ```rust
+use hb_zayfer_core::{aes_gcm, kdf, format, HbError, HbResult};
+```
+
+---
+
+## Error Handling
+
+### `error`
+
+```rust
+pub enum HbError {
+    Encryption(String),
+    Decryption(String),
+    KeyGeneration(String),
+    KeyNotFound(String),
+    InvalidKey(String),
+    InvalidPassphrase,
+    Io(std::io::Error),
+    Format(String),
+    Config(String),
+    Audit(String),
+    Backup(String),
+    Kdf(String),
+    Compression(String),
+    Shred(String),
+    Stego(String),
+    Shamir(String),
+    Qr(String),
+}
+
 pub type HbResult<T> = Result<T, HbError>;
 ```
 
----
-
-## AES-256-GCM
-
-**Module**: `hb_zayfer_core::aes_gcm`
-
-### Constants
-
-| Name | Value | Description |
-|------|-------|-------------|
-| `AES_GCM_NONCE_SIZE` | `12` | 96-bit nonce |
-| `AES_256_KEY_SIZE` | `32` | 256-bit key |
-| `AES_GCM_TAG_SIZE` | `16` | 128-bit auth tag |
-
-### Functions
-
-#### `encrypt(key, plaintext, aad) → HbResult<(Vec<u8>, Vec<u8>)>`
-
-Encrypt with a randomly-generated nonce. Returns `(nonce, ciphertext_with_tag)`.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `key` | `&[u8]` | 32-byte key |
-| `plaintext` | `&[u8]` | Data to encrypt |
-| `aad` | `&[u8]` | Additional authenticated data |
-
-#### `decrypt(key, nonce, ciphertext, aad) → HbResult<Vec<u8>>`
-
-Decrypt and authenticate. Returns plaintext.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `key` | `&[u8]` | 32-byte key |
-| `nonce` | `&[u8]` | 12-byte nonce |
-| `ciphertext` | `&[u8]` | Ciphertext with appended tag |
-| `aad` | `&[u8]` | Must match encryption AAD |
-
-#### `encrypt_chunk(key, base_nonce, chunk_index, chunk, aad) → HbResult<Vec<u8>>`
-
-Streaming chunk encryption. Nonce derived by XOR-ing chunk index into
-bytes 4..12 of the base nonce. Chunk index appended to AAD.
-
-#### `decrypt_chunk(key, base_nonce, chunk_index, ciphertext, aad) → HbResult<Vec<u8>>`
-
-Inverse of `encrypt_chunk`.
+`HbError` implements `std::error::Error`, `Display`, `From<std::io::Error>`.
 
 ---
 
-## ChaCha20-Poly1305
+## Symmetric Encryption
 
-**Module**: `hb_zayfer_core::chacha20`
+### `aes_gcm`
 
-API is identical to `aes_gcm`. Same key size (32 B), nonce size (12 B),
-and tag size (16 B). Same streaming chunk nonce derivation scheme.
+AES-256-GCM authenticated encryption. 32-byte key, 12-byte nonce, 16-byte tag.
 
-### Constants
+```rust
+pub fn encrypt(key: &[u8], plaintext: &[u8], aad: &[u8]) -> HbResult<(Vec<u8>, Vec<u8>)>
+// Returns (nonce, ciphertext_with_tag)
 
-| Name | Value |
-|------|-------|
-| `CHACHA20_NONCE_SIZE` | `12` |
-| `CHACHA20_KEY_SIZE` | `32` |
-| `CHACHA20_TAG_SIZE` | `16` |
+pub fn decrypt(key: &[u8], nonce: &[u8], ciphertext: &[u8], aad: &[u8]) -> HbResult<Vec<u8>>
+// Returns plaintext
+```
 
-### Functions
+### `chacha20`
 
-- `encrypt(key, plaintext, aad) → HbResult<(Vec<u8>, Vec<u8>)>`
-- `decrypt(key, nonce, ciphertext, aad) → HbResult<Vec<u8>>`
-- `encrypt_chunk(key, base_nonce, chunk_index, chunk, aad) → HbResult<Vec<u8>>`
-- `decrypt_chunk(key, base_nonce, chunk_index, ciphertext, aad) → HbResult<Vec<u8>>`
+ChaCha20-Poly1305 AEAD. Same interface as `aes_gcm`.
+
+```rust
+pub fn encrypt(key: &[u8], plaintext: &[u8], aad: &[u8]) -> HbResult<(Vec<u8>, Vec<u8>)>
+pub fn decrypt(key: &[u8], nonce: &[u8], ciphertext: &[u8], aad: &[u8]) -> HbResult<Vec<u8>>
+```
 
 ---
 
-## RSA
-
-**Module**: `hb_zayfer_core::rsa`
+## Key Derivation — `kdf`
 
 ### Types
 
-#### `RsaKeySize`
-
 ```rust
-pub enum RsaKeySize {
-    Rsa2048,  // 2048-bit key
-    Rsa4096,  // 4096-bit key
-}
-```
+pub enum KdfAlgorithm { Argon2id, Scrypt }
 
-#### `RsaKeyPair`
-
-```rust
-pub struct RsaKeyPair {
-    pub private_key: RsaPrivateKey,
-    pub public_key: RsaPublicKey,
-}
-```
-
-### Functions
-
-#### Key Generation
-
-```rust
-fn generate_keypair(size: RsaKeySize) → HbResult<RsaKeyPair>
-```
-
-#### Encryption (RSA-OAEP SHA-256)
-
-```rust
-fn encrypt(public_key: &RsaPublicKey, plaintext: &[u8]) → HbResult<Vec<u8>>
-fn decrypt(private_key: &RsaPrivateKey, ciphertext: &[u8]) → HbResult<Vec<u8>>
-```
-
-#### Signing (RSA-PSS SHA-256, Blinded)
-
-```rust
-fn sign(private_key: &RsaPrivateKey, message: &[u8]) → HbResult<Vec<u8>>
-fn verify(public_key: &RsaPublicKey, message: &[u8], signature: &[u8]) → HbResult<bool>
-```
-
-#### Key Serialization
-
-| Function | Direction | Format |
-|----------|-----------|--------|
-| `export_private_key_pem` | Export | PKCS#8 PEM |
-| `export_public_key_pem` | Export | SPKI PEM |
-| `export_private_key_pkcs1_pem` | Export | PKCS#1 PEM |
-| `export_public_key_pkcs1_pem` | Export | PKCS#1 PEM |
-| `import_private_key_pem` | Import | PKCS#8 PEM |
-| `import_public_key_pem` | Import | SPKI PEM |
-| `import_private_key_pkcs1_pem` | Import | PKCS#1 PEM |
-| `import_public_key_pkcs1_pem` | Import | PKCS#1 PEM |
-
-#### Fingerprint
-
-```rust
-fn fingerprint(public_key: &RsaPublicKey) → HbResult<String>
-// SHA-256 of DER-encoded public key, hex-encoded (64 chars)
-```
-
----
-
-## Ed25519
-
-**Module**: `hb_zayfer_core::ed25519`
-
-### Types
-
-#### `Ed25519KeyPair`
-
-```rust
-pub struct Ed25519KeyPair {
-    pub signing_key: SigningKey,
-    pub verifying_key: VerifyingKey,
-}
-```
-
-Signing key bytes are **zeroized on drop**.
-
-### Functions
-
-#### Key Generation
-
-```rust
-fn generate_keypair() → Ed25519KeyPair
-```
-
-#### Sign & Verify
-
-```rust
-fn sign(signing_key: &SigningKey, message: &[u8]) → Vec<u8>
-// Returns 64-byte signature
-
-fn verify(verifying_key: &VerifyingKey, message: &[u8], signature_bytes: &[u8]) → HbResult<bool>
-```
-
-#### Serialization
-
-| Function | Direction | Format |
-|----------|-----------|--------|
-| `export_signing_key_pem` | Export | PKCS#8 PEM |
-| `export_verifying_key_pem` | Export | SPKI PEM |
-| `import_signing_key_pem` | Import | PKCS#8 PEM |
-| `import_verifying_key_pem` | Import | SPKI PEM |
-| `export_signing_key_raw` | Export | Raw 32 bytes |
-| `export_verifying_key_raw` | Export | Raw 32 bytes |
-| `import_signing_key_raw` | Import | Raw 32 bytes |
-| `import_verifying_key_raw` | Import | Raw 32 bytes |
-
-#### Fingerprint
-
-```rust
-fn fingerprint(verifying_key: &VerifyingKey) → String
-// SHA-256 of raw public key bytes, hex-encoded
-```
-
----
-
-## X25519 ECDH
-
-**Module**: `hb_zayfer_core::x25519`
-
-### Types
-
-#### `X25519KeyPair`
-
-```rust
-pub struct X25519KeyPair {
-    pub secret_key: StaticSecret,
-    pub public_key: PublicKey,
-}
-```
-
-Secret key bytes are **zeroized on drop**.
-
-### Functions
-
-#### Key Generation
-
-```rust
-fn generate_keypair() → X25519KeyPair
-```
-
-#### Key Agreement
-
-```rust
-// Raw static DH
-fn key_agreement(our_secret: &StaticSecret, their_public: &PublicKey) → [u8; 32]
-
-// Ephemeral sender side: generates ephemeral secret + DH
-fn ephemeral_key_agreement(their_public: &PublicKey) → (PublicKey, [u8; 32])
-
-// Full encrypt side: ephemeral DH + HKDF → 32-byte symmetric key
-fn encrypt_key_agreement(their_public: &PublicKey) → HbResult<(PublicKey, [u8; 32])>
-
-// Decrypt side: static DH + HKDF → same 32-byte symmetric key
-fn decrypt_key_agreement(our_secret: &StaticSecret, ephemeral_public: &PublicKey) → HbResult<[u8; 32]>
-
-// HKDF-SHA256 key derivation from shared secret
-fn derive_symmetric_key(shared_secret: &[u8; 32], info: &[u8], salt: Option<&[u8]>) → HbResult<[u8; 32]>
-```
-
-#### Serialization
-
-| Function | Direction | Format |
-|----------|-----------|--------|
-| `export_public_key_raw` | Export | Raw 32 bytes |
-| `import_public_key_raw` | Import | Raw 32 bytes |
-| `export_secret_key_raw` | Export | Raw 32 bytes |
-| `import_secret_key_raw` | Import | Raw 32 bytes |
-
-#### Fingerprint
-
-```rust
-fn fingerprint(public_key: &PublicKey) → String
-```
-
----
-
-## OpenPGP
-
-**Module**: `hb_zayfer_core::openpgp`
-
-Built on [sequoia-openpgp](https://sequoia-pgp.org/) for GPG compatibility.
-
-### Functions
-
-#### Certificate Management
-
-```rust
-fn generate_cert(user_id: &str) → HbResult<Cert>
-// Generates cert with signing + transport-encryption + storage-encryption subkeys
-
-fn export_public_key(cert: &Cert) → HbResult<String>   // ASCII-armored
-fn export_secret_key(cert: &Cert) → HbResult<String>   // ASCII-armored (includes secret material)
-fn import_cert(armored: &str) → HbResult<Cert>
-
-fn cert_fingerprint(cert: &Cert) → String
-fn cert_user_id(cert: &Cert) → Option<String>
-```
-
-#### Encrypt & Decrypt
-
-```rust
-fn encrypt_message(plaintext: &[u8], recipients: &[&Cert]) → HbResult<Vec<u8>>
-// Encrypts to all valid encryption-capable subkeys of each recipient
-
-fn decrypt_message(ciphertext: &[u8], secret_certs: &[Cert]) → HbResult<Vec<u8>>
-```
-
-#### Sign & Verify
-
-```rust
-fn sign_message(message: &[u8], signer_cert: &Cert) → HbResult<Vec<u8>>
-// Inline signature (armored output)
-
-fn verify_signed_message(signed: &[u8], signer_certs: &[Cert]) → HbResult<(Vec<u8>, bool)>
-// Returns (message_content, is_valid)
-```
-
----
-
-## Key Derivation
-
-**Module**: `hb_zayfer_core::kdf`
-
-### Types
-
-#### `KdfAlgorithm`
-
-```rust
-pub enum KdfAlgorithm {
-    Argon2id,  // ID: 0x01
-    Scrypt,    // ID: 0x02
-}
-```
-
-#### `Argon2Params`
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `m_cost` | `u32` | `65536` | Memory in KiB (64 MiB) |
-| `t_cost` | `u32` | `3` | Iterations |
-| `p_cost` | `u32` | `1` | Parallelism |
-
-#### `ScryptParams`
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `log_n` | `u8` | `15` | log₂(N), CPU/memory cost |
-| `r` | `u32` | `8` | Block size |
-| `p` | `u32` | `1` | Parallelism |
-
-#### `KdfParams`
-
-```rust
-pub enum KdfParams {
-    Argon2id(Argon2Params),
-    Scrypt(ScryptParams),
-}
-```
-
-Default: `Argon2id` with default parameters.
-
-#### `DerivedKey`
-
-```rust
-pub struct DerivedKey {
+pub struct KdfParams {
+    pub algorithm: KdfAlgorithm,
     pub salt: Vec<u8>,
-    pub key: Vec<u8>,  // Zeroized on drop
+    // Argon2id fields
+    pub m_cost: Option<u32>,    // memory KiB
+    pub t_cost: Option<u32>,    // iterations
+    pub p_cost: Option<u32>,    // parallelism
+    // scrypt fields
+    pub log_n: Option<u8>,
+    pub r: Option<u32>,
+    pub p: Option<u32>,
 }
 ```
 
 ### Functions
 
 ```rust
-fn generate_salt(len: usize) → Vec<u8>
-// OS CSPRNG random bytes
+pub fn generate_salt(len: usize) -> Vec<u8>
 
-fn derive_key(passphrase: &[u8], salt: &[u8], params: &KdfParams) → HbResult<Vec<u8>>
-// Returns 32-byte key
+pub fn derive_key_argon2(
+    passphrase: &[u8], salt: &[u8],
+    m_cost: u32,    // default: 65536
+    t_cost: u32,    // default: 3
+    p_cost: u32,    // default: 1
+) -> HbResult<Vec<u8>>    // 32 bytes
 
-fn derive_key_fresh(passphrase: &[u8], params: &KdfParams) → HbResult<DerivedKey>
-// Generates salt + derives key in one call
+pub fn derive_key_scrypt(
+    passphrase: &[u8], salt: &[u8],
+    log_n: u8, r: u32, p: u32,
+) -> HbResult<Vec<u8>>
 ```
 
 ---
 
-## HBZF File Format
+## Asymmetric Encryption
 
-**Module**: `hb_zayfer_core::format`
+### `rsa`
 
-### Constants
+RSA-2048/4096 with OAEP-SHA256 (encrypt) and PSS-SHA256 (sign).
 
-| Name | Value | Description |
-|------|-------|-------------|
-| `MAGIC` | `b"HBZF"` | File magic bytes |
-| `VERSION` | `0x01` | Current version |
-| `CHUNK_SIZE` | `65536` | 64 KiB chunks |
+```rust
+pub fn generate(bits: usize) -> HbResult<(String, String)>
+// (private_pkcs8_pem, public_pkcs8_pem)
+
+pub fn encrypt(public_pem: &str, plaintext: &[u8]) -> HbResult<Vec<u8>>
+pub fn decrypt(private_pem: &str, ciphertext: &[u8]) -> HbResult<Vec<u8>>
+
+pub fn sign(private_pem: &str, message: &[u8]) -> HbResult<Vec<u8>>
+pub fn verify(public_pem: &str, message: &[u8], signature: &[u8]) -> HbResult<bool>
+
+pub fn fingerprint(public_pem: &str) -> HbResult<String>
+// SHA-256 of DER, hex-encoded
+```
+
+### `ed25519`
+
+Ed25519 pure signatures.
+
+```rust
+pub fn generate() -> HbResult<(String, String)>
+// (signing_pem, verifying_pem)
+
+pub fn sign(signing_pem: &str, message: &[u8]) -> HbResult<Vec<u8>>   // 64 bytes
+pub fn verify(verifying_pem: &str, message: &[u8], signature: &[u8]) -> HbResult<bool>
+pub fn fingerprint(verifying_pem: &str) -> HbResult<String>
+```
+
+### `x25519`
+
+X25519 Diffie-Hellman key agreement.
+
+```rust
+pub fn generate() -> HbResult<([u8; 32], [u8; 32])>
+// (secret_raw, public_raw)
+
+pub fn encrypt_key_agreement(their_public: &[u8]) -> HbResult<([u8; 32], [u8; 32])>
+// (ephemeral_public, symmetric_key)
+
+pub fn decrypt_key_agreement(secret: &[u8], ephemeral_public: &[u8]) -> HbResult<[u8; 32]>
+// symmetric_key
+
+pub fn fingerprint(public_raw: &[u8]) -> String
+```
+
+### `openpgp`
+
+OpenPGP (Sequoia PGP) key generation, encryption, signing.
+
+```rust
+pub fn generate(user_id: &str) -> HbResult<(String, String)>
+// (public_armored, secret_armored)
+
+pub fn encrypt(plaintext: &[u8], recipient_public_keys: &[&str]) -> HbResult<Vec<u8>>
+pub fn decrypt(ciphertext: &[u8], secret_key: &str) -> HbResult<Vec<u8>>
+
+pub fn sign(message: &[u8], secret_key: &str) -> HbResult<Vec<u8>>
+pub fn verify(signed_message: &[u8], public_key: &str) -> HbResult<(Vec<u8>, bool)>
+
+pub fn fingerprint(armored_key: &str) -> HbResult<String>
+pub fn user_id(armored_key: &str) -> HbResult<Option<String>>
+```
+
+---
+
+## HBZF Container Format — `format`
 
 ### Types
 
-#### `SymmetricAlgorithm`
-
-| Variant | ID | Description |
-|---------|----|-------------|
-| `Aes256Gcm` | `0x01` | AES-256-GCM |
-| `ChaCha20Poly1305` | `0x02` | ChaCha20-Poly1305 |
-
-#### `KeyWrapping`
-
-| Variant | ID | Description |
-|---------|----|-------------|
-| `Password` | `0x00` | Passphrase → KDF → symmetric key |
-| `RsaOaep` | `0x01` | Symmetric key encrypted with RSA-OAEP |
-| `X25519Ecdh` | `0x02` | Ephemeral ECDH → HKDF → symmetric key |
-
-#### `EncryptParams`
-
-Fields: `algorithm`, `wrapping`, `symmetric_key`, `kdf_params`, `kdf_salt`,
-`wrapped_key`, `ephemeral_public`.
-
-#### `FileHeader`
-
-Parsed header from an HBZF file. Fields: `version`, `algorithm`,
-`kdf_algorithm`, `wrapping`, `kdf_params`, `kdf_salt`, `wrapped_key`,
-`ephemeral_public`, `base_nonce`, `plaintext_len`.
+```rust
+pub enum SymmetricAlgorithm { Aes256Gcm, ChaCha20Poly1305 }
+pub enum KeyWrapping { Password, Rsa, X25519 }
+```
 
 ### Functions
 
 ```rust
-fn read_header<R: Read>(reader: &mut R) → HbResult<FileHeader>
+pub fn encrypt_data(
+    plaintext: &[u8],
+    algorithm: SymmetricAlgorithm,
+    wrapping: KeyWrapping,
+    passphrase: Option<&[u8]>,
+    recipient_public_pem: Option<&str>,
+    recipient_public_raw: Option<&[u8]>,
+) -> HbResult<Vec<u8>>
 
-fn encrypt_stream<R: Read, W: Write>(
-    reader: &mut R,
-    writer: &mut W,
-    params: &EncryptParams,
-    plaintext_len: u64,
-    progress_callback: Option<&mut dyn FnMut(u64)>,
-) → HbResult<()>
+pub fn decrypt_data(
+    data: &[u8],
+    passphrase: Option<&[u8]>,
+    private_pem: Option<&str>,
+    secret_raw: Option<&[u8]>,
+) -> HbResult<Vec<u8>>
 
-fn decrypt_stream<R: Read, W: Write>(
-    reader: &mut R,
-    writer: &mut W,
-    header: &FileHeader,
-    symmetric_key: &[u8],
-    progress_callback: Option<&mut dyn FnMut(u64)>,
-) → HbResult<()>
+pub fn encrypt_file<P: AsRef<Path>, Q: AsRef<Path>>(
+    input: P, output: Q,
+    algorithm: SymmetricAlgorithm,
+    wrapping: KeyWrapping,
+    passphrase: Option<&[u8]>,
+    recipient_public_pem: Option<&str>,
+    recipient_public_raw: Option<&[u8]>,
+) -> HbResult<u64>           // bytes written
+
+pub fn decrypt_file<P: AsRef<Path>, Q: AsRef<Path>>(
+    input: P, output: Q,
+    passphrase: Option<&[u8]>,
+    private_pem: Option<&str>,
+    secret_raw: Option<&[u8]>,
+) -> HbResult<u64>
 ```
 
 ---
 
-## Key Store
+## Key Management — `keystore`
 
-**Module**: `hb_zayfer_core::keystore`
+### `KeyStore`
 
-### Types
+```rust
+pub struct KeyStore { /* private */ }
 
-#### `KeyAlgorithm`
+impl KeyStore {
+    pub fn open(path: impl AsRef<Path>) -> HbResult<Self>
+    pub fn open_default() -> HbResult<Self>
+
+    // Key operations
+    pub fn store_private_key(&self, fp: &str, key: &[u8],
+        passphrase: &[u8], algorithm: KeyAlgorithm, label: &str) -> HbResult<()>
+    pub fn store_public_key(&self, fp: &str, key: &[u8],
+        algorithm: KeyAlgorithm, label: &str) -> HbResult<()>
+    pub fn load_private_key(&self, fp: &str, passphrase: &[u8]) -> HbResult<Vec<u8>>
+    pub fn load_public_key(&self, fp: &str) -> HbResult<Vec<u8>>
+    pub fn list_keys(&self) -> HbResult<Vec<KeyMetadata>>
+    pub fn get_key_metadata(&self, fp: &str) -> HbResult<Option<KeyMetadata>>
+    pub fn find_keys_by_label(&self, query: &str) -> HbResult<Vec<KeyMetadata>>
+    pub fn delete_key(&self, fp: &str) -> HbResult<()>
+
+    // Contact operations
+    pub fn add_contact(&self, name: &str, email: Option<&str>,
+        notes: Option<&str>) -> HbResult<()>
+    pub fn associate_key_with_contact(&self, name: &str, fp: &str) -> HbResult<()>
+    pub fn get_contact(&self, name: &str) -> HbResult<Option<Contact>>
+    pub fn list_contacts(&self) -> HbResult<Vec<Contact>>
+    pub fn remove_contact(&self, name: &str) -> HbResult<()>
+    pub fn resolve_recipient(&self, name_or_fp: &str) -> HbResult<Vec<String>>
+}
+```
+
+### `KeyMetadata`
+
+```rust
+pub struct KeyMetadata {
+    pub fingerprint: String,
+    pub algorithm: KeyAlgorithm,
+    pub label: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub has_private: bool,
+    pub has_public: bool,
+    pub usage: Option<KeyUsage>,
+    pub expires_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+```
+
+### `KeyAlgorithm`
 
 ```rust
 pub enum KeyAlgorithm {
-    Rsa2048, Rsa4096, Ed25519, X25519, Pgp,
+    Rsa2048, Rsa4096,
+    Ed25519, X25519,
+    OpenPgp,
 }
 ```
 
-#### `KeyMetadata`
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `fingerprint` | `String` | Hex-encoded SHA-256 |
-| `algorithm` | `KeyAlgorithm` | Key type |
-| `label` | `String` | Human-readable name |
-| `created_at` | `DateTime<Utc>` | Creation time |
-| `has_private` | `bool` | Private key stored |
-| `has_public` | `bool` | Public key stored |
-
-#### `Contact`
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `name` | `String` | Contact name |
-| `email` | `Option<String>` | Email address |
-| `key_fingerprints` | `Vec<String>` | Associated keys |
-| `notes` | `Option<String>` | Free-form notes |
-| `created_at` | `DateTime<Utc>` | Creation time |
-
-#### `KeyFormat`
+### `KeyUsage`
 
 ```rust
-pub enum KeyFormat {
-    Pkcs8Pem, Pkcs1Pem, Der, OpenPgpArmor, OpenSsh,
+pub enum KeyUsage {
+    EncryptOnly,
+    SignOnly,
+    EncryptAndSign,
 }
 ```
 
-### `KeyStore` Methods
+### `KeyExpiryStatus`
 
 ```rust
-// Open
-fn open_default() → HbResult<Self>
-fn open(base_path: PathBuf) → HbResult<Self>
-fn base_path(&self) → &Path
-
-// Key storage
-fn store_private_key(&mut self, fp, key_bytes, passphrase, algorithm, label) → HbResult<()>
-fn store_public_key(&mut self, fp, key_bytes, algorithm, label) → HbResult<()>
-fn load_private_key(&self, fp, passphrase) → HbResult<Vec<u8>>
-fn load_public_key(&self, fp) → HbResult<Vec<u8>>
-
-// Key queries
-fn list_keys(&self) → Vec<&KeyMetadata>
-fn get_key_metadata(&self, fp) → Option<&KeyMetadata>
-fn find_keys_by_label(&self, query) → Vec<&KeyMetadata>
-fn delete_key(&mut self, fp) → HbResult<()>
-
-// Contact management
-fn add_contact(&mut self, name, email, notes) → HbResult<()>
-fn associate_key_with_contact(&mut self, contact_name, fingerprint) → HbResult<()>
-fn get_contact(&self, name) → Option<&Contact>
-fn list_contacts(&self) → Vec<&Contact>
-fn remove_contact(&mut self, name) → HbResult<()>
-fn resolve_recipient(&self, name_or_fp) → Vec<String>
+pub enum KeyExpiryStatus {
+    NoExpiry,
+    Valid { expires_at: DateTime<Utc> },
+    Expired { expired_at: DateTime<Utc> },
+}
 ```
 
-### Utility Functions
+### `Contact`
 
 ```rust
-fn compute_fingerprint(public_key_bytes: &[u8]) → String
-fn detect_key_format(data: &[u8]) → KeyFormat
+pub struct Contact {
+    pub name: String,
+    pub email: Option<String>,
+    pub key_fingerprints: Vec<String>,
+    pub notes: Option<String>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
 ```
+
+---
+
+## Audit Logging — `audit`
+
+### Types
+
+```rust
+pub enum AuditOperation {
+    KeyGenerated { algorithm: String, fingerprint: String },
+    FileEncrypted { algorithm: String, filename: Option<String>, size_bytes: Option<u64> },
+    FileDecrypted { algorithm: String, filename: Option<String>, size_bytes: Option<u64> },
+    DataSigned { algorithm: String, fingerprint: String },
+    SignatureVerified { algorithm: String, fingerprint: String, valid: bool },
+    ContactAdded { name: String },
+    ContactDeleted { name: String },
+    KeyDeleted { fingerprint: String },
+}
+
+pub struct AuditEntry {
+    pub timestamp: chrono::DateTime<chrono::Utc>,
+    pub operation: AuditOperation,
+    pub note: Option<String>,
+    pub prev_hash: Option<String>,
+    pub entry_hash: String,
+}
+```
+
+### `AuditLogger`
+
+```rust
+pub struct AuditLogger { /* private */ }
+
+impl AuditLogger {
+    pub fn open(path: impl AsRef<Path>) -> HbResult<Self>
+    pub fn open_default() -> HbResult<Self>
+    pub fn log(&mut self, operation: AuditOperation, note: Option<&str>) -> HbResult<()>
+    pub fn recent_entries(&self, limit: usize) -> HbResult<Vec<AuditEntry>>
+    pub fn verify_integrity(&self) -> HbResult<bool>
+    pub fn export(&self, destination: impl AsRef<Path>) -> HbResult<()>
+    pub fn entry_count(&self) -> HbResult<usize>
+}
+```
+
+Entries form a hash chain: each `entry_hash` commits to the previous entry,
+providing tamper evidence.
+
+---
+
+## Backup & Restore — `backup`
+
+```rust
+pub struct BackupManifest {
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub private_key_count: usize,
+    pub public_key_count: usize,
+    pub contact_count: usize,
+    pub version: u32,
+    pub label: Option<String>,
+    pub integrity_hash: String,
+}
+
+pub fn create_backup(
+    keystore: &KeyStore, output: impl AsRef<Path>,
+    passphrase: &[u8], label: Option<&str>,
+) -> HbResult<()>
+
+pub fn restore_backup(
+    keystore: &KeyStore, backup: impl AsRef<Path>,
+    passphrase: &[u8],
+) -> HbResult<BackupManifest>
+
+pub fn verify_backup(
+    backup: impl AsRef<Path>, passphrase: &[u8],
+) -> HbResult<BackupManifest>
+```
+
+---
+
+## Configuration — `config`
+
+### Types
+
+```rust
+pub struct Config {
+    pub default_algorithm: SymmetricAlgorithm,
+    pub default_kdf: KdfPreset,
+    pub gui: GuiConfig,
+    pub cli: CliConfig,
+}
+
+pub enum KdfPreset { Low, Standard, High, Paranoid }
+
+pub struct GuiConfig {
+    pub theme: String,           // "dark", "light", "auto"
+    pub font_size: f64,
+    pub confirm_shred: bool,
+}
+
+pub struct CliConfig {
+    pub color: bool,
+    pub json_output: bool,
+}
+```
+
+### Functions
+
+```rust
+pub fn load() -> HbResult<Config>
+pub fn load_from(path: impl AsRef<Path>) -> HbResult<Config>
+pub fn save(config: &Config) -> HbResult<()>
+pub fn save_to(config: &Config, path: impl AsRef<Path>) -> HbResult<()>
+pub fn config_path() -> PathBuf
+pub fn get(key: &str) -> HbResult<String>
+pub fn set(key: &str, value: &str) -> HbResult<()>
+pub fn list_settings() -> HbResult<Vec<(String, String)>>
+pub fn reset() -> HbResult<Config>
+```
+
+---
+
+## Compression — `compression`
+
+Transparent deflate compression with a 1-byte magic header.
+
+```rust
+/// Compress; header 0x01 = compressed, 0x00 = stored.
+pub fn compress(data: &[u8]) -> HbResult<Vec<u8>>
+
+/// Decompress data produced by `compress`.
+pub fn decompress(data: &[u8]) -> HbResult<Vec<u8>>
+
+/// Returns true if `data_len` exceeds `threshold` (None → 1 KiB default).
+pub fn should_compress(data_len: u64, threshold: Option<u64>) -> bool
+
+/// Compress only if exceeding threshold; always decompressible via `decompress`.
+pub fn maybe_compress(data: &[u8], threshold: Option<u64>) -> HbResult<Vec<u8>>
+```
+
+---
+
+## Secure Memory — `secure_mem`
+
+### `SecureBytes`
+
+An `mlock(2)`-backed byte buffer that is zeroized on `Drop`.
+
+```rust
+pub struct SecureBytes { /* inner: Vec<u8>, locked: bool – private */ }
+
+impl SecureBytes {
+    /// Take ownership of `data` and lock it in physical memory.
+    pub fn new(data: Vec<u8>) -> Self
+
+    /// Create a zero-filled buffer of `len`, already locked.
+    pub fn zeroed(len: usize) -> Self
+
+    /// Consume self, returning the inner bytes WITHOUT zeroizing.
+    pub fn into_inner(mut self) -> Vec<u8>
+}
+```
+
+**Trait implementations:**
+
+| Trait | Behaviour |
+|-------|-----------|
+| `Deref<Target = [u8]>` | Transparent slice access |
+| `DerefMut` | Mutable slice access |
+| `AsRef<[u8]>` | Borrow as slice |
+| `From<Vec<u8>>` | Equivalent to `SecureBytes::new(data)` |
+| `Clone` | Deep clone, also locked |
+| `Drop` | Zeroize via `zeroize`, then `munlock` |
+| `Debug` | Redacted — prints only `len` and `locked` |
+
+---
+
+## Secure Shredding — `shred`
+
+Multi-pass overwrite (random → zero → random) then `unlink`.
+
+```rust
+pub const DEFAULT_PASSES: u32 = 3;
+
+/// Overwrite `path` with `passes` passes, truncate, sync, unlink.
+pub fn shred_file<P: AsRef<Path>>(path: P, passes: u32) -> HbResult<()>
+
+/// Recursively shred all files then remove empty dirs.
+/// Returns the number of files shredded.
+pub fn shred_directory<P: AsRef<Path>>(path: P, passes: u32) -> HbResult<usize>
+```
+
+---
+
+## Password Generation — `passgen`
+
+### `PasswordPolicy`
+
+```rust
+#[derive(Debug, Clone)]
+pub struct PasswordPolicy {
+    pub length: usize,        // default: 20
+    pub uppercase: bool,      // default: true
+    pub lowercase: bool,      // default: true
+    pub digits: bool,         // default: true
+    pub symbols: bool,        // default: true
+    pub exclude: String,      // default: ""
+}
+```
+
+### Functions
+
+```rust
+/// Generate a random password; at least one char from each enabled class.
+pub fn generate_password(policy: &PasswordPolicy) -> String
+
+/// Generate a diceware passphrase (min 3 words).
+pub fn generate_passphrase(words: usize, separator: &str) -> String
+
+/// Entropy (bits) for a password matching `policy`.
+pub fn estimate_entropy(policy: &PasswordPolicy) -> f64
+
+/// Entropy (bits) for a diceware passphrase of `word_count` words.
+pub fn passphrase_entropy(word_count: usize) -> f64
+```
+
+---
+
+## Shamir's Secret Sharing — `shamir`
+
+Byte-level SSS over GF(2⁸).
+
+### `Share`
+
+```rust
+#[derive(Debug, Clone)]
+pub struct Share {
+    pub x: u8,           // 1..=255
+    pub data: Vec<u8>,   // same length as original secret
+}
+```
+
+### Functions
+
+```rust
+/// Split `secret` into `n` shares; any `k` reconstruct.
+/// 2 ≤ k ≤ n ≤ 255, secret must be non-empty.
+pub fn split(secret: &[u8], n: u8, k: u8) -> HbResult<Vec<Share>>
+
+/// Reconstruct from ≥ k shares (Lagrange interpolation over GF(2⁸)).
+pub fn combine(shares: &[Share]) -> HbResult<Vec<u8>>
+
+/// Encode share to portable bytes: [x][data...]
+pub fn encode_share(share: &Share) -> Vec<u8>
+
+/// Decode share from portable bytes.
+pub fn decode_share(bytes: &[u8]) -> HbResult<Share>
+```
+
+**Example:**
+
+```rust
+use hb_zayfer_core::shamir;
+
+let secret = b"my-master-key-32-bytes-long!!!!!";
+let shares = shamir::split(secret, 5, 3)?;
+
+// Reconstruct with any 3
+let recovered = shamir::combine(&shares[..3])?;
+assert_eq!(&recovered, &secret[..]);
+```
+
+---
+
+## Steganography — `stego`
+
+LSB steganography in raw RGBA pixel data.
+
+```rust
+/// Max payload bytes storable in `pixel_len` pixel bytes.
+pub fn capacity(pixel_len: usize) -> usize
+
+/// Embed `payload` into the LSBs of `pixels` (in-place).
+pub fn embed_in_pixels(pixels: &mut [u8], payload: &[u8]) -> HbResult<()>
+
+/// Extract hidden payload from `pixels`.
+pub fn extract_from_pixels(pixels: &[u8]) -> HbResult<Vec<u8>>
+```
+
+---
+
+## QR Key Exchange — `qr`
+
+Encode/decode public keys as `hbzf-key://` URIs for QR-code exchange.
+
+```rust
+/// Encode: hbzf-key://<algo>/<base64url>?label=<label>
+pub fn encode_key_uri(algorithm: &str, public_key: &[u8], label: Option<&str>) -> String
+
+/// Decode → (algorithm, public_key_bytes, label)
+pub fn decode_key_uri(uri: &str) -> HbResult<(String, Vec<u8>, Option<String>)>
+```
+
+---
+
+## Re-exports
+
+The crate root re-exports commonly used types:
+
+```rust
+pub use audit::{AuditLogger, AuditOperation, AuditEntry};
+pub use backup::BackupManifest;
+pub use config::{Config, KdfPreset, GuiConfig, CliConfig};
+pub use error::{HbError, HbResult};
+pub use format::{SymmetricAlgorithm, KeyWrapping};
+pub use keystore::{KeyStore, KeyAlgorithm, KeyMetadata, KeyUsage, KeyExpiryStatus, Contact};
+pub use kdf::{KdfParams, KdfAlgorithm};
+pub use secure_mem::SecureBytes;
+```
+
+---
+
+## Module Index
+
+| Module | Description |
+|--------|-------------|
+| `aes_gcm` | AES-256-GCM AEAD |
+| `audit` | Tamper-evident audit logging (hash-chain) |
+| `backup` | Encrypted backup/restore of keystore |
+| `chacha20` | ChaCha20-Poly1305 AEAD |
+| `compression` | Transparent deflate compression layer |
+| `config` | TOML configuration management |
+| `ed25519` | Ed25519 signatures |
+| `error` | `HbError` enum and `HbResult<T>` |
+| `format` | HBZF container encrypt/decrypt |
+| `kdf` | Argon2id & scrypt key derivation |
+| `keystore` | Key + contact storage |
+| `openpgp` | OpenPGP (Sequoia) |
+| `passgen` | Password / passphrase generation |
+| `qr` | QR key exchange URIs |
+| `rsa` | RSA-2048/4096 (OAEP + PSS) |
+| `secure_mem` | mlock-backed secure memory |
+| `shamir` | Shamir's Secret Sharing |
+| `shred` | Secure file shredding |
+| `stego` | LSB steganography |
+| `x25519` | X25519 ECDH key agreement |

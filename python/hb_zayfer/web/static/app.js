@@ -13,6 +13,10 @@ async function api(method, path, body) {
         method,
         headers: { "Content-Type": "application/json" },
     };
+    // Include auth token if configured (read from <meta> tag or global)
+    const token = document.querySelector('meta[name="api-token"]')?.content
+                  || window.__HB_API_TOKEN;
+    if (token) opts.headers["Authorization"] = `Bearer ${token}`;
     if (body !== undefined) opts.body = JSON.stringify(body);
     const res = await fetch(`${API}${path}`, opts);
     const data = await res.json();

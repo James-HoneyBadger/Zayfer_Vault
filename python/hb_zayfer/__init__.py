@@ -69,10 +69,39 @@ from hb_zayfer._native import (
     # Utilities
     compute_fingerprint,
     detect_key_format,
+    audit_log_key_generated,
+    audit_log_file_encrypted,
+    audit_log_file_decrypted,
+    audit_log_data_signed,
+    audit_log_signature_verified,
+    audit_log_contact_added,
+    audit_log_contact_deleted,
+    audit_log_key_deleted,
+    # Password generation
+    generate_password,
+    generate_passphrase,
+    password_entropy,
+    passphrase_entropy,
+    # Shamir's Secret Sharing
+    shamir_split,
+    shamir_combine,
+    # Steganography
+    stego_embed,
+    stego_extract,
+    stego_capacity,
+    # Secure shredding
+    shred_file,
+    shred_directory,
+    # QR key exchange
+    qr_encode_key_uri,
+    qr_decode_key_uri,
     # Classes
     KeyStore,
     KeyMetadata,
     Contact,
+    BackupManifest,
+    AuditEntry,
+    AuditLogger,
 )
 
 __all__ = [
@@ -119,10 +148,41 @@ __all__ = [
     # Utilities
     "compute_fingerprint",
     "detect_key_format",
+    "audit_log_key_generated",
+    "audit_log_file_encrypted",
+    "audit_log_file_decrypted",
+    "audit_log_data_signed",
+    "audit_log_signature_verified",
+    "audit_log_contact_added",
+    "audit_log_contact_deleted",
+    "audit_log_key_deleted",
+    # Password generation
+    "generate_password",
+    "generate_passphrase",
+    "password_entropy",
+    "passphrase_entropy",
+    # Shamir's Secret Sharing
+    "shamir_split",
+    "shamir_combine",
+    # Steganography
+    "stego_embed",
+    "stego_extract",
+    "stego_capacity",
+    # Secure shredding
+    "shred_file",
+    "shred_directory",
+    # QR key exchange
+    "qr_encode_key_uri",
+    "qr_decode_key_uri",
     # Classes
     "KeyStore",
     "KeyMetadata",
     "Contact",
+    "BackupManifest",
+    "AuditEntry",
+    "AuditLogger",
+    # Version
+    "__version__",
 ]
 
 __version__ = version()

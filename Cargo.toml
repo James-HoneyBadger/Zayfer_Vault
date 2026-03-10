@@ -1,11 +1,11 @@
 [workspace]
-members = ["crates/core", "crates/cli", "crates/python"]
+members = ["crates/core", "crates/cli", "crates/python", "crates/wasm"]
 resolver = "2"
 
 [workspace.package]
-version = "0.1.0"
+version = "1.0.0"
 edition = "2021"
-authors = ["HB_Zayfer Contributors"]
+authors = ["James Temple <james@honey-badger.org>"]
 license = "MIT"
 description = "A full-featured encryption/decryption suite"
 

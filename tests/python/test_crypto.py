@@ -362,3 +362,344 @@ def test_keystore_associate_key():
 
     contacts = ks.list_contacts()
     assert fp in contacts[0].key_fingerprints
+
+
+# ===========================================================================
+# Shamir's Secret Sharing
+# ===========================================================================
+
+
+def test_shamir_split_combine():
+    secret = b"super secret data"
+    shares = hbz.shamir_split(secret, 5, 3)
+    assert len(shares) == 5
+    # Reconstruct with 3 of 5 shares
+    recovered = hbz.shamir_combine(shares[:3])
+    assert recovered == secret
+
+
+def test_shamir_different_subsets():
+    secret = b"another secret"
+    shares = hbz.shamir_split(secret, 4, 2)
+    # Any 2 shares should work
+    assert hbz.shamir_combine(shares[0:2]) == secret
+    assert hbz.shamir_combine(shares[2:4]) == secret
+    assert hbz.shamir_combine([shares[0], shares[3]]) == secret
+
+
+# ===========================================================================
+# Steganography
+# ===========================================================================
+
+
+def test_stego_embed_extract():
+    pixels = os.urandom(2000)
+    payload = b"hidden message"
+    modified = hbz.stego_embed(pixels, payload)
+    assert len(modified) == len(pixels)
+    extracted = hbz.stego_extract(modified)
+    assert extracted == payload
+
+
+def test_stego_capacity():
+    cap = hbz.stego_capacity(8000)
+    assert cap > 0
+    # 8000 bytes of pixels / 8 bits per byte = 1000 bytes capacity - header
+    assert cap == (8000 // 8) - 8  # minus 8 bytes for magic + length header
+
+
+# ===========================================================================
+# QR Key Exchange
+# ===========================================================================
+
+
+def test_qr_encode_decode():
+    key_data = os.urandom(32)
+    uri = hbz.qr_encode_key_uri("ed25519", key_data, "Test Key")
+    assert uri.startswith("hbzf-key://ed25519/")
+    algo, decoded_key, label = hbz.qr_decode_key_uri(uri)
+    assert algo == "ed25519"
+    assert decoded_key == key_data
+    assert label == "Test Key"
+
+
+def test_qr_encode_no_label():
+    key_data = os.urandom(48)
+    uri = hbz.qr_encode_key_uri("rsa-2048", key_data, None)
+    algo, decoded_key, label = hbz.qr_decode_key_uri(uri)
+    assert algo == "rsa-2048"
+    assert decoded_key == key_data
+    assert label is None
+
+
+# ===========================================================================
+# Password Generation
+# ===========================================================================
+
+
+def test_generate_password():
+    pw = hbz.generate_password(length=20, uppercase=True, lowercase=True,
+                                digits=True, symbols=True, exclude="")
+    assert len(pw) == 20
+    # Should have decent entropy
+    e = hbz.password_entropy(length=20, uppercase=True, lowercase=True,
+                              digits=True, symbols=True)
+    assert e > 50
+
+
+def test_generate_passphrase():
+    pp = hbz.generate_passphrase(4, "-")
+    assert "-" in pp
+    words = pp.split("-")
+    assert len(words) == 4
+    e = hbz.passphrase_entropy(4)
+    assert e > 30
+
+
+def test_password_entropy_excludes():
+    e_full = hbz.password_entropy(length=16, uppercase=True, lowercase=True,
+                                   digits=True, symbols=True)
+    # With fewer char classes, entropy should be lower
+    e_less = hbz.password_entropy(length=16, uppercase=True, lowercase=True,
+                                   digits=True, symbols=False)
+    assert e_less < e_full
+
+
+# ===========================================================================
+# Utility Functions
+# ===========================================================================
+
+
+def test_detect_key_format():
+    # ed25519 key pair is PEM
+    priv, pub = hbz.ed25519_generate()
+    fmt = hbz.detect_key_format(priv.encode())
+    assert isinstance(fmt, str)
+    assert len(fmt) > 0
+
+
+def test_compute_fingerprint():
+    data = b"some public key data"
+    fp = hbz.compute_fingerprint(data)
+    assert isinstance(fp, str)
+    assert len(fp) > 0
+    # Deterministic: same input → same output
+    assert hbz.compute_fingerprint(data) == fp
+
+
+# ===========================================================================
+# Audit Logger
+# ===========================================================================
+
+
+def test_audit_logger_basic(tmp_path: Path):
+    os.environ["HB_ZAYFER_HOME"] = str(tmp_path)
+    try:
+        # Log something
+        hbz.audit_log_key_generated("ED25519", "abc123", "test")
+
+        logger = hbz.AuditLogger()
+        count = logger.entry_count()
+        assert count >= 1
+
+        entries = logger.recent_entries(10)
+        assert len(entries) >= 1
+        e = entries[0]
+        assert hasattr(e, "timestamp")
+        assert hasattr(e, "operation")
+        assert hasattr(e, "entry_hash")
+
+        valid = logger.verify_integrity()
+        assert valid is True
+    finally:
+        if "HB_ZAYFER_HOME" in os.environ:
+            del os.environ["HB_ZAYFER_HOME"]
+
+
+def test_audit_logger_export(tmp_path: Path):
+    os.environ["HB_ZAYFER_HOME"] = str(tmp_path)
+    try:
+        hbz.audit_log_file_encrypted("AES", "test.txt", 1024, "test")
+        logger = hbz.AuditLogger()
+        export_path = str(tmp_path / "audit_export.json")
+        logger.export(export_path)
+        assert Path(export_path).exists()
+        assert Path(export_path).stat().st_size > 0
+    finally:
+        if "HB_ZAYFER_HOME" in os.environ:
+            del os.environ["HB_ZAYFER_HOME"]
+
+
+def test_audit_log_convenience_functions(tmp_path: Path):
+    """All audit convenience functions should succeed without error."""
+    os.environ["HB_ZAYFER_HOME"] = str(tmp_path)
+    try:
+        hbz.audit_log_key_generated("ED25519", "fp1", "test")
+        hbz.audit_log_file_encrypted("AES", "f.txt", 100, "test")
+        hbz.audit_log_file_decrypted("AES", "f.txt", 100, "test")
+        hbz.audit_log_data_signed("ED25519", "fp1", "test")
+        hbz.audit_log_signature_verified("ED25519", "fp1", True)
+        hbz.audit_log_contact_added("Alice", "test")
+        hbz.audit_log_contact_deleted("Alice", "test")
+        hbz.audit_log_key_deleted("fp1", "test")
+
+        logger = hbz.AuditLogger()
+        assert logger.entry_count() >= 8
+    finally:
+        if "HB_ZAYFER_HOME" in os.environ:
+            del os.environ["HB_ZAYFER_HOME"]
+
+
+# ===========================================================================
+# KeyStore Extended Methods
+# ===========================================================================
+
+
+def test_keystore_base_path(tmp_path: Path):
+    os.environ["HB_ZAYFER_HOME"] = str(tmp_path)
+    try:
+        ks = hbz.KeyStore()
+        bp = ks.base_path
+        assert isinstance(bp, str)
+        assert str(tmp_path) in bp
+    finally:
+        if "HB_ZAYFER_HOME" in os.environ:
+            del os.environ["HB_ZAYFER_HOME"]
+
+
+def test_keystore_get_key_metadata(tmp_path: Path):
+    os.environ["HB_ZAYFER_HOME"] = str(tmp_path)
+    try:
+        ks = hbz.KeyStore()
+        sk, vk = hbz.ed25519_generate()
+        fp = hbz.ed25519_fingerprint(vk)
+        ks.store_public_key(fp, vk.encode(), "ed25519", "meta-test")
+        ks.store_private_key(fp, sk.encode(), b"pass", "ed25519", "meta-test")
+        m = ks.get_key_metadata(fp)
+        assert m.fingerprint == fp
+        assert m.algorithm.lower() == "ed25519"
+        assert m.label == "meta-test"
+        assert m.has_private is True
+        assert m.has_public is True
+        assert len(m.created_at) > 0
+    finally:
+        if "HB_ZAYFER_HOME" in os.environ:
+            del os.environ["HB_ZAYFER_HOME"]
+
+
+def test_keystore_find_keys_by_label(tmp_path: Path):
+    os.environ["HB_ZAYFER_HOME"] = str(tmp_path)
+    try:
+        ks = hbz.KeyStore()
+        sk1, vk1 = hbz.ed25519_generate()
+        sk2, vk2 = hbz.ed25519_generate()
+        fp1 = hbz.ed25519_fingerprint(vk1)
+        fp2 = hbz.ed25519_fingerprint(vk2)
+        ks.store_public_key(fp1, vk1.encode(), "ed25519", "find-me")
+        ks.store_private_key(fp1, sk1.encode(), b"p", "ed25519", "find-me")
+        ks.store_public_key(fp2, vk2.encode(), "ed25519", "other")
+        ks.store_private_key(fp2, sk2.encode(), b"p", "ed25519", "other")
+        found = ks.find_keys_by_label("find-me")
+        assert len(found) == 1
+        assert found[0].label == "find-me"
+    finally:
+        if "HB_ZAYFER_HOME" in os.environ:
+            del os.environ["HB_ZAYFER_HOME"]
+
+
+def test_keystore_update_contact(tmp_path: Path):
+    os.environ["HB_ZAYFER_HOME"] = str(tmp_path)
+    try:
+        ks = hbz.KeyStore()
+        ks.add_contact("Eve", email="eve@old.com", notes="original")
+        ks.update_contact("Eve", email="eve@new.com", notes="updated")
+        c = ks.get_contact("Eve")
+        assert c.email == "eve@new.com"
+        assert c.notes == "updated"
+    finally:
+        if "HB_ZAYFER_HOME" in os.environ:
+            del os.environ["HB_ZAYFER_HOME"]
+
+
+def test_keystore_get_contact(tmp_path: Path):
+    os.environ["HB_ZAYFER_HOME"] = str(tmp_path)
+    try:
+        ks = hbz.KeyStore()
+        ks.add_contact("Dan", email="dan@test.com", notes="a note")
+        c = ks.get_contact("Dan")
+        assert c.name == "Dan"
+        assert c.email == "dan@test.com"
+        assert c.notes == "a note"
+        assert len(c.created_at) > 0
+    finally:
+        if "HB_ZAYFER_HOME" in os.environ:
+            del os.environ["HB_ZAYFER_HOME"]
+
+
+def test_keystore_resolve_recipient(tmp_path: Path):
+    os.environ["HB_ZAYFER_HOME"] = str(tmp_path)
+    try:
+        ks = hbz.KeyStore()
+        sk, vk = hbz.ed25519_generate()
+        fp = hbz.ed25519_fingerprint(vk)
+        ks.store_public_key(fp, vk.encode(), "ed25519", "resolve-test")
+        ks.store_private_key(fp, sk.encode(), b"p", "ed25519", "resolve-test")
+
+        # Add contact and link key
+        ks.add_contact("Frank")
+        ks.associate_key_with_contact("Frank", fp)
+
+        # Resolve by name should give fingerprints
+        resolved = ks.resolve_recipient("Frank")
+        assert fp in resolved
+    finally:
+        if "HB_ZAYFER_HOME" in os.environ:
+            del os.environ["HB_ZAYFER_HOME"]
+
+
+def test_keystore_backup_verify_restore(tmp_path: Path):
+    os.environ["HB_ZAYFER_HOME"] = str(tmp_path)
+    try:
+        ks = hbz.KeyStore()
+        sk, vk = hbz.ed25519_generate()
+        fp = hbz.ed25519_fingerprint(vk)
+        ks.store_public_key(fp, vk.encode(), "ed25519", "bk-test")
+        ks.store_private_key(fp, sk.encode(), b"p", "ed25519", "bk-test")
+        ks.add_contact("BackupBud")
+
+        bk_path = str(tmp_path / "test_backup.hbzf")
+        ks.create_backup(bk_path, b"bkpass", "py-test")
+
+        manifest = ks.verify_backup(bk_path, b"bkpass")
+        assert manifest.private_key_count >= 1
+        assert manifest.contact_count >= 1
+        assert manifest.label == "py-test"
+        assert len(manifest.integrity_hash) > 0
+
+        restored = ks.restore_backup(bk_path, b"bkpass")
+        assert restored.private_key_count >= 1
+    finally:
+        if "HB_ZAYFER_HOME" in os.environ:
+            del os.environ["HB_ZAYFER_HOME"]
+
+
+# ===========================================================================
+# Secure Shred
+# ===========================================================================
+
+
+def test_shred_file(tmp_path: Path):
+    target = tmp_path / "shred_me.txt"
+    target.write_text("sensitive data here")
+    assert target.exists()
+    hbz.shred_file(str(target))
+    assert not target.exists()
+
+
+def test_shred_directory(tmp_path: Path):
+    d = tmp_path / "shred_dir"
+    d.mkdir()
+    (d / "a.txt").write_text("data a")
+    (d / "b.txt").write_text("data b")
+    hbz.shred_directory(str(d))
+    assert not d.exists()

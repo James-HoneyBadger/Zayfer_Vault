@@ -1,218 +1,304 @@
-# Security Model
+# Security Design & Audit Notes
 
-This document describes the security design of HB_Zayfer, the threat model,
-algorithm choices, and responsible disclosure policy.
+**HB Zayfer v1.0.0**
 
----
-
-## Threat Model
-
-HB_Zayfer is designed to protect data **at rest** and **in transit** against:
-
-- **Unauthorized access** to encrypted files or messages.
-- **Tampering** with ciphertext (detected via AEAD authentication).
-- **Chunk reordering/truncation** in the HBZF streaming format.
-- **Brute-force passphrase attacks** (mitigated by memory-hard KDFs).
-- **Key compromise on disk** (private keys encrypted with AES-256-GCM + Argon2id).
-
-### Out of Scope
-
-- Side-channel attacks on the host (e.g., CPU cache timing, EM emissions).
-  The RustCrypto implementations aim for constant-time operations where
-  possible, but this is not formally verified.
-- Compromise of the operating system or hardware root of trust.
-- Availability attacks (DoS) on the web interface.
+This document details the security posture of HB Zayfer: algorithms chosen,
+key management practices, memory protections, supply-chain considerations,
+and known limitations.
 
 ---
 
-## Algorithm Selection
+## Cryptographic Algorithms
 
-### Symmetric Encryption
+| Category | Algorithm | Standard | Key Size |
+|----------|-----------|----------|----------|
+| Symmetric (AEAD) | AES-256-GCM | NIST SP 800-38D | 256-bit |
+| Symmetric (AEAD) | ChaCha20-Poly1305 | RFC 8439 | 256-bit |
+| KDF | Argon2id | RFC 9106 | Configurable |
+| KDF | scrypt | RFC 7914 | Configurable |
+| Asymmetric Enc. | RSA-OAEP-SHA256 | PKCS#1 v2.2 | 2048/4096-bit |
+| Signatures | RSA-PSS-SHA256 | PKCS#1 v2.1 | 2048/4096-bit |
+| Signatures | Ed25519 | RFC 8032 | 256-bit curve |
+| Key Agreement | X25519 | RFC 7748 | 256-bit curve |
+| OpenPGP | Sequoia PGP | RFC 4880/6637 | Per key type |
+| Secret Sharing | Shamir SSS GF(2⁸) | Shamir (1979) | ≤ 255 shares |
+| Hashing | SHA-256 | FIPS 180-4 | 256-bit |
 
-| Algorithm | Key Size | Nonce | Tag | Standard |
-|-----------|----------|-------|-----|----------|
-| AES-256-GCM | 256 bit | 96 bit | 128 bit | NIST SP 800-38D |
-| ChaCha20-Poly1305 | 256 bit | 96 bit | 128 bit | RFC 8439 |
-
-Both provide authenticated encryption with associated data (AEAD).
-AES-256-GCM is the default; ChaCha20-Poly1305 is offered as an alternative
-that performs well on hardware without AES-NI.
-
-### Asymmetric Encryption
-
-| Algorithm | Operation | Standard |
-|-----------|-----------|----------|
-| RSA-2048 / RSA-4096 (OAEP SHA-256) | Key wrapping | PKCS#1 v2.2 |
-| X25519 (ECDH) + HKDF-SHA256 | Key agreement | RFC 7748, RFC 5869 |
-
-RSA-OAEP is used only to encrypt the per-file symmetric key (not bulk data).
-X25519 is preferred for new deployments.
-
-### Digital Signatures
-
-| Algorithm | Operation | Standard |
-|-----------|-----------|----------|
-| RSA-PSS (SHA-256, blinded) | Signing | PKCS#1 v2.2, FIPS 186-5 |
-| Ed25519 | Signing | RFC 8032 |
-| OpenPGP (Sequoia) | Signing | RFC 4880bis |
-
-RSA-PSS uses `BlindedSigningKey` to resist timing side-channels.
-
-### Key Derivation
-
-| Algorithm | Default Parameters | Standard |
-|-----------|-------------------|----------|
-| Argon2id | m=64 MiB, t=3, p=1 | RFC 9106 (winner of PHC) |
-| scrypt | log_n=15 (32 MiB), r=8, p=1 | RFC 7914 |
-
-Argon2id is the recommended default. It provides resistance against both
-GPU/ASIC attacks (memory-hard) and side-channel attacks (data-independent
-in the first pass, data-dependent in subsequent passes).
+All nonces / IVs are generated from `OsRng` (kernel CSPRNG).
 
 ---
 
-## Key Material Handling
+## Key Derivation Defaults
 
-### Zeroization
+| Preset | Argon2id m\_cost | t\_cost | p\_cost | Notes |
+|--------|-----------------|---------|---------|-------|
+| Low | 16 MiB | 2 | 1 | Interactive / embedded |
+| Standard | 64 MiB | 3 | 1 | Default for most uses |
+| High | 256 MiB | 4 | 2 | High-value keys |
+| Paranoid | 1 GiB | 6 | 4 | Maximum strength |
 
-All secret key types implement `Zeroize` and/or `ZeroizeOnDrop`:
+The `config` module exposes `KdfPreset` for easy switching. CLI and GUI
+default to **Standard**.
 
-- `Ed25519KeyPair.signing_key` → signing key seed bytes zeroed on drop.
-- `X25519KeyPair.secret_key` → secret bytes zeroed on drop.
-- `DerivedKey.key` → derived key bytes zeroed on drop.
-- RSA private keys use the `rsa` crate's internal zeroize support.
+---
 
-### Private Key Encryption at Rest
+## Memory Security
 
-Private keys are stored in a **versioned envelope** (v2):
+### `SecureBytes`
+
+All sensitive key material is stored in `SecureBytes` buffers:
+
+- **`mlock(2)`** — Pages are locked in physical RAM, preventing swap-out
+- **Zeroize-on-drop** — `zeroize` crate blanks memory before deallocation
+- **Redacted `Debug`** — `Debug` output prints only `len` and `locked`, never
+  the contents
+- **`munlock(2)` on drop** — Memory is unlocked after zeroizing
+
+### Passphrase Handling
+
+Passphrases are accepted as `&[u8]` and immediately converted to `SecureBytes`
+within the Rust core. No string copies are retained after key derivation.
+
+---
+
+## Secure File Shredding
+
+The `shred` module performs multi-pass file overwrite before deletion:
+
+1. **Random pass** — Overwrite entire file with cryptographic random bytes
+2. **Zero pass** — Overwrite with `0x00`
+3. **Random pass** — Final random overwrite
+4. Repeat for the configured number of passes (default: 3)
+5. **Truncate** to zero length
+6. **`fsync()`** — Flush to disk
+7. **`unlink()`** — Remove directory entry
+
+**Limitations:**
+
+- Journaling filesystems (ext4, NTFS) may retain journal copies
+- SSD wear-levelling may keep old data in unmapped sectors
+- Copy-on-write filesystems (ZFS, btrfs) create new blocks on write
+- For maximum security on SSDs, combine with full-disk encryption (LUKS/dm-crypt)
+
+---
+
+## Audit Logging
+
+### Hash-Chain Integrity
+
+Each audit entry includes:
+
+- `entry_hash = SHA-256(timestamp ‖ operation ‖ prev_hash ‖ note)`
+- `prev_hash` — Hash of the immediately preceding entry
+
+This creates a tamper-evident append-only log:
 
 ```
-[1B]  Envelope version: 0x02
-[1B]  KDF algorithm ID
-[12B] KDF parameters (embedded, immune to config drift)
-[16B] Random salt
-[12B] Random nonce
-[…]   AES-256-GCM ciphertext of the raw private key
+Entry 0:  hash₀ = H(ts₀ ‖ op₀ ‖ ∅ ‖ note₀)
+Entry 1:  hash₁ = H(ts₁ ‖ op₁ ‖ hash₀ ‖ note₁)
+Entry 2:  hash₂ = H(ts₂ ‖ op₂ ‖ hash₁ ‖ note₂)
+...
 ```
 
-AAD for the AES-GCM encryption is the key's fingerprint, binding the
-ciphertext to its identity.
+`verify_integrity()` replays the entire chain and checks every hash.
 
-### File System Permissions
+### What Is Logged
 
-On Unix systems:
-
-- `~/.hb_zayfer/keys/private/` directory: `0o700`
-- Individual `.key` files: `0o600`
-
-These are set programmatically. Users should verify their umask settings.
-
----
-
-## HBZF File Format Security
-
-### Nonce Management
-
-- A random 96-bit **base nonce** is generated per file.
-- Per-chunk nonces are derived by XOR-ing the chunk index (64-bit LE) into
-  bytes 4..12 of the base nonce.
-- This guarantees unique nonces for up to $2^{64}$ chunks per file without
-  requiring nonce storage per chunk.
-
-### Chunk Integrity
-
-- Each 64 KiB chunk is independently authenticated with a 128-bit AEAD tag.
-- The **chunk index** is appended to the AAD for each chunk, preventing:
-  - **Reordering**: swapping chunk positions is detected.
-  - **Duplication**: replaying a chunk at a different position fails.
-  - **Truncation**: the final plaintext length is recorded in the header and
-    verified post-decryption.
-
-### Malicious Input Protection
-
-- Maximum encrypted chunk size is capped at `CHUNK_SIZE + 16` bytes.
-  Any larger chunk length in the file header causes an immediate error,
-  preventing memory exhaustion from crafted files.
+| Operation | Fields Recorded |
+|-----------|----------------|
+| Key generated | Algorithm, fingerprint |
+| File encrypted | Algorithm, filename, size |
+| File decrypted | Algorithm, filename, size |
+| Data signed | Algorithm, signer fingerprint |
+| Signature verified | Algorithm, signer fingerprint, valid/invalid |
+| Contact added | Contact name |
+| Contact deleted | Contact name |
+| Key deleted | Fingerprint |
 
 ---
 
-## Web Interface Security
+## Key Storage Security
+
+### At-Rest Encryption
+
+Private keys stored in the `KeyStore` are encrypted at rest:
+
+1. User provides a passphrase for each private key
+2. Salt is generated (32 bytes, `OsRng`)
+3. Key derived via Argon2id (Standard preset)
+4. Private key bytes encrypted with AES-256-GCM
+5. Stored as: `salt ‖ nonce ‖ ciphertext_with_tag`
+
+Public keys are stored as plaintext (they are public).
+
+### Key Usage Constraints
+
+Keys can be tagged with a `KeyUsage` policy:
+
+- `Encrypt` — Key may be used for encryption / key wrapping
+- `Decrypt` — Key may be used for decryption / key unwrapping
+- `Sign` — Key may be used for digital signatures
+- `Verify` — Key may be used for signature verification
+- `KeyAgreement` — Key may be used for Diffie-Hellman key agreement
+
+### Key Expiry
+
+Keys can have an optional `expires_at` timestamp. The `KeyExpiryStatus` enum
+reports:
+
+- `NoExpiry` — No expiration set
+- `Valid { expires_at }` — Key is within validity period
+- `Expired { expired_at }` — Key has expired
+
+Expired keys can still be read (for decryption of old data) but the GUI/CLI
+warn when selecting them.
+
+---
+
+## Shamir's Secret Sharing
+
+The `shamir` module implements byte-level Shamir's Secret Sharing over GF(2⁸):
+
+- **Threshold scheme**: any _k_ of _n_ shares reconstruct the secret;
+  fewer than _k_ shares reveal zero information
+- **Constraints**: 2 ≤ _k_ ≤ _n_ ≤ 255
+- **Security**: Information-theoretically secure — no computational
+  assumptions beyond the GF(2⁸) arithmetic
+- **Use case**: Split a master passphrase or key among multiple custodians
+  for disaster recovery
+
+---
+
+## Steganography
+
+The `stego` module provides LSB (Least Significant Bit) embedding in raw
+pixel data:
+
+- **Encoding**: 1 bit per pixel byte, with a 64-bit length header
+- **Capacity**: `pixel_count / 8 - 8` bytes
+- **Security note**: LSB steganography is detectable via statistical analysis
+  (chi-square, RS analysis). Use for casual concealment, not against a
+  determined adversary. For strong confidentiality, encrypt data first, then
+  embed the ciphertext.
+
+---
+
+## QR Key Exchange
+
+`hbzf-key://` URIs encode a public key reference:
+
+```
+hbzf-key://<algorithm>/<base64url-encoded-key>?label=<label>
+```
+
+- URI does **not** contain private key material
+- Designed for in-person key exchange (phone-to-phone QR scan)
+- Base64url encoding avoids QR-unfriendly characters
+
+---
+
+## Web API Security
+
+### Rate Limiting
+
+The web server includes a built-in `_RateLimiter` that caps requests per
+client IP. Configuration via environment variables:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `HB_ZAYFER_RATE_LIMIT` | `60` | Maximum requests per window |
+| `HB_ZAYFER_RATE_WINDOW` | `60` | Window duration in seconds |
+
+For production deployments you should **also**:
+
+- Use a reverse proxy (nginx, Caddy) with additional rate-limit rules
+- Bind to `127.0.0.1` (default) — do not expose to the public internet
+  without TLS and authentication
 
 ### Authentication
 
-- Optional bearer-token authentication via `HB_ZAYFER_API_TOKEN`.
-- Static files and docs are explicitly exempt from auth.
-- When enabled, all `/api/*` endpoints require the correct token.
+The web server supports optional Bearer-token authentication. Set the
+`HB_ZAYFER_API_TOKEN` environment variable to enable it:
 
-### CORS
+```bash
+export HB_ZAYFER_API_TOKEN="my-secret-token"
+```
 
-- Restricted to `http://localhost:8000` and `http://127.0.0.1:8000`.
-- The web server binds to `127.0.0.1` by default (not `0.0.0.0`).
+When set, every request must include an `Authorization: Bearer <token>` header.
+When unset, the server runs without authentication (suitable for local use).
 
-### Recommendations
+For multi-user or internet-facing deployments, add:
 
-- **Always set `HB_ZAYFER_API_TOKEN`** in any environment where the web
-  interface may be reachable by other users on the network.
-- **Do not expose** the web interface to the public internet without
-  additional hardening (TLS termination, rate limiting, IP allowlisting).
-- Passphrases are transmitted in request bodies. Use HTTPS in production.
+- TLS termination (nginx/Caddy)
+- Additional auth layers at the reverse proxy if needed
 
 ---
 
-## Cryptographic Library Provenance
+## Compression Security
 
-All cryptographic primitives are sourced from established, audited libraries:
+Optional deflate compression is applied inside the HBZF container:
 
-| Functionality | Rust Crate | Notes |
-|---------------|------------|-------|
-| AES-256-GCM | `aes-gcm` 0.10 | RustCrypto project |
-| ChaCha20-Poly1305 | `chacha20poly1305` 0.10 | RustCrypto project |
-| RSA | `rsa` 0.9 | RustCrypto project |
-| Ed25519 | `ed25519-dalek` 2.x | Dalek cryptography |
-| X25519 | `x25519-dalek` 2.x | Dalek cryptography |
-| Argon2 | `argon2` 0.5 | RustCrypto project |
-| scrypt | `scrypt` 0.11 | RustCrypto project |
-| HKDF | `hkdf` 0.12 | RustCrypto project |
-| SHA-256 | `sha2` 0.10 | RustCrypto project |
-| OpenPGP | `sequoia-openpgp` 2.x | Sequoia PGP |
-| Randomness | `rand` 0.8 / `rand_core` 0.6 | OS CSPRNG (`getrandom`) |
-| Zeroization | `zeroize` 1.x | RustCrypto project |
-
-No custom cryptographic implementations are used. All random numbers come
-from the operating system's CSPRNG via `getrandom`.
+- Compression happens **before** encryption (compress-then-encrypt)
+- A 1-byte magic header (`0x01` = compressed, `0x00` = stored) is included
+  inside the encrypted payload, so an attacker cannot determine whether
+  compression was used
+- **CRIME/BREACH note**: Compression of secret data alongside attacker-
+  controlled data can leak information via ciphertext length. HB Zayfer's
+  HBZF format does not mix user-controlled AAD into the compressed payload,
+  mitigating this vector. However, file-size side channels remain for any
+  encrypted format.
 
 ---
 
-## Security Recommendations for Users
+## Supply Chain
 
-1. **Choose strong passphrases.** The Argon2id KDF protects against
-   brute-force, but a weak passphrase still compromises security.
+### Dependencies
 
-2. **Prefer X25519 or Ed25519** for new key pairs. RSA is supported for
-   compatibility but offers no advantage for new deployments.
+All cryptographic operations are performed by audited, widely-used Rust crates:
 
-3. **Back up your keystore.** If `~/.hb_zayfer/keys/private/` is lost,
-   encrypted data cannot be recovered.
+| Crate | Version | Purpose |
+|-------|---------|---------|
+| `aes-gcm` | 0.10 | AES-256-GCM |
+| `chacha20poly1305` | 0.10 | ChaCha20-Poly1305 |
+| `argon2` | 0.5 | Argon2id KDF |
+| `scrypt` | 0.11 | scrypt KDF |
+| `rsa` | 0.9 | RSA |
+| `ed25519-dalek` | 2.1 | Ed25519 |
+| `x25519-dalek` | 2.0 | X25519 |
+| `sequoia-openpgp` | 2.x | OpenPGP |
+| `sha2` | 0.10 | SHA-256 |
+| `rand` / `rand_core` | 0.8 | CSPRNG (`OsRng`) |
+| `zeroize` | 1.x | Secure memory zeroization |
+| `flate2` | 1.x | Deflate compression |
 
-4. **Verify fingerprints** out-of-band when exchanging public keys to
-   prevent man-in-the-middle key substitution.
+No custom cryptographic primitives are implemented.
 
-5. **Keep dependencies updated.** Run `cargo update` periodically to pick
-   up security patches in cryptographic crates.
+### Build Reproducibility
 
-6. **Use the web interface locally only** unless you configure TLS and
-   bearer-token authentication.
+- `Cargo.lock` is committed for reproducible builds
+- `maturin` wheel builds are pinned via `pyproject.toml`
+- CI should verify `cargo audit` for known vulnerabilities
 
 ---
 
-## Responsible Disclosure
+## Known Limitations
 
-If you discover a security vulnerability in HB_Zayfer, please report it
-responsibly:
+1. **No forward secrecy** for password-wrapped HBZF files — the same
+   passphrase always derives the same key for a given salt
+2. **File-size side channel** — encrypted file size reveals approximate
+   plaintext size (± compression ratio)
+3. **No built-in secure transport** — the web API serves over HTTP; TLS
+   must be provided externally
+4. **SSD shredding** — `shred_file` cannot guarantee erasure on
+   wear-levelled storage (see Secure File Shredding section)
+5. **LSB stego is detectable** — use encryption before embedding for
+   confidentiality
+6. **OpenPGP passphrase** — Sequoia-generated secret keys are not
+   passphrase-protected at the PGP layer; they rely on KeyStore encryption
 
-1. **Do not** open a public GitHub issue.
-2. Email the maintainers with details of the vulnerability, reproduction
-   steps, and any suggested fixes.
-3. Allow a reasonable period (90 days) for a fix before public disclosure.
+---
 
-We will credit reporters in the release notes (unless anonymity is requested).
+## Reporting Vulnerabilities
+
+Please report security issues via GitHub private vulnerability disclosure
+or email the maintainer directly. Do not open public issues for security bugs.

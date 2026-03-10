@@ -14,18 +14,32 @@
 //! File encryption uses the HBZF streaming format with 64 KiB chunks.
 
 pub mod aes_gcm;
+pub mod audit;
+pub mod backup;
 pub mod chacha20;
+pub mod compression;
+pub mod config;
 pub mod ed25519;
 pub mod error;
 pub mod format;
 pub mod kdf;
 pub mod keystore;
 pub mod openpgp;
+pub mod passgen;
+pub mod qr;
 pub mod rsa;
+pub mod secure_mem;
+pub mod shamir;
+pub mod shred;
+pub mod stego;
 pub mod x25519;
 
 // Re-export commonly used types
+pub use audit::{AuditLogger, AuditOperation, AuditEntry};
+pub use backup::BackupManifest;
+pub use config::{Config, KdfPreset, GuiConfig, CliConfig};
 pub use error::{HbError, HbResult};
 pub use format::{SymmetricAlgorithm, KeyWrapping};
-pub use keystore::{KeyStore, KeyAlgorithm, KeyMetadata, Contact};
+pub use keystore::{KeyStore, KeyAlgorithm, KeyMetadata, KeyUsage, KeyExpiryStatus, Contact};
 pub use kdf::{KdfParams, KdfAlgorithm};
+pub use secure_mem::SecureBytes;

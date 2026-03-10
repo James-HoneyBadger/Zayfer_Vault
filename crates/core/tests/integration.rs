@@ -5,7 +5,7 @@
 //! format, and the on-disk keystore.
 
 use hb_zayfer_core::*;
-use hb_zayfer_core::{aes_gcm, chacha20, ed25519, kdf, keystore, openpgp, rsa, x25519};
+use hb_zayfer_core::{aes_gcm, chacha20, ed25519, format, kdf, keystore, openpgp, rsa, x25519};
 use tempfile::TempDir;
 
 // ==========================================================================
@@ -235,17 +235,17 @@ fn x25519_key_agreement() {
     let kp_a = x25519::generate_keypair();
     let kp_b = x25519::generate_keypair();
 
-    let shared_a = x25519::key_agreement(&kp_a.secret_key, &kp_b.public_key);
-    let shared_b = x25519::key_agreement(&kp_b.secret_key, &kp_a.public_key);
+    let shared_a = x25519::key_agreement(&kp_a.secret_key, &kp_b.public_key).unwrap();
+    let shared_b = x25519::key_agreement(&kp_b.secret_key, &kp_a.public_key).unwrap();
     assert_eq!(shared_a, shared_b);
 }
 
 #[test]
 fn x25519_ephemeral_agreement() {
     let kp = x25519::generate_keypair();
-    let (eph_pub, eph_shared) = x25519::ephemeral_key_agreement(&kp.public_key);
+    let (eph_pub, eph_shared) = x25519::ephemeral_key_agreement(&kp.public_key).unwrap();
 
-    let recv_shared = x25519::key_agreement(&kp.secret_key, &eph_pub);
+    let recv_shared = x25519::key_agreement(&kp.secret_key, &eph_pub).unwrap();
     assert_eq!(eph_shared, recv_shared);
 }
 
@@ -384,4 +384,363 @@ fn openpgp_fingerprint_and_uid() {
     assert!(!fp.is_empty());
     let extracted_uid = openpgp::cert_user_id(&cert);
     assert!(extracted_uid.as_deref().unwrap_or("").contains("FP Test"));
+}
+
+// ==========================================================================
+// Audit logging
+// ==========================================================================
+
+#[test]
+fn audit_log_and_read() {
+    use hb_zayfer_core::audit::{AuditLogger, AuditOperation};
+    let dir = TempDir::new().unwrap();
+    let logger = AuditLogger::new(dir.path().join("audit.log"));
+    logger
+        .log(
+            AuditOperation::FileEncrypted {
+                algorithm: "AES-256-GCM".into(),
+                filename: Some("/tmp/test.txt".into()),
+                size_bytes: Some(1024),
+            },
+            Some("test note".into()),
+        )
+        .unwrap();
+    let entries = logger.read_entries().unwrap();
+    assert_eq!(entries.len(), 1);
+    assert_eq!(logger.entry_count().unwrap(), 1);
+}
+
+#[test]
+fn audit_integrity_chain() {
+    use hb_zayfer_core::audit::{AuditLogger, AuditOperation};
+    let dir = TempDir::new().unwrap();
+    let logger = AuditLogger::new(dir.path().join("audit.log"));
+    for i in 0..5 {
+        logger
+            .log(
+                AuditOperation::FileDecrypted {
+                    algorithm: "ChaCha20".into(),
+                    filename: Some(format!("/tmp/file_{i}.hbzf")),
+                    size_bytes: None,
+                },
+                None,
+            )
+            .unwrap();
+    }
+    assert!(logger.verify_integrity().unwrap(), "Audit chain should be valid");
+}
+
+#[test]
+fn audit_entry_self_verify() {
+    use hb_zayfer_core::audit::{AuditEntry, AuditOperation};
+    let entry = AuditEntry::new(
+        AuditOperation::KeyGenerated {
+            algorithm: "Ed25519".into(),
+            fingerprint: "abc123".into(),
+        },
+        None,
+        None,
+    );
+    assert!(entry.verify(), "Fresh entry should self-verify");
+}
+
+#[test]
+fn audit_export() {
+    use hb_zayfer_core::audit::{AuditLogger, AuditOperation};
+    let dir = TempDir::new().unwrap();
+    let logger = AuditLogger::new(dir.path().join("audit.log"));
+    logger
+        .log(
+            AuditOperation::KeyGenerated {
+                algorithm: "RSA-4096".into(),
+                fingerprint: "deadbeef".into(),
+            },
+            None,
+        )
+        .unwrap();
+    let export_path = dir.path().join("exported.log");
+    logger.export(&export_path).unwrap();
+    assert!(export_path.exists());
+}
+
+// ==========================================================================
+// Config
+// ==========================================================================
+
+#[test]
+fn config_save_load_roundtrip() {
+    use hb_zayfer_core::config::Config;
+    let dir = TempDir::new().unwrap();
+    let path = dir.path().join("config.toml");
+    let mut cfg = Config::default();
+    cfg.chunk_size = 1024 * 256;
+    cfg.save(&path).unwrap();
+    let loaded = Config::load(&path).unwrap();
+    assert_eq!(loaded.chunk_size, 1024 * 256);
+}
+
+#[test]
+fn config_set_get() {
+    use hb_zayfer_core::config::Config;
+    let dir = TempDir::new().unwrap();
+    let path = dir.path().join("config.toml");
+    let mut cfg = Config::default();
+    cfg.set("chunk_size", "524288").unwrap();
+    assert_eq!(cfg.get("chunk_size").unwrap(), "524288");
+    cfg.save(&path).unwrap();
+    let loaded = Config::load(&path).unwrap();
+    assert_eq!(loaded.chunk_size, 524288);
+}
+
+// ==========================================================================
+// Backup & Restore
+// ==========================================================================
+
+#[test]
+fn backup_create_verify_restore() {
+    // Create a keystore with an Ed25519 key
+    let ks_dir = TempDir::new().unwrap();
+    let mut ks = KeyStore::open(ks_dir.path().to_path_buf()).unwrap();
+
+    let kp = ed25519::generate_keypair();
+    let priv_pem = ed25519::export_signing_key_pem(&kp.signing_key).unwrap();
+    let pub_pem = ed25519::export_verifying_key_pem(&kp.verifying_key).unwrap();
+    let fp = keystore::compute_fingerprint(pub_pem.as_bytes());
+    ks.store_private_key(&fp, priv_pem.as_bytes(), b"backuptest", KeyAlgorithm::Ed25519, "Backup Test Key")
+        .unwrap();
+    ks.store_public_key(&fp, pub_pem.as_bytes(), KeyAlgorithm::Ed25519, "Backup Test Key")
+        .unwrap();
+
+    // Create backup
+    let backup_dir = TempDir::new().unwrap();
+    let backup_path = backup_dir.path().join("test.hbzfbk");
+    ks.create_backup(&backup_path, b"backup-pass", Some("test backup".into()))
+        .unwrap();
+    assert!(backup_path.exists());
+
+    // Verify backup
+    let manifest = KeyStore::verify_backup(&backup_path, b"backup-pass").unwrap();
+    assert_eq!(manifest.label.as_deref(), Some("test backup"));
+
+    // Restore to new location
+    let restore_dir = TempDir::new().unwrap();
+    let restore_manifest =
+        KeyStore::restore_backup(&backup_path, b"backup-pass", restore_dir.path()).unwrap();
+    assert_eq!(restore_manifest.label.as_deref(), Some("test backup"));
+}
+
+// ==========================================================================
+// Format: stream encryption round-trip
+// ==========================================================================
+
+#[test]
+fn format_encrypt_decrypt_bytes_aes() {
+    let key = kdf::generate_salt(32);
+    let plaintext = b"Hello stream world \xe2\x80\x94 AES";
+    let (nonce, ct) = format::encrypt_bytes(plaintext, &key, format::SymmetricAlgorithm::Aes256Gcm).unwrap();
+    assert!(!ct.is_empty());
+    let pt = format::decrypt_bytes(&nonce, &ct, &key, format::SymmetricAlgorithm::Aes256Gcm).unwrap();
+    assert_eq!(&pt, plaintext);
+}
+
+#[test]
+fn format_encrypt_decrypt_bytes_chacha() {
+    let key = kdf::generate_salt(32);
+    let plaintext = b"Hello stream world \xe2\x80\x94 ChaCha";
+    let (nonce, ct) = format::encrypt_bytes(plaintext, &key, format::SymmetricAlgorithm::ChaCha20Poly1305).unwrap();
+    let pt = format::decrypt_bytes(&nonce, &ct, &key, format::SymmetricAlgorithm::ChaCha20Poly1305).unwrap();
+    assert_eq!(&pt, plaintext);
+}
+
+#[test]
+fn format_wrong_key_fails() {
+    let key = kdf::generate_salt(32);
+    let wrong_key = kdf::generate_salt(32);
+    let plaintext = b"Secret stuff";
+    let (nonce, ct) = format::encrypt_bytes(plaintext, &key, format::SymmetricAlgorithm::Aes256Gcm).unwrap();
+    let result = format::decrypt_bytes(&nonce, &ct, &wrong_key, format::SymmetricAlgorithm::Aes256Gcm);
+    assert!(result.is_err(), "Decryption with wrong key should fail");
+}
+
+// ==========================================================================
+// Error module: help_text & user_message
+// ==========================================================================
+
+mod error_tests {
+    use hb_zayfer_core::error::HbError;
+
+    #[test]
+    fn help_text_invalid_passphrase() {
+        let e = HbError::InvalidPassphrase;
+        let help = e.help_text();
+        assert!(help.contains("Wrong passphrase"), "Should mention wrong passphrase");
+        assert!(help.contains("Try:"), "Should include troubleshooting tip");
+    }
+
+    #[test]
+    fn help_text_key_not_found() {
+        let e = HbError::KeyNotFound("abc123".into());
+        let help = e.help_text();
+        assert!(help.contains("abc123"));
+        assert!(help.contains("keys list"));
+    }
+
+    #[test]
+    fn user_message_variants() {
+        assert_eq!(HbError::InvalidPassphrase.user_message(), "Wrong passphrase");
+        assert_eq!(HbError::PassphraseRequired.user_message(), "Passphrase required");
+
+        let msg = HbError::KeyNotFound("fp1".into()).user_message();
+        assert!(msg.contains("fp1"));
+
+        let msg = HbError::ContactNotFound("Alice".into()).user_message();
+        assert!(msg.contains("Alice"));
+
+        let msg = HbError::ContactAlreadyExists("Bob".into()).user_message();
+        assert!(msg.contains("Bob"));
+    }
+
+    #[test]
+    fn help_text_covers_all_branches() {
+        // Exercise each match arm in help_text to ensure no panics
+        let variants: Vec<HbError> = vec![
+            HbError::InvalidPassphrase,
+            HbError::AuthenticationFailed,
+            HbError::KeyNotFound("key1".into()),
+            HbError::InvalidFormat("bad header".into()),
+            HbError::UnsupportedVersion(99),
+            HbError::PassphraseRequired,
+            HbError::KeyAlreadyExists("key2".into()),
+            HbError::ContactNotFound("Nobody".into()),
+            HbError::Io("permission denied".into()),
+            HbError::Config("syntax error".into()),
+        ];
+        for v in &variants {
+            let text = v.help_text();
+            assert!(!text.is_empty(), "help_text for {:?} should not be empty", v);
+        }
+    }
+}
+
+// ==========================================================================
+// KeyStore: extended management methods
+// ==========================================================================
+
+mod keystore_extended {
+    use hb_zayfer_core::keystore::{KeyStore, KeyAlgorithm, KeyUsage, KeyExpiryStatus};
+    use hb_zayfer_core::ed25519;
+    use tempfile::TempDir;
+
+    fn setup() -> (TempDir, KeyStore) {
+        let tmp = TempDir::new().unwrap();
+        let ks = KeyStore::open(tmp.path().to_path_buf()).unwrap();
+        (tmp, ks)
+    }
+
+    fn store_ed25519_key(ks: &mut KeyStore, label: &str) -> String {
+        let kp = ed25519::generate_keypair();
+        let sk_bytes = ed25519::export_signing_key_raw(&kp.signing_key);
+        let vk_bytes = ed25519::export_verifying_key_raw(&kp.verifying_key);
+        let fp = ed25519::fingerprint(&kp.verifying_key);
+        ks.store_public_key(&fp, &vk_bytes, KeyAlgorithm::Ed25519, label).unwrap();
+        ks.store_private_key(&fp, &sk_bytes, b"pass", KeyAlgorithm::Ed25519, label).unwrap();
+        fp
+    }
+
+    #[test]
+    fn get_key_metadata() {
+        let (_tmp, mut ks) = setup();
+        let fp = store_ed25519_key(&mut ks, "meta-test");
+        let m = ks.get_key_metadata(&fp).expect("metadata should exist");
+        assert_eq!(m.algorithm, KeyAlgorithm::Ed25519);
+        assert_eq!(m.label, "meta-test");
+        assert!(m.has_private);
+        assert!(m.has_public);
+    }
+
+    #[test]
+    fn find_keys_by_label() {
+        let (_tmp, mut ks) = setup();
+        store_ed25519_key(&mut ks, "alpha");
+        store_ed25519_key(&mut ks, "beta");
+        store_ed25519_key(&mut ks, "alpha-2");
+
+        let found = ks.find_keys_by_label("alpha");
+        assert_eq!(found.len(), 2, "Should find 'alpha' and 'alpha-2'");
+    }
+
+    #[test]
+    fn set_key_usage() {
+        let (_tmp, mut ks) = setup();
+        let fp = store_ed25519_key(&mut ks, "usage-test");
+        ks.set_key_usage(&fp, Some(vec![KeyUsage::Sign, KeyUsage::Verify])).unwrap();
+        let m = ks.get_key_metadata(&fp).unwrap();
+        let usages = m.allowed_usages.as_ref().expect("should have usages set");
+        assert!(usages.contains(&KeyUsage::Sign));
+        assert!(usages.contains(&KeyUsage::Verify));
+        assert!(!usages.contains(&KeyUsage::Encrypt));
+    }
+
+    #[test]
+    fn set_key_expiry_and_check() {
+        use chrono::{Utc, Duration};
+        let (_tmp, mut ks) = setup();
+        let fp = store_ed25519_key(&mut ks, "expiry-test");
+
+        // Set expiry far in the future: should not be returned as expiring
+        let future = Utc::now() + Duration::days(365);
+        ks.set_key_expiry(&fp, Some(future)).unwrap();
+        let expiring = ks.check_expiring_keys(30);
+        assert!(expiring.iter().all(|(m, _)| m.fingerprint != fp),
+                "Key with 365-day expiry should not appear in 30-day check");
+
+        // Set expiry to 10 days from now: should appear as expiring soon
+        let soon = Utc::now() + Duration::days(10);
+        ks.set_key_expiry(&fp, Some(soon)).unwrap();
+        let expiring = ks.check_expiring_keys(30);
+        let found: Vec<_> = expiring.iter()
+            .filter(|(m, _)| m.fingerprint == fp)
+            .collect();
+        assert_eq!(found.len(), 1);
+        assert!(matches!(found[0].1, KeyExpiryStatus::ExpiringSoon { .. }));
+    }
+
+    #[test]
+    fn update_contact() {
+        let (_tmp, mut ks) = setup();
+        ks.add_contact("Eve", Some("eve@old.com"), Some("original")).unwrap();
+
+        ks.update_contact("Eve", Some(Some("eve@new.com")), Some(Some("updated"))).unwrap();
+        let c = ks.get_contact("Eve").expect("contact should exist");
+        assert_eq!(c.email.as_deref(), Some("eve@new.com"));
+        assert_eq!(c.notes.as_deref(), Some("updated"));
+    }
+
+    #[test]
+    fn update_contact_clear_fields() {
+        let (_tmp, mut ks) = setup();
+        ks.add_contact("Fay", Some("fay@test.com"), Some("note")).unwrap();
+
+        // Clear email, keep notes
+        ks.update_contact("Fay", Some(None), None).unwrap();
+        let c = ks.get_contact("Fay").unwrap();
+        assert_eq!(c.email, None);
+        assert_eq!(c.notes.as_deref(), Some("note")); // unchanged
+    }
+
+    #[test]
+    fn get_contact_nonexistent() {
+        let (_tmp, ks) = setup();
+        assert!(ks.get_contact("Nobody").is_none());
+    }
+
+    #[test]
+    fn check_usage_enforcement() {
+        let (_tmp, mut ks) = setup();
+        let fp = store_ed25519_key(&mut ks, "usage-enforce");
+        ks.set_key_usage(&fp, Some(vec![KeyUsage::Sign])).unwrap();
+        let m = ks.get_key_metadata(&fp).unwrap();
+        assert!(m.check_usage(KeyUsage::Sign).is_ok(), "Sign should be allowed");
+        assert!(m.check_usage(KeyUsage::Encrypt).is_err(), "Encrypt should be disallowed");
+    }
 }

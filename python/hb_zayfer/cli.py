@@ -20,6 +20,76 @@ console = Console()
 err_console = Console(stderr=True, style="bold red")
 
 
+def _audit_safe(fn, *args, **kwargs) -> None:
+    """Best-effort audit logging that never breaks user operations."""
+    try:
+        fn(*args, **kwargs)
+    except Exception:
+        pass
+
+
+def _passphrase_strength(pw: str) -> tuple[int, str]:
+    """Lightweight passphrase strength scorer (0-100, label).
+
+    Uses the same algorithm as the GUI's PasswordStrengthMeter when
+    available, falling back to a minimal inline implementation when
+    PySide6 is not installed.
+    """
+    try:
+        from hb_zayfer.gui.password_strength import PasswordStrengthMeter
+        return PasswordStrengthMeter._calculate_strength(pw)
+    except ImportError:
+        pass
+
+    # Minimal fallback (no PySide6)
+    import re
+
+    score = 0
+    length = len(pw)
+    if length < 8:
+        score += length * 5
+    elif length < 12:
+        score += 40 + (length - 8) * 5
+    elif length < 16:
+        score += 60 + (length - 12) * 5
+    else:
+        score += 80 + min((length - 16) * 2, 20)
+
+    has_lower = bool(re.search(r"[a-z]", pw))
+    has_upper = bool(re.search(r"[A-Z]", pw))
+    has_digit = bool(re.search(r"\d", pw))
+    has_special = bool(re.search(r"[^a-zA-Z0-9]", pw))
+    score += sum([has_lower, has_upper, has_digit, has_special]) * 5
+
+    if re.match(r"^[a-z]+$", pw) or re.match(r"^[A-Z]+$", pw):
+        score -= 10
+    if re.match(r"^\d+$", pw):
+        score -= 20
+    if re.search(r"(.)\1{2,}", pw):
+        score -= 10
+    if re.search(r"(012|123|234|345|456|567|678|789|890|abc|bcd|cde|def)", pw.lower()):
+        score -= 10
+
+    common = [
+        "password", "12345678", "qwerty", "abc123", "monkey", "letmein",
+        "trustno1", "dragon", "baseball", "iloveyou", "master", "sunshine",
+        "ashley", "bailey", "shadow", "superman", "qazwsx", "michael",
+    ]
+    if pw.lower() in common:
+        score = max(10, score - 40)
+
+    score = max(0, min(100, score))
+    if score < 30:
+        return score, "Very Weak"
+    if score < 50:
+        return score, "Weak"
+    if score < 70:
+        return score, "Fair"
+    if score < 85:
+        return score, "Good"
+    return score, "Strong"
+
+
 def _prompt_passphrase(confirm: bool = False) -> bytes:
     """Prompt for a passphrase securely."""
     pw = getpass.getpass("Passphrase: ")
@@ -28,6 +98,11 @@ def _prompt_passphrase(confirm: bool = False) -> bytes:
         if pw != pw2:
             err_console.print("Passphrases do not match.")
             sys.exit(1)
+        # Warn on weak passphrases
+        score, label = _passphrase_strength(pw)
+        if score < 50:
+            err_console.print(f"[yellow]⚠ Passphrase strength: {label} ({score}/100)[/yellow]")
+            err_console.print("[yellow]  Consider using a longer passphrase with mixed characters.[/yellow]")
     return pw.encode("utf-8")
 
 
@@ -82,6 +157,7 @@ def keygen(algorithm: str, label: str, user_id: Optional[str], export_dir: Optio
     console.print(f"[green]Key generated:[/green] {label}")
     console.print(f"  Fingerprint: {fp}")
     console.print(f"  Algorithm:   {algorithm.upper()}")
+    _audit_safe(hbz.audit_log_key_generated, algorithm.upper(), fp, "source=cli")
 
     if export_dir:
         out = Path(export_dir) / f"{fp[:16]}.pub"
@@ -134,6 +210,12 @@ def encrypt(input_file: str, output: Optional[str], algorithm: str, password: bo
             sys.exit(1)
 
     console.print(f"[green]Encrypted:[/green] {output}")
+    _audit_safe(
+        hbz.audit_log_file_encrypted,
+        algorithm.upper(),
+        input_file,
+        Path(input_file).stat().st_size,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -185,6 +267,12 @@ def decrypt(input_file: str, output: Optional[str], key: Optional[str]) -> None:
         sys.exit(1)
 
     console.print(f"[green]Decrypted:[/green] {output}")
+    _audit_safe(
+        hbz.audit_log_file_decrypted,
+        f"WRAP-0x{wrapping_id:02x}",
+        input_file,
+        Path(output).stat().st_size if Path(output).exists() else None,
+    )
 
 
 def _select_key(ks: hbz.KeyStore, hint: Optional[str], algo_prefix: str) -> str:
@@ -205,6 +293,9 @@ def _select_key(ks: hbz.KeyStore, hint: Optional[str], algo_prefix: str) -> str:
     for i, k in enumerate(keys, 1):
         console.print(f"  {i}. {k.label} ({k.fingerprint[:16]}..)")
     choice = click.prompt("Select key", type=int, default=1)
+    if choice < 1 or choice > len(keys):
+        err_console.print(f"Invalid selection: must be 1–{len(keys)}.")
+        sys.exit(1)
     return keys[choice - 1].fingerprint
 
 
@@ -242,6 +333,7 @@ def sign(input_file: str, key: Optional[str], output: Optional[str], algorithm: 
 
     Path(output).write_bytes(sig)
     console.print(f"[green]Signature written:[/green] {output}")
+    _audit_safe(hbz.audit_log_data_signed, algorithm.upper(), fp, "source=cli")
 
 
 @cli.command()
@@ -280,6 +372,8 @@ def verify(input_file: str, signature_file: str, key: Optional[str], algorithm: 
         console.print("[green]Signature is VALID.[/green]")
     else:
         console.print("[red]Signature is INVALID.[/red]")
+    _audit_safe(hbz.audit_log_signature_verified, algorithm.upper(), fp, bool(valid))
+    if not valid:
         sys.exit(1)
 
 
@@ -447,6 +541,109 @@ def contacts_link(contact_name: str, fingerprint_prefix: str) -> None:
         sys.exit(1)
     ks.associate_key_with_contact(contact_name, fps[0])
     console.print(f"[green]Linked[/green] key {fps[0][:16]}.. to {contact_name}")
+
+
+# ---------------------------------------------------------------------------
+# Backup and audit
+# ---------------------------------------------------------------------------
+
+@cli.group()
+def backup() -> None:
+    """Create, restore, and verify encrypted keystore backups."""
+
+
+@backup.command("create")
+@click.option("--output", "-o", required=True, type=click.Path(), help="Backup output file path.")
+@click.option("--label", "-l", default=None, help="Optional backup label.")
+def backup_create(output: str, label: Optional[str]) -> None:
+    """Create an encrypted keystore backup."""
+    ks = hbz.KeyStore()
+    passphrase = _prompt_passphrase(confirm=True)
+    with console.status("Creating backup..."):
+        ks.create_backup(output, passphrase, label)
+    console.print(f"[green]Backup created:[/green] {output}")
+
+
+@backup.command("restore")
+@click.option("--input", "-i", "input_file", required=True, type=click.Path(exists=True), help="Backup file path.")
+@click.option("--yes", "-y", is_flag=True, help="Skip confirmation prompt.")
+def backup_restore(input_file: str, yes: bool) -> None:
+    """Restore keystore from an encrypted backup."""
+    if not yes:
+        click.confirm("Restore will overwrite existing keystore files. Continue?", abort=True)
+    ks = hbz.KeyStore()
+    passphrase = _prompt_passphrase(confirm=False)
+    with console.status("Restoring backup..."):
+        manifest = ks.restore_backup(input_file, passphrase)
+
+    console.print("[green]Backup restored successfully[/green]")
+    console.print(f"  Created at:    {manifest.created_at}")
+    console.print(f"  Private keys:  {manifest.private_key_count}")
+    console.print(f"  Public keys:   {manifest.public_key_count}")
+    console.print(f"  Contacts:      {manifest.contact_count}")
+
+
+@backup.command("verify")
+@click.option("--input", "-i", "input_file", required=True, type=click.Path(exists=True), help="Backup file path.")
+def backup_verify(input_file: str) -> None:
+    """Verify a backup file and passphrase without restoring."""
+    ks = hbz.KeyStore()
+    passphrase = _prompt_passphrase(confirm=False)
+    with console.status("Verifying backup..."):
+        manifest = ks.verify_backup(input_file, passphrase)
+
+    console.print("[green]Backup verification passed[/green]")
+    console.print(f"  Version:       {manifest.version}")
+    console.print(f"  Created at:    {manifest.created_at}")
+    if manifest.label:
+        console.print(f"  Label:         {manifest.label}")
+
+
+@cli.group()
+def audit() -> None:
+    """Inspect and verify the audit log."""
+
+
+@audit.command("show")
+@click.option("--limit", "-n", default=20, show_default=True, type=int, help="Number of recent entries to show.")
+def audit_show(limit: int) -> None:
+    """Show recent audit log entries."""
+    logger = hbz.AuditLogger()
+    entries = logger.recent_entries(limit)
+    if not entries:
+        console.print("No audit entries found.")
+        return
+
+    table = Table(title="Audit Log")
+    table.add_column("Timestamp", style="cyan")
+    table.add_column("Operation", style="green")
+    table.add_column("Note")
+
+    for e in entries:
+        table.add_row(e.timestamp, e.operation, e.note or "")
+
+    console.print(table)
+
+
+@audit.command("verify")
+def audit_verify() -> None:
+    """Verify audit log integrity chain."""
+    logger = hbz.AuditLogger()
+    valid = logger.verify_integrity()
+    if valid:
+        console.print("[green]Audit log integrity OK[/green]")
+    else:
+        err_console.print("Audit log integrity FAILED")
+        sys.exit(1)
+
+
+@audit.command("export")
+@click.option("--output", "-o", required=True, type=click.Path(), help="Output path for exported log.")
+def audit_export(output: str) -> None:
+    """Export audit log to a file."""
+    logger = hbz.AuditLogger()
+    logger.export(output)
+    console.print(f"[green]Audit log exported:[/green] {output}")
 
 
 # ---------------------------------------------------------------------------
