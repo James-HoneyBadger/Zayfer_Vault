@@ -16,7 +16,7 @@ set -euo pipefail
 # Extract version from workspace Cargo.toml to avoid hardcoding
 VERSION=$(grep -m1 '^version' Cargo.toml | sed 's/.*"\(.*\)".*/\1/')
 if [[ -z "$VERSION" ]]; then
-    VERSION="1.0.0"
+    VERSION="1.0.1"
 fi
 NAME="hb-zayfer"
 DESCRIPTION="A full-featured encryption/decryption suite"
@@ -171,7 +171,7 @@ build_arch() {
     cat > "$DIST_DIR/PKGBUILD" <<'EOF'
 # Maintainer: James Temple <james@honey-badger.org>
 pkgname=hb-zayfer
-pkgver=1.0.0
+pkgver=1.0.1
 pkgrel=1
 pkgdesc="A full-featured encryption/decryption suite"
 arch=('x86_64' 'aarch64')

@@ -122,7 +122,7 @@ main() {
     # Handle help flags
     case "$mode" in
         -h|--help|help)
-            echo "HB Zayfer v1.0.0 — Encryption/Decryption Suite"
+            echo "HB Zayfer v1.0.1 — Encryption/Decryption Suite"
             echo ""
             echo "Usage: $0 [MODE] [OPTIONS]"
             echo ""
@@ -144,7 +144,7 @@ main() {
     esac
 
     printf "\n${BOLD}  ╔══════════════════════════════════════╗${NC}\n"
-    printf "${BOLD}  ║     🔐  HB Zayfer  v1.0.0  🔐      ║${NC}\n"
+    printf "${BOLD}  ║     🔐  HB Zayfer  v1.0.1  🔐      ║${NC}\n"
     printf "${BOLD}  ╚══════════════════════════════════════╝${NC}\n\n"
 
     check_rust

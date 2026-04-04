@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.0.1] — 2026-04-04
+
+### Security
+
+- Hardened the web API with safer filename sanitization and strict home-directory path validation for uploads, backups, and audit exports.
+- Added constant-time audit integrity checks, nonce-space exhaustion guards for chunked encryption, and stronger KDF input validation in Python and WASM bindings.
+- Improved RSA key-size detection during import to avoid heuristic misclassification.
+
+### Improved
+
+- Added optional `--compress` support to CLI encryption workflows.
+- Kept the backup/restore GUI responsive with background workers, busy indicators, and cooperative cancellation.
+- Refined onboarding, password-strength screening, launcher native-module detection, and notification stacking behavior.
+
+### CI & Docs
+
+- Expanded GitHub Actions coverage with GUI and web smoke tests, a WASM build job, and `cargo audit`.
+- Added new maintenance and encryption/password hygiene documentation for end users.
+
 ## [1.0.0] — 2025-06-09
 
 ### Sprint 6 — Infrastructure & Distribution

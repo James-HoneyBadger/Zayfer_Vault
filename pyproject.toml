@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "hb_zayfer"
-version = "1.0.0"
+version = "1.0.1"
 description = "A full-featured encryption/decryption suite with GUI, CLI, and web interfaces"
 license = { text = "MIT" }
 authors = [{name = "James Temple", email = "james@honey-badger.org"}]
