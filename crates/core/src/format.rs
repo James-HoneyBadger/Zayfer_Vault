@@ -19,6 +19,7 @@ use rand::RngCore;
 use rand_core::OsRng;
 use serde::{Deserialize, Serialize};
 
+use crate::config::{DEFAULT_CHUNK_SIZE, MAX_CHUNK_SIZE};
 use crate::error::{HbError, HbResult};
 use crate::kdf::{self, KdfAlgorithm, KdfParams, Argon2Params, ScryptParams};
 use crate::{aes_gcm as aes, chacha20 as chacha, compression};
@@ -29,8 +30,8 @@ pub const MAGIC: &[u8; 4] = b"HBZF";
 pub const VERSION: u8 = 0x01;
 /// Bit flag for compression in the version byte.
 const COMPRESS_FLAG: u8 = 0x80;
-/// Default chunk size for streaming encryption (64 KiB).
-pub const CHUNK_SIZE: usize = 64 * 1024;
+/// Default chunk size for streaming encryption — re-exported from config.
+pub const CHUNK_SIZE: usize = DEFAULT_CHUNK_SIZE;
 
 /// Symmetric cipher selection.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -387,9 +388,9 @@ pub fn decrypt_stream<R: Read, W: Write>(
     let mut total_written: u64 = 0;
 
     // Maximum allowed encrypted chunk size.
-    // We accept up to 16 MiB plaintext chunks (the config max) plus 16 bytes AEAD tag.
+    // Uses the config maximum plus 16 bytes AEAD tag.
     // This ensures files encrypted with any valid chunk_size can be decrypted.
-    const MAX_CHUNK_LEN: usize = 16 * 1024 * 1024 + 16;
+    const MAX_CHUNK_LEN: usize = MAX_CHUNK_SIZE + 16;
 
     loop {
         // Read chunk length

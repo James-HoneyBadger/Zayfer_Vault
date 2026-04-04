@@ -14,6 +14,8 @@
 //! assert_eq!(phrase.split('-').count(), 6);
 //! ```
 
+use std::collections::HashSet;
+
 use rand::Rng;
 use rand_core::OsRng;
 
@@ -76,11 +78,14 @@ pub fn generate_password(policy: &PasswordPolicy) -> String {
         charset.push_str(SYMBOLS);
     }
 
-    // Remove excluded characters
-    if !policy.exclude.is_empty() {
+    // Build exclusion set once for O(1) lookups
+    let exclude_set: HashSet<char> = policy.exclude.chars().collect();
+
+    // Remove excluded characters efficiently
+    if !exclude_set.is_empty() {
         charset = charset
             .chars()
-            .filter(|c| !policy.exclude.contains(*c))
+            .filter(|c| !exclude_set.contains(c))
             .collect();
     }
 
@@ -99,33 +104,33 @@ pub fn generate_password(policy: &PasswordPolicy) -> String {
 
     // Ensure at least one char from each enabled class
     let mut pos = 0;
-    let usable = |set: &str, excl: &str| -> Vec<char> {
-        set.chars().filter(|c| !excl.contains(*c)).collect()
+    let usable = |set: &str, excl: &HashSet<char>| -> Vec<char> {
+        set.chars().filter(|c| !excl.contains(c)).collect()
     };
 
     if policy.uppercase {
-        let set = usable(UPPER, &policy.exclude);
+        let set = usable(UPPER, &exclude_set);
         if !set.is_empty() && !password.iter().any(|c| set.contains(c)) {
             password[pos] = set[rng.gen_range(0..set.len())];
             pos += 1;
         }
     }
     if policy.lowercase {
-        let set = usable(LOWER, &policy.exclude);
+        let set = usable(LOWER, &exclude_set);
         if !set.is_empty() && !password.iter().any(|c| set.contains(c)) {
             password[pos] = set[rng.gen_range(0..set.len())];
             pos += 1;
         }
     }
     if policy.digits {
-        let set = usable(DIGITS, &policy.exclude);
+        let set = usable(DIGITS, &exclude_set);
         if !set.is_empty() && !password.iter().any(|c| set.contains(c)) {
             password[pos] = set[rng.gen_range(0..set.len())];
             pos += 1;
         }
     }
     if policy.symbols {
-        let set = usable(SYMBOLS, &policy.exclude);
+        let set = usable(SYMBOLS, &exclude_set);
         if !set.is_empty() && !password.iter().any(|c| set.contains(c)) {
             password[pos] = set[rng.gen_range(0..set.len())];
             let _ = pos; // suppress unused warning

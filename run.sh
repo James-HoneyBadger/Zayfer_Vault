@@ -93,7 +93,7 @@ ensure_deps() {
 ensure_native() {
     # Rebuild if the shared library is missing or any Rust source is newer
     local so_path
-    so_path=$(find "$VENV_DIR" -name "_native*.so" -o -name "_native*.pyd" 2>/dev/null | head -1)
+    so_path=$(find "$PROJECT_DIR/python" "$VENV_DIR" -type f \( -name "_native*.so" -o -name "_native*.pyd" -o -name "_native*.dylib" \) 2>/dev/null | head -1)
 
     local need_build=0
     if [[ -z "$so_path" ]]; then

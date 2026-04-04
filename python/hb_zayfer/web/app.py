@@ -1,4 +1,15 @@
-"""FastAPI application factory."""
+"""FastAPI application factory.
+
+This module owns the web application's cross-cutting concerns:
+
+- bearer-token authentication,
+- per-client rate limiting, and
+- static-file / SPA mounting.
+
+The environment is read inside `create_app()` rather than at import time so
+fresh app instances reflect the caller's configuration. This is important for
+both tests and multi-process deployments.
+"""
 
 from __future__ import annotations
 
@@ -19,15 +30,10 @@ import hb_zayfer as hbz
 
 STATIC_DIR = Path(__file__).parent / "static"
 
-# Bearer token for API authentication.
-# Set HB_ZAYFER_API_TOKEN env-var to require token auth on every request.
-# If unset, the API is openly accessible (suitable for local-only use).
-_API_TOKEN: str | None = os.environ.get("HB_ZAYFER_API_TOKEN")
-
-# Rate limiting configuration (per-IP).
-# Defaults: 60 requests per 60-second window.  Override via env-vars.
-_RATE_LIMIT: int = int(os.environ.get("HB_ZAYFER_RATE_LIMIT", "60"))
-_RATE_WINDOW: int = int(os.environ.get("HB_ZAYFER_RATE_WINDOW", "60"))
+# Default rate limiting configuration (per-IP). Actual values are read when
+# each app instance is created so tests and subprocesses see fresh env state.
+_DEFAULT_RATE_LIMIT = 60
+_DEFAULT_RATE_WINDOW = 60
 
 
 class _RateLimiter:
@@ -59,11 +65,18 @@ class _RateLimiter:
             return True, self._max - len(timestamps)
 
 
-_limiter = _RateLimiter(_RATE_LIMIT, _RATE_WINDOW)
-
-
 def create_app() -> FastAPI:
     """Create and configure the FastAPI app."""
+    # Read environment-derived settings at app construction time so each app
+    # instance starts from a clean, explicit configuration boundary.
+    api_token = os.environ.get("HB_ZAYFER_API_TOKEN")
+    rate_limit = int(os.environ.get("HB_ZAYFER_RATE_LIMIT", str(_DEFAULT_RATE_LIMIT)))
+    rate_window = int(os.environ.get("HB_ZAYFER_RATE_WINDOW", str(_DEFAULT_RATE_WINDOW)))
+
+    # The limiter is intentionally per-app, not global, to avoid state leaking
+    # across unit tests or between independently created FastAPI instances.
+    limiter = _RateLimiter(rate_limit, rate_window)
+
     app = FastAPI(
         title="HB_Zayfer",
         description="Encryption/Decryption Suite — Web Interface",
@@ -84,12 +97,12 @@ def create_app() -> FastAPI:
     # Bearer-token auth middleware (if token is configured)
     @app.middleware("http")
     async def _auth_middleware(request: Request, call_next):
-        if _API_TOKEN is not None:
+        if api_token is not None:
             # Allow static files and docs without auth
             path = request.url.path
             if not (path.startswith("/static") or path == "/" or path.startswith("/docs") or path.startswith("/openapi")):
                 auth = request.headers.get("authorization", "")
-                expected = f"Bearer {_API_TOKEN}"
+                expected = f"Bearer {api_token}"
                 # Timing-safe comparison to prevent token-guessing side-channel attacks
                 if not secrets.compare_digest(auth, expected):
                     return JSONResponse({"detail": "Unauthorized"}, status_code=401)
@@ -99,15 +112,19 @@ def create_app() -> FastAPI:
     @app.middleware("http")
     async def _rate_limit_middleware(request: Request, call_next):
         client_ip = request.client.host if request.client else "unknown"
-        allowed, remaining = _limiter.is_allowed(client_ip)
+        allowed, remaining = limiter.is_allowed(client_ip)
         if not allowed:
             return JSONResponse(
                 {"detail": "Rate limit exceeded. Try again later."},
                 status_code=429,
-                headers={"Retry-After": str(_RATE_WINDOW)},
+                headers={
+                    "Retry-After": str(rate_window),
+                    "X-RateLimit-Limit": str(rate_limit),
+                    "X-RateLimit-Remaining": "0",
+                },
             )
         response = await call_next(request)
-        response.headers["X-RateLimit-Limit"] = str(_RATE_LIMIT)
+        response.headers["X-RateLimit-Limit"] = str(rate_limit)
         response.headers["X-RateLimit-Remaining"] = str(remaining)
         return response
 

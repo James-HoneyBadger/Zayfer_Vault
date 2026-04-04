@@ -102,10 +102,80 @@ jobs:
       - name: Install maturin & Python deps
         run: |
           pip install --upgrade pip
-          pip install maturin[patchelf] pytest pytest-asyncio httpx fastapi
+          pip install maturin[patchelf] pytest pytest-asyncio httpx fastapi uvicorn PySide6
 
       - name: Build native module (develop)
         run: maturin develop --release
 
+      - name: Web app smoke test
+        run: |
+          python - <<'PY'
+          from hb_zayfer.web.app import create_app
+          app = create_app()
+          print(app.title, app.version)
+          PY
+
+      - name: GUI smoke test
+        env:
+          QT_QPA_PLATFORM: offscreen
+          HB_ZAYFER_SKIP_ONBOARDING: "1"
+        run: |
+          python - <<'PY'
+          from PySide6.QtWidgets import QApplication
+          from hb_zayfer.gui.main_window import MainWindow
+
+          app = QApplication([])
+          win = MainWindow()
+          print(win.windowTitle())
+          win.close()
+          app.quit()
+          PY
+
       - name: Run Python tests
+        env:
+          QT_QPA_PLATFORM: offscreen
         run: pytest tests/python/ -v --tb=short
+
+  # -----------------------------------------------------------------------
+  # WASM – verify wasm crate builds
+  # -----------------------------------------------------------------------
+  wasm:
+    name: WASM build check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-wasm-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-wasm-cargo-
+
+      - name: Build WASM crate
+        run: cargo build -p hb_zayfer_wasm --target wasm32-unknown-unknown --release
+
+  # -----------------------------------------------------------------------
+  # Security audit – check for known vulnerabilities
+  # -----------------------------------------------------------------------
+  audit:
+    name: Cargo audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked || true
+
+      - name: Run audit
+        run: cargo audit

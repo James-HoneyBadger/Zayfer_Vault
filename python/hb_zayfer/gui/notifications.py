@@ -143,13 +143,14 @@ class NotificationManager:
         
         # Create new notification
         toast = ToastNotification(message, toast_type, self.parent)
+        
+        # Compute stacking offset before showing to avoid flicker
+        offset = len(self.active_notifications)
         self.active_notifications.append(toast)
         
-        # Adjust position for stacking
-        offset = len(self.active_notifications) - 1
         toast.show_notification(duration)
         
-        # Adjust Y position if multiple toasts
+        # Adjust Y position for stacking (move upward for each active toast)
         if offset > 0:
             current_y = toast.y()
             toast.move(toast.x(), current_y - (offset * (toast.height() + 10)))

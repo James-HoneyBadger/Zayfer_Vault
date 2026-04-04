@@ -35,6 +35,21 @@ def client():
     return TestClient(app)
 
 
+def test_auth_token_required_when_configured(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("HB_ZAYFER_API_TOKEN", "top-secret")
+    app = create_app()
+
+    with TestClient(app) as secured_client:
+        r = secured_client.get("/api/config")
+        assert r.status_code == 401
+
+        r = secured_client.get(
+            "/api/config",
+            headers={"Authorization": "Bearer top-secret"},
+        )
+        assert r.status_code == 200
+
+
 # ===========================================================================
 # Version
 # ===========================================================================
@@ -317,6 +332,15 @@ def test_decrypt_file_wrong_passphrase(client: TestClient):
     assert r.status_code == 400
 
 
+def test_encrypt_file_size_limit(client: TestClient, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr("hb_zayfer.web.routes._MAX_UPLOAD_BYTES", 8)
+    r = client.post(
+        "/api/encrypt/file?passphrase=filepass&algorithm=aes",
+        files={"file": ("too-big.txt", io.BytesIO(b"123456789"), "text/plain")},
+    )
+    assert r.status_code == 413
+
+
 # ===========================================================================
 # Audit log
 # ===========================================================================
@@ -364,6 +388,14 @@ def test_audit_export(client: TestClient, tmp_path: Path):
 def test_audit_export_path_traversal(client: TestClient):
     """Path traversal attempt should be rejected."""
     r = client.post("/api/audit/export", params={"destination": "/tmp/../../etc/passwd"})
+    assert r.status_code == 400
+    assert "home directory" in r.json()["detail"].lower()
+
+
+def test_audit_export_home_prefix_bypass_rejected(client: TestClient):
+    home = Path.home().resolve()
+    bypass = home.parent / f"{home.name}_evil" / "audit.json"
+    r = client.post("/api/audit/export", params={"destination": str(bypass)})
     assert r.status_code == 400
     assert "home directory" in r.json()["detail"].lower()
 
@@ -417,6 +449,17 @@ def test_backup_create_verify_restore(client: TestClient, tmp_path: Path):
 def test_backup_path_traversal(client: TestClient):
     r = client.post("/api/backup/create", json={
         "output_path": "/tmp/../../etc/evil",
+        "passphrase": "p",
+    })
+    assert r.status_code == 400
+    assert "home directory" in r.json()["detail"].lower()
+
+
+def test_backup_home_prefix_bypass_rejected(client: TestClient):
+    home = Path.home().resolve()
+    bypass = home.parent / f"{home.name}_evil" / "backup.hbzf"
+    r = client.post("/api/backup/create", json={
+        "output_path": str(bypass),
         "passphrase": "p",
     })
     assert r.status_code == 400
@@ -562,6 +605,23 @@ def test_rate_limit_headers(client: TestClient):
     assert r.status_code == 200
     assert "X-RateLimit-Limit" in r.headers
     assert "X-RateLimit-Remaining" in r.headers
+
+
+def test_rate_limiter_isolated_per_app_instance(monkeypatch: pytest.MonkeyPatch):
+    """A fresh app instance should start with a fresh limiter window."""
+    monkeypatch.setenv("HB_ZAYFER_RATE_LIMIT", "1")
+    monkeypatch.setenv("HB_ZAYFER_RATE_WINDOW", "60")
+
+    app1 = create_app()
+    with TestClient(app1) as c1:
+        assert c1.get("/api/version").status_code == 200
+        assert c1.get("/api/version").status_code == 429
+
+    app2 = create_app()
+    with TestClient(app2) as c2:
+        r = c2.get("/api/version")
+        assert r.status_code == 200
+        assert r.headers["X-RateLimit-Limit"] == "1"
 
 
 # ===========================================================================

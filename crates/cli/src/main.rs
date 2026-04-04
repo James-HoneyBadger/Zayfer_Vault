@@ -65,6 +65,9 @@ enum Commands {
         /// Read passphrase from a file (first line, trimmed)
         #[arg(long, value_name = "FILE")]
         passphrase_file: Option<String>,
+        /// Enable compression before encryption
+        #[arg(long)]
+        compress: bool,
     },
 
     /// Decrypt a file or text
@@ -413,7 +416,8 @@ fn main() -> Result<()> {
             algorithm,
             password,
             passphrase_file,
-        } => cmd_encrypt(&keystore, &input, &output, recipient, algorithm.into(), password, passphrase_file)?,
+            compress,
+        } => cmd_encrypt(&keystore, &input, &output, recipient, algorithm.into(), password, passphrase_file, compress)?,
 
         Commands::Decrypt {
             input,
@@ -754,6 +758,7 @@ fn cmd_encrypt(
     algorithm: SymmetricAlgorithm,
     use_password: bool,
     passphrase_file: Option<String>,
+    compress: bool,
 ) -> Result<()> {
     let plaintext = read_input(input)?;
 
@@ -774,7 +779,7 @@ fn cmd_encrypt(
             wrapped_key: None,
             ephemeral_public: None,
             chunk_size: None,
-            compress: false,
+            compress,
         };
 
         let mut input_cursor = io::Cursor::new(&plaintext);
@@ -826,7 +831,7 @@ fn cmd_encrypt(
                     wrapped_key: None,
                     ephemeral_public: Some(x25519::export_public_key_raw(&eph_public)),
                     chunk_size: None,
-                    compress: false,
+                    compress,
                 };
 
                 let mut input_cursor = io::Cursor::new(&plaintext);
@@ -868,7 +873,7 @@ fn cmd_encrypt(
                     wrapped_key: Some(wrapped),
                     ephemeral_public: None,
                     chunk_size: None,
-                    compress: false,
+                    compress,
                 };
 
                 let mut input_cursor = io::Cursor::new(&plaintext);
@@ -1199,14 +1204,14 @@ fn cmd_keys_import(
             _ => {
                 if let Ok(text) = std::str::from_utf8(&data) {
                     if text.contains("RSA") {
-                        // Heuristic: RSA-4096 PEM data is roughly twice the
-                        // size of RSA-2048.  A 4096-bit private key PEM is
-                        // ~3200 bytes; a 2048-bit private key PEM is ~1700.
-                        // For public keys: 4096 → ~800 bytes, 2048 → ~450.
-                        if data.len() > 2000 {
-                            KeyAlgorithm::Rsa4096
+                        // Parse the actual RSA modulus to determine key size.
+                        if let Ok(size) = rsa::detect_key_size(text) {
+                            match size {
+                                rsa::RsaKeySize::Rsa4096 => KeyAlgorithm::Rsa4096,
+                                rsa::RsaKeySize::Rsa2048 => KeyAlgorithm::Rsa2048,
+                            }
                         } else {
-                            KeyAlgorithm::Rsa2048
+                            KeyAlgorithm::Rsa4096 // fallback for unparseable RSA PEM
                         }
                     } else if text.contains("ED25519") || text.contains("ed25519") {
                         KeyAlgorithm::Ed25519

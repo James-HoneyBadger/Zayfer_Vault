@@ -79,6 +79,10 @@ pub fn decrypt(key: &[u8], nonce: &[u8], ciphertext: &[u8], aad: &[u8]) -> HbRes
         .map_err(|_| HbError::AuthenticationFailed)
 }
 
+/// Maximum chunk index to prevent nonce space exhaustion.
+/// With a 4-byte prefix and 8-byte counter, 2^32 chunks is the safe limit.
+const MAX_CHUNK_INDEX: u64 = 1u64 << 32;
+
 /// Encrypt with a freshly generated nonce, using an incrementing counter.
 /// Useful for streaming encryption of chunks.
 pub fn encrypt_chunk(
@@ -88,11 +92,19 @@ pub fn encrypt_chunk(
     chunk: &[u8],
     aad: &[u8],
 ) -> HbResult<Vec<u8>> {
+    if chunk_index >= MAX_CHUNK_INDEX {
+        return Err(HbError::AesGcm(
+            "Chunk index exceeds maximum (nonce space exhaustion)".into(),
+        ));
+    }
+
     let cipher = Aes256Gcm::new_from_slice(key)
         .map_err(|e| HbError::AesGcm(format!("Invalid key: {e}")))?;
 
+    // Derive per-chunk nonce: first 4 bytes from base_nonce, last 8 bytes
+    // are the chunk index XORed with the corresponding base_nonce bytes.
+    // This is safe because chunk_index < 2^32 guarantees unique nonces.
     let mut nonce_bytes = *base_nonce;
-    // XOR the last 8 bytes of the nonce with the chunk index
     let idx_bytes = chunk_index.to_le_bytes();
     for i in 0..8 {
         nonce_bytes[4 + i] ^= idx_bytes[i];
@@ -121,6 +133,12 @@ pub fn decrypt_chunk(
     ciphertext: &[u8],
     aad: &[u8],
 ) -> HbResult<Vec<u8>> {
+    if chunk_index >= MAX_CHUNK_INDEX {
+        return Err(HbError::AesGcm(
+            "Chunk index exceeds maximum (nonce space exhaustion)".into(),
+        ));
+    }
+
     let cipher = Aes256Gcm::new_from_slice(key)
         .map_err(|e| HbError::AesGcm(format!("Invalid key: {e}")))?;
 

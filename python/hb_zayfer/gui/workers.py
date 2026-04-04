@@ -1,4 +1,10 @@
-"""Background workers for long-running crypto operations."""
+"""Background workers for long-running crypto operations.
+
+The worker abstraction keeps CPU- and I/O-heavy tasks off the Qt GUI thread.
+Cancellation is cooperative: it does not terminate the underlying crypto call,
+but it prevents stale success/error signals from updating the UI after the user
+has already moved on.
+"""
 
 from __future__ import annotations
 
@@ -32,13 +38,24 @@ class CryptoWorker(QRunnable):
         self.args = args
         self.kwargs = kwargs
         self.signals = WorkerSignals()
+        self._cancelled = False
+
+    def cancel(self) -> None:
+        """Request that any late result/error notification be suppressed."""
+        self._cancelled = True
 
     @Slot()
     def run(self) -> None:
+        if self._cancelled:
+            self.signals.finished.emit()
+            return
+
         try:
             result = self.fn(*self.args, **self.kwargs)
-            self.signals.result.emit(result)
+            if not self._cancelled:
+                self.signals.result.emit(result)
         except Exception as exc:
-            self.signals.error.emit(str(exc))
+            if not self._cancelled:
+                self.signals.error.emit(str(exc))
         finally:
             self.signals.finished.emit()

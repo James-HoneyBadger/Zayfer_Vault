@@ -14,6 +14,7 @@ Complete installation instructions for HB Zayfer encryption suite on Linux, macO
 - [Platform-Specific Notes](#platform-specific-notes)
 - [Troubleshooting](#troubleshooting)
 - [Verifying Installation](#verifying-installation)
+- [Maintenance and Updates](#maintenance-and-updates)
 
 ---
 
@@ -62,13 +63,15 @@ brew install pkg-config openssl nettle
 
 For most users, this one-command installation will set up everything:
 
-### Linux/macOS
+### Linux/macOS / Windows (Git Bash, WSL, or a regular terminal)
 
 ```bash
-# Clone the repository and run the launcher
+# Clone the repository and let the launcher handle setup
 git clone https://github.com/James-HoneyBadger/HB_Zayfer.git
 cd HB_Zayfer
-bash run.sh install   # builds everything and creates venv
+./run.sh              # Creates venv, installs deps, builds native extension, launches GUI
+./run.sh web          # Start the web interface instead
+./run.sh cli --help   # Show CLI help
 ```
 
 ### Manual Quick Install
@@ -252,7 +255,7 @@ python -c "import hb_zayfer; print(f'Version: {hb_zayfer.version()}')"
 hb-zayfer --help
 
 # Test GUI launches (if installed)
-python -m hb_zayfer.gui.app &
+python -m hb_zayfer.gui &
 
 # Test web server (if installed)
 hb-zayfer-web --help
@@ -498,22 +501,35 @@ After successful installation:
 
 ---
 
-## Keeping Updated
+## Maintenance and Updates
+
+Use the following procedure whenever you update the repository, switch Python versions, or suspect a broken local build:
 
 ```bash
-# Update Rust toolchain
+# Update toolchains
 rustup update stable
-
-# Update Python dependencies
 source .venv/bin/activate
 pip install --upgrade pip maturin
 
-# Pull latest changes
+# Pull latest project changes
 git pull origin main
 
-# Rebuild
+# Refresh dependencies and rebuild the native extension
+pip install -e ".[all]"
 maturin develop --release -m crates/python/Cargo.toml
+
+# Run the supported verification command
+HB_ZAYFER_SKIP_ONBOARDING=1 QT_QPA_PLATFORM=offscreen ./run.sh test
 ```
+
+Recommended maintenance habits:
+
+- **Back up** the keystore after creating or importing important keys.
+- Run `hb-zayfer audit verify` periodically to confirm log integrity.
+- Use a password manager and rotate compromised passphrases immediately.
+- Keep at least one **offline backup** of your `.hbzf-backup` archives.
+
+For the full operational checklist, see [`docs/MAINTENANCE.md`](docs/MAINTENANCE.md).
 
 ---
 

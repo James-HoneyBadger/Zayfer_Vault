@@ -30,6 +30,8 @@ pem.workspace = true
 zeroize.workspace = true
 rand.workspace = true
 rand_core.workspace = true
+subtle.workspace = true
+percent-encoding.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

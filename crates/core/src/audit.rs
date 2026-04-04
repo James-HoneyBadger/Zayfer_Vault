@@ -14,6 +14,7 @@ use chrono::{DateTime, Utc};
 use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use subtle::ConstantTimeEq;
 
 use crate::error::{HbError, HbResult};
 
@@ -97,9 +98,11 @@ impl AuditEntry {
         hex::encode(hasher.finalize())
     }
 
-    /// Verify the integrity of this entry.
+    /// Verify the integrity of this entry using constant-time comparison.
     pub fn verify(&self) -> bool {
-        self.entry_hash == self.compute_hash()
+        let computed = self.compute_hash();
+        // Use constant-time comparison to prevent timing side-channel attacks
+        self.entry_hash.as_bytes().ct_eq(computed.as_bytes()).into()
     }
 
     /// Compute the HMAC-SHA256 of this entry using an external key.

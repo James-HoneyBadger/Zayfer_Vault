@@ -106,12 +106,31 @@ class PasswordStrengthMeter(QWidget):
         if re.search(r'(012|123|234|345|456|567|678|789|890|abc|bcd|cde|def)', password.lower()):
             score -= 10  # Sequential patterns
 
-        # Common password check (simple list)
-        common = [
-            'password', '12345678', 'qwerty', 'abc123', 'monkey', 'letmein',
-            'trustno1', 'dragon', 'baseball', 'iloveyou', 'master', 'sunshine',
-            'ashley', 'bailey', 'shadow', 'superman', 'qazwsx', 'michael',
-        ]
+        # Common password check (top entries from breach databases)
+        common = {
+            'password', 'password1', 'password123', '12345678', '123456789',
+            '1234567890', '12345', '123456', '1234', 'qwerty', 'qwerty123',
+            'abc123', 'monkey', 'letmein', 'trustno1', 'dragon', 'baseball',
+            'iloveyou', 'master', 'sunshine', 'ashley', 'bailey', 'shadow',
+            'superman', 'qazwsx', 'michael', 'football', 'princess', 'access',
+            'hello', 'charlie', 'donald', 'welcome', 'login', 'admin',
+            'passw0rd', 'starwars', 'solo', 'master1', 'jordan', 'harley',
+            'ranger', 'daniel', 'robert', 'thomas', 'jennifer', 'jessica',
+            'joshua', 'andrew', 'hunter', 'buster', 'soccer', 'hockey',
+            'george', 'pepper', 'ginger', 'flower', 'zaq1zaq1', 'mustang',
+            'fuckyou', 'freedom', 'whatever', 'nothing', 'secret', 'biteme',
+            'batman', 'jordan23', 'summer', 'internet', 'service', 'computer',
+            'asshole', 'killer', 'cheese', 'yankees', 'dallas', 'austin',
+            'thunder', 'taylor', 'matrix', 'corvette', 'merlin', 'diamond',
+            'bigdog', 'cowboy', 'falcon', 'phoenix', 'silver', 'tigger',
+            'jackson', 'dallas1', 'anthony', 'william', 'richard', 'matthew',
+            'chicken', 'maggie', 'cookie', 'orange', 'banana', 'lakers',
+            'andrea', 'nicole', 'samantha', 'heather', 'amanda', 'michelle',
+            'compaq', 'trustme', 'maverick', 'matrix1', 'changeme',
+            'qwerty1', 'test123', 'test1234', 'letmein1', 'default',
+            'master12', 'admin123', 'root', 'toor', 'pass', 'temp',
+            'guest', 'p@ssw0rd', 'p@ssword',
+        }
         if password.lower() in common:
             score = max(10, score - 40)
 

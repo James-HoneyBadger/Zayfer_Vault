@@ -33,6 +33,8 @@ pkcs1 = { version = "0.7", features = ["pem"] }
 zeroize = { version = "1", features = ["derive"] }
 rand = "0.8"
 rand_core = { version = "0.6", features = ["getrandom"] }
+subtle = "2"
+percent-encoding = "2"
 
 # Serialization & encoding
 serde = { version = "1", features = ["derive"] }

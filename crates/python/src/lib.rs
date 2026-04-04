@@ -492,11 +492,26 @@ fn build_kdf_params(
     match kdf {
         "argon2id" | "argon2" => {
             let mem = kdf_memory_kib.unwrap_or(64 * 1024);
+            if mem < 8 * 1024 {
+                return Err(PyValueError::new_err(
+                    "kdf_memory_kib must be at least 8192 (8 MiB) for Argon2id",
+                ));
+            }
             let iters = kdf_iterations.unwrap_or(3);
+            if iters < 1 {
+                return Err(PyValueError::new_err(
+                    "kdf_iterations must be at least 1",
+                ));
+            }
             Ok(kdf::KdfParams::argon2id(mem, iters, 1))
         }
         "scrypt" => {
             let log_n = kdf_log_n.unwrap_or(15);
+            if log_n < 14 {
+                return Err(PyValueError::new_err(
+                    "kdf_log_n must be at least 14 for scrypt",
+                ));
+            }
             let r = kdf_r.unwrap_or(8);
             let p = kdf_p.unwrap_or(1);
             Ok(kdf::KdfParams::scrypt(log_n, r, p))

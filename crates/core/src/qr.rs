@@ -16,6 +16,7 @@
 
 use crate::error::HbError;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+use percent_encoding::{utf8_percent_encode, percent_decode_str, NON_ALPHANUMERIC};
 
 /// URI scheme used for key exchange.
 const SCHEME: &str = "hbzf-key://";
@@ -29,16 +30,9 @@ pub fn encode_key_uri(algorithm: &str, public_key: &[u8], label: Option<&str>) -
     let mut uri = format!("{}{}/{}", SCHEME, algorithm, b64);
     if let Some(l) = label {
         uri.push_str("?label=");
-        // Percent-encode spaces and special characters in label
-        for ch in l.chars() {
-            match ch {
-                ' ' => uri.push_str("%20"),
-                '&' => uri.push_str("%26"),
-                '=' => uri.push_str("%3D"),
-                '?' => uri.push_str("%3F"),
-                _ => uri.push(ch),
-            }
-        }
+        // Percent-encode the label using RFC 3986 compliant encoding
+        let encoded = utf8_percent_encode(l, NON_ALPHANUMERIC).to_string();
+        uri.push_str(&encoded);
     }
     uri
 }
@@ -85,21 +79,11 @@ pub fn decode_key_uri(uri: &str) -> Result<(String, Vec<u8>, Option<String>), Hb
     Ok((algorithm.to_string(), public_key, label))
 }
 
-/// Simple percent-decode for label values.
+/// Percent-decode for label values using RFC 3986 compliant decoding.
 fn percent_decode(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    let mut chars = s.chars();
-    while let Some(ch) = chars.next() {
-        if ch == '%' {
-            let hex: String = chars.by_ref().take(2).collect();
-            if let Ok(byte) = u8::from_str_radix(&hex, 16) {
-                out.push(byte as char);
-            }
-        } else {
-            out.push(ch);
-        }
-    }
-    out
+    percent_decode_str(s)
+        .decode_utf8_lossy()
+        .into_owned()
 }
 
 #[cfg(test)]

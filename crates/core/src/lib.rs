@@ -37,7 +37,7 @@ pub mod x25519;
 // Re-export commonly used types
 pub use audit::{AuditLogger, AuditOperation, AuditEntry};
 pub use backup::BackupManifest;
-pub use config::{Config, KdfPreset, GuiConfig, CliConfig};
+pub use config::{Config, KdfPreset, GuiConfig, CliConfig, MIN_CHUNK_SIZE, MAX_CHUNK_SIZE, DEFAULT_CHUNK_SIZE};
 pub use error::{HbError, HbResult};
 pub use format::{SymmetricAlgorithm, KeyWrapping};
 pub use keystore::{KeyStore, KeyAlgorithm, KeyMetadata, KeyUsage, KeyExpiryStatus, Contact};

@@ -12,6 +12,13 @@ use crate::error::{HbError, HbResult};
 use crate::format::SymmetricAlgorithm;
 use crate::kdf::KdfParams;
 
+/// Minimum allowed chunk size for streaming encryption (4 KiB).
+pub const MIN_CHUNK_SIZE: usize = 4 * 1024;
+/// Maximum allowed chunk size for streaming encryption (16 MiB).
+pub const MAX_CHUNK_SIZE: usize = 16 * 1024 * 1024;
+/// Default chunk size for streaming encryption (64 KiB).
+pub const DEFAULT_CHUNK_SIZE: usize = 64 * 1024;
+
 /// Application configuration with user preferences and defaults.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
@@ -175,12 +182,10 @@ impl Config {
             .map_err(|e| HbError::Config(format!("Failed to parse config file: {}", e)))?;
         
         // Clamp chunk_size to valid range
-        const MIN_CHUNK: usize = 4 * 1024;
-        const MAX_CHUNK: usize = 16 * 1024 * 1024;
-        if config.chunk_size < MIN_CHUNK {
-            config.chunk_size = MIN_CHUNK;
-        } else if config.chunk_size > MAX_CHUNK {
-            config.chunk_size = MAX_CHUNK;
+        if config.chunk_size < MIN_CHUNK_SIZE {
+            config.chunk_size = MIN_CHUNK_SIZE;
+        } else if config.chunk_size > MAX_CHUNK_SIZE {
+            config.chunk_size = MAX_CHUNK_SIZE;
         }
         
         Ok(config)
@@ -326,7 +331,7 @@ impl Config {
 
 // Helper functions for serde defaults
 fn default_chunk_size() -> usize {
-    65536 // 64 KiB
+    DEFAULT_CHUNK_SIZE
 }
 
 fn default_true() -> bool {

@@ -1,4 +1,10 @@
-"""Backup / Restore view — create, restore, and verify keyring backups."""
+"""Backup / Restore view.
+
+This widget is intentionally backed by `CryptoWorker` tasks so long-running
+backup, verification, and restore operations do not freeze the main GUI event
+loop. The view exposes status messages, an indeterminate progress bar, and a
+best-effort cancel button that suppresses late UI updates from in-flight work.
+"""
 
 from __future__ import annotations
 
@@ -30,6 +36,8 @@ class BackupView(QWidget):
 
     def __init__(self) -> None:
         super().__init__()
+        self.thread_pool = QThreadPool.globalInstance()
+        self._current_worker: CryptoWorker | None = None
         self._setup_ui()
 
     # ------------------------------------------------------------------
@@ -73,9 +81,9 @@ class BackupView(QWidget):
         self.backup_pass_confirm.setPlaceholderText("Confirm passphrase")
         create_form.addRow("Confirm:", self.backup_pass_confirm)
 
-        create_btn = QPushButton("Create Backup")
-        create_btn.clicked.connect(self._create_backup)
-        create_form.addRow("", create_btn)
+        self.create_btn = QPushButton("Create Backup")
+        self.create_btn.clicked.connect(self._create_backup)
+        create_form.addRow("", self.create_btn)
         layout.addWidget(create_box)
 
         # ---- Restore / Verify backup ----
@@ -97,15 +105,15 @@ class BackupView(QWidget):
         restore_form.addRow("Passphrase:", self.restore_pass_input)
 
         btn_row = QHBoxLayout()
-        verify_btn = QPushButton("Verify Backup")
-        verify_btn.setToolTip("Check backup integrity without restoring")
-        verify_btn.clicked.connect(self._verify_backup)
-        btn_row.addWidget(verify_btn)
+        self.verify_btn = QPushButton("Verify Backup")
+        self.verify_btn.setToolTip("Check backup integrity without restoring")
+        self.verify_btn.clicked.connect(self._verify_backup)
+        btn_row.addWidget(self.verify_btn)
 
-        restore_btn = QPushButton("Restore Backup")
-        restore_btn.setToolTip("Restore keys and contacts from backup")
-        restore_btn.clicked.connect(self._restore_backup)
-        btn_row.addWidget(restore_btn)
+        self.restore_btn = QPushButton("Restore Backup")
+        self.restore_btn.setToolTip("Restore keys and contacts from backup")
+        self.restore_btn.clicked.connect(self._restore_backup)
+        btn_row.addWidget(self.restore_btn)
         restore_form.addRow("", btn_row)
 
         layout.addWidget(restore_box)
@@ -116,6 +124,17 @@ class BackupView(QWidget):
         self.status_output.setMaximumHeight(120)
         self.status_output.setPlaceholderText("Status messages will appear here…")
         layout.addWidget(self.status_output)
+
+        self.progress = QProgressBar()
+        self.progress.setVisible(False)
+        self.progress.setRange(0, 1)
+        self.progress.setValue(0)
+        layout.addWidget(self.progress)
+
+        self.cancel_btn = QPushButton("Cancel Current Task")
+        self.cancel_btn.setEnabled(False)
+        self.cancel_btn.clicked.connect(self._cancel_current_task)
+        layout.addWidget(self.cancel_btn)
 
         layout.addStretch()
 
@@ -143,6 +162,70 @@ class BackupView(QWidget):
         if path:
             self.restore_path_input.setText(path)
 
+    def _append_status(self, message: str) -> None:
+        """Append a timestamped status message."""
+        self.status_output.append(f"[{datetime.now():%H:%M:%S}] {message}")
+
+    def _set_busy(self, busy: bool, message: str | None = None) -> None:
+        """Toggle busy UI state for long-running backup operations."""
+        for button in (self.create_btn, self.verify_btn, self.restore_btn):
+            button.setEnabled(not busy)
+        self.cancel_btn.setEnabled(busy)
+        self.progress.setVisible(busy)
+        if busy:
+            self.progress.setRange(0, 0)
+            if message:
+                self._append_status(message)
+        else:
+            self.progress.setRange(0, 1)
+            self.progress.setValue(0)
+
+    def _start_worker(self, worker: CryptoWorker, message: str, on_result) -> None:
+        """Start a background task with shared progress/error handling.
+
+        All long-running backup operations funnel through this helper so the
+        view stays consistent: one task at a time, one busy indicator, and a
+        shared completion/error path.
+        """
+        self._current_worker = worker
+        self._set_busy(True, message)
+        worker.signals.result.connect(on_result)
+        worker.signals.error.connect(self._on_worker_error)
+        worker.signals.finished.connect(self._on_worker_finished)
+        self.thread_pool.start(worker)
+
+    def _cancel_current_task(self) -> None:
+        """Request cancellation of the current background operation."""
+        if self._current_worker is None:
+            return
+        self._current_worker.cancel()
+        self._append_status("⚠️ Cancellation requested. Any in-flight work will finish in the background.")
+        self._set_busy(False)
+
+    def _on_worker_error(self, error: str) -> None:
+        self._append_status(f"❌ Operation failed: {error}")
+        QMessageBox.critical(self, "Operation Failed", error)
+
+    def _on_worker_finished(self) -> None:
+        self._current_worker = None
+        self._set_busy(False)
+
+    @staticmethod
+    def _create_backup_work(dest: str, passphrase: bytes, label: str | None):
+        ks = hbz.KeyStore()
+        ks.create_backup(dest, passphrase, label)
+        return dest, ks.verify_backup(dest, passphrase)
+
+    @staticmethod
+    def _verify_backup_work(path: str, passphrase: bytes):
+        ks = hbz.KeyStore()
+        return ks.verify_backup(path, passphrase)
+
+    @staticmethod
+    def _restore_backup_work(path: str, passphrase: bytes):
+        ks = hbz.KeyStore()
+        return ks.restore_backup(path, passphrase)
+
     # ------------------------------------------------------------------
     # Create backup
     # ------------------------------------------------------------------
@@ -163,15 +246,8 @@ class BackupView(QWidget):
             QMessageBox.warning(self, "Backup", "Passphrases do not match.")
             return
 
-        try:
-            ks = hbz.KeyStore()
-            ks.create_backup(dest, pw.encode(), label)
-            self.status_output.append(f"✅ Backup created: {dest}")
-            self.backup_pass_input.clear()
-            self.backup_pass_confirm.clear()
-        except Exception as exc:
-            self.status_output.append(f"❌ Backup failed: {exc}")
-            QMessageBox.critical(self, "Backup Failed", str(exc))
+        worker = CryptoWorker(self._create_backup_work, dest, pw.encode(), label)
+        self._start_worker(worker, f"Creating backup at {dest}…", self._on_create_backup_done)
 
     # ------------------------------------------------------------------
     # Verify backup
@@ -188,22 +264,8 @@ class BackupView(QWidget):
             QMessageBox.warning(self, "Verify", "Please enter the backup passphrase.")
             return
 
-        try:
-            ks = hbz.KeyStore()
-            manifest = ks.verify_backup(path, pw.encode())
-            info = (
-                f"✅ Backup verified successfully.\n"
-                f"  Created: {manifest.created_at}\n"
-                f"  Label: {manifest.label or '(none)'}\n"
-                f"  Private keys: {manifest.private_key_count}\n"
-                f"  Public keys: {manifest.public_key_count}\n"
-                f"  Contacts: {manifest.contact_count}\n"
-                f"  Integrity hash: {manifest.integrity_hash[:24]}…"
-            )
-            self.status_output.append(info)
-        except Exception as exc:
-            self.status_output.append(f"❌ Verification failed: {exc}")
-            QMessageBox.critical(self, "Verify Failed", str(exc))
+        worker = CryptoWorker(self._verify_backup_work, path, pw.encode())
+        self._start_worker(worker, f"Verifying backup {path}…", self._on_verify_backup_done)
 
     # ------------------------------------------------------------------
     # Restore backup
@@ -232,17 +294,41 @@ class BackupView(QWidget):
         if reply != QMessageBox.StandardButton.Yes:
             return
 
-        try:
-            ks = hbz.KeyStore()
-            manifest = ks.restore_backup(path, pw.encode())
-            info = (
-                f"✅ Backup restored successfully.\n"
-                f"  Private keys: {manifest.private_key_count}\n"
-                f"  Public keys: {manifest.public_key_count}\n"
-                f"  Contacts: {manifest.contact_count}"
-            )
-            self.status_output.append(info)
-            self.restore_pass_input.clear()
-        except Exception as exc:
-            self.status_output.append(f"❌ Restore failed: {exc}")
-            QMessageBox.critical(self, "Restore Failed", str(exc))
+        worker = CryptoWorker(self._restore_backup_work, path, pw.encode())
+        self._start_worker(worker, f"Restoring backup from {path}…", self._on_restore_backup_done)
+
+    def _on_create_backup_done(self, result: object) -> None:
+        dest, manifest = result
+        info = (
+            f"✅ Backup created: {dest}\n"
+            f"  Label: {manifest.label or '(none)'}\n"
+            f"  Private keys: {manifest.private_key_count}\n"
+            f"  Public keys: {manifest.public_key_count}\n"
+            f"  Contacts: {manifest.contact_count}"
+        )
+        self._append_status(info)
+        self.restore_path_input.setText(str(dest))
+        self.backup_pass_input.clear()
+        self.backup_pass_confirm.clear()
+
+    def _on_verify_backup_done(self, manifest: object) -> None:
+        info = (
+            f"✅ Backup verified successfully.\n"
+            f"  Created: {manifest.created_at}\n"
+            f"  Label: {manifest.label or '(none)'}\n"
+            f"  Private keys: {manifest.private_key_count}\n"
+            f"  Public keys: {manifest.public_key_count}\n"
+            f"  Contacts: {manifest.contact_count}\n"
+            f"  Integrity hash: {manifest.integrity_hash[:24]}…"
+        )
+        self._append_status(info)
+
+    def _on_restore_backup_done(self, manifest: object) -> None:
+        info = (
+            f"✅ Backup restored successfully.\n"
+            f"  Private keys: {manifest.private_key_count}\n"
+            f"  Public keys: {manifest.public_key_count}\n"
+            f"  Contacts: {manifest.contact_count}"
+        )
+        self._append_status(info)
+        self.restore_pass_input.clear()

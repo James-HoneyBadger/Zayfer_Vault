@@ -73,6 +73,9 @@ pub fn decrypt(key: &[u8], nonce: &[u8], ciphertext: &[u8], aad: &[u8]) -> HbRes
         .map_err(|_| HbError::AuthenticationFailed)
 }
 
+/// Maximum chunk index to prevent nonce space exhaustion.
+const MAX_CHUNK_INDEX: u64 = 1u64 << 32;
+
 /// Encrypt a chunk for streaming.
 pub fn encrypt_chunk(
     key: &[u8],
@@ -81,6 +84,12 @@ pub fn encrypt_chunk(
     chunk: &[u8],
     aad: &[u8],
 ) -> HbResult<Vec<u8>> {
+    if chunk_index >= MAX_CHUNK_INDEX {
+        return Err(HbError::ChaCha20(
+            "Chunk index exceeds maximum (nonce space exhaustion)".into(),
+        ));
+    }
+
     let cipher = ChaCha20Poly1305::new_from_slice(key)
         .map_err(|e| HbError::ChaCha20(format!("Invalid key: {e}")))?;
 
@@ -112,6 +121,12 @@ pub fn decrypt_chunk(
     ciphertext: &[u8],
     aad: &[u8],
 ) -> HbResult<Vec<u8>> {
+    if chunk_index >= MAX_CHUNK_INDEX {
+        return Err(HbError::ChaCha20(
+            "Chunk index exceeds maximum (nonce space exhaustion)".into(),
+        ));
+    }
+
     let cipher = ChaCha20Poly1305::new_from_slice(key)
         .map_err(|e| HbError::ChaCha20(format!("Invalid key: {e}")))?;
 

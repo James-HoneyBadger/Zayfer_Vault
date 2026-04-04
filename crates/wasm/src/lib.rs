@@ -204,6 +204,9 @@ pub fn x25519_dh(my_secret: &[u8], their_public: &[u8]) -> Result<Vec<u8>, JsErr
 #[wasm_bindgen]
 pub fn derive_key(password: &str, salt: &[u8]) -> Result<Vec<u8>, JsError> {
     use argon2::Argon2;
+    if password.is_empty() {
+        return Err(JsError::new("password must not be empty"));
+    }
     if salt.len() < 8 {
         return Err(JsError::new("salt must be at least 8 bytes"));
     }
@@ -237,17 +240,13 @@ pub fn version() -> String {
     env!("CARGO_PKG_VERSION").to_string()
 }
 
-/// Generate `n` random bytes.
+/// Generate `n` random bytes (max 1 MiB).
 #[wasm_bindgen]
-pub fn random_bytes(n: usize) -> Vec<u8> {
+pub fn random_bytes(n: usize) -> Result<Vec<u8>, JsError> {
+    if n > 1_048_576 {
+        return Err(JsError::new("n must be at most 1048576 (1 MiB)"));
+    }
     let mut buf = vec![0u8; n];
     OsRng.fill_bytes(&mut buf);
-    buf
-}
-
-// We need hex for serialization
-mod hex {
-    pub fn encode(data: &[u8]) -> String {
-        data.iter().map(|b| format!("{:02x}", b)).collect()
-    }
+    Ok(buf)
 }

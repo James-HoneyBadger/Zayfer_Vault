@@ -63,6 +63,26 @@ ensuring memory safety and high performance.
 
 All interfaces share the same keystore at `~/.hb_zayfer/`.
 
+### Documentation Map
+
+If you are new to HB Zayfer or to encryption in general, use this order:
+
+1. [`QUICKSTART.md`](QUICKSTART.md) — fastest way to launch and verify the app
+2. [`TUTORIAL_ENCRYPTION_PASSWORDS.md`](TUTORIAL_ENCRYPTION_PASSWORDS.md) — safe password and encryption walkthrough
+3. [`USER_GUIDE.md`](USER_GUIDE.md) — full day-to-day usage reference
+4. [`TECHNICAL_REFERENCE.md`](TECHNICAL_REFERENCE.md) — exact commands, parameters, and endpoints
+5. [`MAINTENANCE.md`](MAINTENANCE.md) — backup, upgrade, and recovery procedures
+
+### Safety-First Setup Checklist
+
+Before storing important data, make sure you have done the following:
+
+- generated or imported the keys you actually need,
+- verified at least one backup with `hb-zayfer backup verify`,
+- decided whether your workflow uses **password-based** or **recipient-based** encryption,
+- stored passphrases in a secure password manager, and
+- verified key fingerprints through a second channel before trusting other people's public keys.
+
 ---
 
 ## Getting Started

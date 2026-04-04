@@ -313,19 +313,39 @@ All endpoints prefixed with `/api`.
 
 ## Environment Variables
 
-| Variable | Description |
-|----------|-------------|
-| `HB_ZAYFER_HOME` | Override default data directory (`~/.hb_zayfer/`) |
-| `HB_ZAYFER_CONFIG` | Override config file path |
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `HB_ZAYFER_HOME` | `~/.hb_zayfer/` | Override the default data directory for keys, contacts, audit data, and config |
+| `HB_ZAYFER_API_TOKEN` | *(unset)* | Require `Authorization: Bearer <token>` on web API requests |
+| `HB_ZAYFER_RATE_LIMIT` | `60` | Maximum requests per client IP in each rate-limit window |
+| `HB_ZAYFER_RATE_WINDOW` | `60` | Rate-limit window duration in seconds |
+| `HB_ZAYFER_PORT` | `8000` | Default web-server port when launching `./run.sh web` |
+| `HB_ZAYFER_SKIP_ONBOARDING` | *(unset)* | Skip the GUI first-run prompt for CI/headless smoke tests |
 
 ---
 
-## File Locations
+## Data Directory Layout
 
 | Path | Contents |
 |------|----------|
 | `~/.hb_zayfer/` | Default data directory |
-| `~/.hb_zayfer/config.toml` | Configuration file |
-| `~/.hb_zayfer/keys/` | Key storage |
+| `~/.hb_zayfer/keys/private/` | Encrypted private keys |
+| `~/.hb_zayfer/keys/public/` | Public key material |
+| `~/.hb_zayfer/keyring.json` | Key metadata index |
 | `~/.hb_zayfer/contacts.json` | Contact database |
-| `~/.hb_zayfer/audit.log` | Audit log (hash-chain) |
+| `~/.hb_zayfer/audit.json` | Tamper-evident audit trail |
+| `~/.hb_zayfer/config.toml` | Core CLI/runtime configuration |
+| `~/.hb_zayfer/config.json` | Web/GUI configuration |
+| `~/.hb_zayfer/gui_settings.json` | Persisted window and interface settings |
+
+---
+
+## Operational Commands
+
+| Task | Command |
+|------|---------|
+| Launch GUI | `./run.sh` or `./run.sh gui` |
+| Launch web UI | `./run.sh web` |
+| Show CLI help | `./run.sh cli --help` |
+| Rebuild native extension | `./run.sh build` |
+| Run the full supported verification set | `HB_ZAYFER_SKIP_ONBOARDING=1 QT_QPA_PLATFORM=offscreen ./run.sh test` |

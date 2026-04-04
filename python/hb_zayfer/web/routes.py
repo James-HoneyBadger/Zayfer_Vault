@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import json
+import re
 import tempfile
 from pathlib import Path
 from typing import Optional
@@ -20,11 +21,35 @@ router = APIRouter()
 _MAX_UPLOAD_BYTES = 256 * 1024 * 1024
 
 
+def _sanitize_filename(name: str | None, fallback: str = "file") -> str:
+    """Strip path separators and control chars from a user-supplied filename."""
+    if not name:
+        return fallback
+    # Keep only the basename (no directory traversal)
+    name = Path(name).name
+    # Remove control characters and quotes that could break Content-Disposition
+    name = re.sub(r'[\x00-\x1f"\\]', "_", name)
+    return name or fallback
+
+
 def _audit_safe(fn, *args, **kwargs) -> None:
     try:
         fn(*args, **kwargs)
     except Exception:
         pass
+
+
+def _require_home_path(raw_path: str, field_name: str) -> Path:
+    """Resolve a user-supplied path and ensure it stays within the home dir."""
+    try:
+        resolved = Path(raw_path).expanduser().resolve()
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid {field_name}: {exc}") from exc
+
+    home = Path.home().resolve()
+    if not resolved.is_relative_to(home):
+        raise HTTPException(status_code=400, detail=f"{field_name} must be within user's home directory")
+    return resolved
 
 
 # ---------------------------------------------------------------------------
@@ -196,6 +221,8 @@ def generate_key(req: KeygenRequest):
             ks.store_public_key(fp, pk_raw, req.algorithm, req.label)
         elif req.algorithm == "pgp":
             uid = req.user_id or req.label
+            if not uid or len(uid) > 256:
+                raise HTTPException(status_code=400, detail="PGP user_id must be 1–256 characters")
             pub_arm, sec_arm = hbz.pgp_generate(uid)
             fp = hbz.pgp_fingerprint(pub_arm)
             ks.store_private_key(fp, sec_arm.encode(), pw, req.algorithm, req.label)
@@ -382,7 +409,8 @@ async def encrypt_file(
         raise HTTPException(status_code=400, detail="passphrase is required")
 
     with tempfile.TemporaryDirectory() as tmp:
-        in_path = Path(tmp) / (file.filename or "upload")
+        safe_name = _sanitize_filename(file.filename, "upload")
+        in_path = Path(tmp) / safe_name
         out_path = in_path.with_suffix(in_path.suffix + ".hbzf")
 
         # Read uploaded file with size limit
@@ -408,7 +436,7 @@ async def encrypt_file(
         _audit_safe(
             hbz.audit_log_file_encrypted,
             algorithm.upper(),
-            file.filename,
+            safe_name,
             len(content),
             "source=web, endpoint=/api/encrypt/file",
         )
@@ -422,7 +450,7 @@ async def encrypt_file(
         _iter(),
         media_type="application/octet-stream",
         headers={
-            "Content-Disposition": f'attachment; filename="{file.filename or "encrypted"}.hbzf"',
+            "Content-Disposition": f'attachment; filename="{_sanitize_filename(file.filename, "encrypted")}.hbzf"',
             "Content-Length": str(len(encrypted)),
         },
     )
@@ -438,7 +466,8 @@ async def decrypt_file(
         raise HTTPException(status_code=400, detail="passphrase is required")
 
     with tempfile.TemporaryDirectory() as tmp:
-        in_path = Path(tmp) / (file.filename or "upload.hbzf")
+        safe_name = _sanitize_filename(file.filename, "upload.hbzf")
+        in_path = Path(tmp) / safe_name
         # Strip .hbzf suffix for output name
         out_name = in_path.stem if in_path.suffix == ".hbzf" else in_path.name + ".dec"
         out_path = Path(tmp) / out_name
@@ -465,7 +494,7 @@ async def decrypt_file(
         _audit_safe(
             hbz.audit_log_file_decrypted,
             "WEB:FILE",
-            file.filename,
+            safe_name,
             len(decrypted),
             "source=web, endpoint=/api/decrypt/file",
         )
@@ -477,7 +506,7 @@ async def decrypt_file(
         _iter(),
         media_type="application/octet-stream",
         headers={
-            "Content-Disposition": f'attachment; filename="{out_name}"',
+            "Content-Disposition": f'attachment; filename="{_sanitize_filename(out_name, "decrypted")}"',
             "Content-Length": str(len(decrypted)),
         },
     )
@@ -542,15 +571,14 @@ def audit_count():
 @router.post("/audit/export")
 def audit_export(destination: str):
     """Export the audit log to a given path on the server."""
-    # Path traversal protection: resolve and restrict to home directory
-    dest = Path(destination).expanduser().resolve()
-    home = Path.home().resolve()
-    if not str(dest).startswith(str(home)):
-        raise HTTPException(status_code=400, detail="destination must be within user's home directory")
+    dest = _require_home_path(destination, "destination")
     try:
+        dest.parent.mkdir(parents=True, exist_ok=True)
         logger = hbz.AuditLogger()
         logger.export(str(dest))
         return {"status": "exported", "destination": str(dest)}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -583,12 +611,9 @@ class RestoreRequest(BaseModel):
 @router.post("/backup/create", response_model=BackupManifestOut)
 def create_backup(req: BackupRequest):
     """Create an encrypted backup of the keyring."""
-    # Path traversal protection
-    out = Path(req.output_path).expanduser().resolve()
-    home = Path.home().resolve()
-    if not str(out).startswith(str(home)):
-        raise HTTPException(status_code=400, detail="output_path must be within user's home directory")
+    out = _require_home_path(req.output_path, "output_path")
     try:
+        out.parent.mkdir(parents=True, exist_ok=True)
         ks = hbz.KeyStore()
         ks.create_backup(str(out), req.passphrase.encode("utf-8"), req.label)
         manifest = ks.verify_backup(str(out), req.passphrase.encode("utf-8"))
@@ -608,10 +633,7 @@ def create_backup(req: BackupRequest):
 @router.post("/backup/verify", response_model=BackupManifestOut)
 def verify_backup(req: RestoreRequest):
     """Verify a backup file without restoring it."""
-    bpath = Path(req.backup_path).expanduser().resolve()
-    home = Path.home().resolve()
-    if not str(bpath).startswith(str(home)):
-        raise HTTPException(status_code=400, detail="backup_path must be within user's home directory")
+    bpath = _require_home_path(req.backup_path, "backup_path")
     try:
         ks = hbz.KeyStore()
         manifest = ks.verify_backup(str(bpath), req.passphrase.encode("utf-8"))
@@ -631,10 +653,7 @@ def verify_backup(req: RestoreRequest):
 @router.post("/backup/restore", response_model=BackupManifestOut)
 def restore_backup(req: RestoreRequest):
     """Restore a backup, importing keys and contacts."""
-    bpath = Path(req.backup_path).expanduser().resolve()
-    home = Path.home().resolve()
-    if not str(bpath).startswith(str(home)):
-        raise HTTPException(status_code=400, detail="backup_path must be within user's home directory")
+    bpath = _require_home_path(req.backup_path, "backup_path")
     try:
         ks = hbz.KeyStore()
         manifest = ks.restore_backup(str(bpath), req.passphrase.encode("utf-8"))

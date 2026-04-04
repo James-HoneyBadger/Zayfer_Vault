@@ -47,25 +47,63 @@ fn gf_mul(mut a: u8, mut b: u8) -> u8 {
     result
 }
 
-/// GF(2^8) multiplicative inverse (0 maps to 0 by convention).
-///
-/// Uses Fermat's little theorem: a^(254) = a^(-1) in GF(2^8).
-/// Computed via repeated squaring (addition chain for exponent 254).
-fn gf_inv(a: u8) -> u8 {
-    if a == 0 {
-        return 0;
-    }
-    let mut power = a;
-    let mut acc = 1u8;
-    let mut exp = 254u32;
-    while exp > 0 {
-        if exp & 1 != 0 {
-            acc = gf_mul(acc, power);
+/// Precomputed GF(2^8) multiplicative inverse lookup table.
+/// Entry `i` = inverse of `i` in GF(2^8), with `gf_inv(0) = 0` by convention.
+/// This is significantly faster than the Fermat exponentiation approach.
+const GF_INV_TABLE: [u8; 256] = {
+    let mut table = [0u8; 256];
+    // Build using Fermat's little theorem: a^254 = a^(-1) in GF(2^8)
+    let mut i: usize = 1;
+    while i < 256 {
+        let a = i as u8;
+        let mut power = a;
+        let mut acc: u8 = 1;
+        let mut exp: u32 = 254;
+        while exp > 0 {
+            if exp & 1 != 0 {
+                // acc = gf_mul(acc, power) inlined for const context
+                let mut r: u8 = 0;
+                let mut aa = acc;
+                let mut bb = power;
+                let mut j = 0;
+                while j < 8 {
+                    if bb & 1 != 0 { r ^= aa; }
+                    let high = aa & 0x80;
+                    aa <<= 1;
+                    if high != 0 { aa ^= 0x1B; }
+                    bb >>= 1;
+                    j += 1;
+                }
+                acc = r;
+            }
+            // power = gf_mul(power, power) inlined for const context
+            {
+                let mut r: u8 = 0;
+                let mut aa = power;
+                let mut bb = power;
+                let mut j = 0;
+                while j < 8 {
+                    if bb & 1 != 0 { r ^= aa; }
+                    let high = aa & 0x80;
+                    aa <<= 1;
+                    if high != 0 { aa ^= 0x1B; }
+                    bb >>= 1;
+                    j += 1;
+                }
+                power = r;
+            }
+            exp >>= 1;
         }
-        power = gf_mul(power, power);
-        exp >>= 1;
+        table[i] = acc;
+        i += 1;
     }
-    acc
+    table
+};
+
+/// GF(2^8) multiplicative inverse via precomputed lookup table.
+/// Returns 0 for input 0 by convention.
+fn gf_inv(a: u8) -> u8 {
+    GF_INV_TABLE[a as usize]
 }
 
 /// Evaluate polynomial at point `x` in GF(2^8).

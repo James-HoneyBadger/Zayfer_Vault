@@ -1,10 +1,16 @@
-"""Main window with sidebar navigation and stacked views."""
+"""Main window with sidebar navigation and stacked views.
+
+The main window coordinates persistent settings, notification toasts, the
+13-page navigation stack, and the first-run onboarding prompt that helps new
+users generate keys or review settings before handling real data.
+"""
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QSize
+from PySide6.QtCore import Qt, QSize, QTimer
 from PySide6.QtGui import QIcon, QAction, QKeySequence
 from PySide6.QtWidgets import (
     QMainWindow,
@@ -73,6 +79,7 @@ class MainWindow(QMainWindow):
         self._setup_ui()
         self._setup_statusbar()
         self._setup_shortcuts()
+        QTimer.singleShot(0, self._maybe_show_onboarding)
 
     # ---------------------------------------------------------------
     # Menu bar
@@ -214,6 +221,46 @@ class MainWindow(QMainWindow):
             self.status_bar.clear_count()
         else:
             self.status_bar.clear_count()
+
+    def _maybe_show_onboarding(self) -> None:
+        """Show a lightweight first-run setup prompt when no keys exist yet."""
+        if os.environ.get("HB_ZAYFER_SKIP_ONBOARDING") == "1":
+            return
+        if self.settings.get("onboarding.seen", False):
+            return
+
+        try:
+            has_keys = len(hbz.KeyStore().list_keys()) > 0
+        except Exception:
+            has_keys = False
+
+        if has_keys:
+            self.settings.set("onboarding.seen", True)
+            self.settings.save()
+            return
+
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Information)
+        box.setWindowTitle("Welcome to HB Zayfer")
+        box.setText("No keys were found yet.")
+        box.setInformativeText(
+            "Start by generating your first key pair, or review settings before encrypting with a passphrase."
+        )
+        create_btn = box.addButton("Create First Key", QMessageBox.ButtonRole.AcceptRole)
+        settings_btn = box.addButton("Open Settings", QMessageBox.ButtonRole.ActionRole)
+        box.addButton("Later", QMessageBox.ButtonRole.RejectRole)
+        box.setDefaultButton(create_btn)
+        box.exec()
+
+        self.settings.set("onboarding.seen", True)
+        self.settings.save()
+
+        if box.clickedButton() == create_btn:
+            self.sidebar.setCurrentRow(2)
+            self.status_bar.set_message("Welcome — generate your first key pair to get started")
+        elif box.clickedButton() == settings_btn:
+            self.sidebar.setCurrentRow(10)
+            self.status_bar.set_message("Welcome — review your settings before first use")
 
     # ---------------------------------------------------------------
     # Status bar

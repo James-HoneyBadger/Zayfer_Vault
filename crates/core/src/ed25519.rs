@@ -4,6 +4,7 @@ use ed25519_dalek::{
 };
 use rand_core::OsRng;
 use sha2::{Digest, Sha256};
+use zeroize::Zeroize;
 
 use crate::error::{HbError, HbResult};
 
@@ -17,10 +18,12 @@ pub struct Ed25519KeyPair {
 
 impl Drop for Ed25519KeyPair {
     fn drop(&mut self) {
-        // Replace the signing key with a fresh random key to overwrite internal state.
-        // `ed25519_dalek::SigningKey` does not expose mutable access to its seed bytes,
-        // so we overwrite the struct field entirely with a disposable key.
-        self.signing_key = SigningKey::from_bytes(&[0u8; 32]);
+        // Zeroize the signing key seed bytes by overwriting with zeros.
+        // `SigningKey::from_bytes` creates a key from a seed, so writing
+        // a zeroed seed ensures the internal state is overwritten.
+        let mut zero_seed = [0u8; 32];
+        self.signing_key = SigningKey::from_bytes(&zero_seed);
+        zero_seed.zeroize();
     }
 }
 

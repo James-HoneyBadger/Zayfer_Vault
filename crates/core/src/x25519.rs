@@ -2,6 +2,7 @@ use hkdf::Hkdf;
 use rand_core::OsRng;
 use sha2::{Digest, Sha256};
 use x25519_dalek::{EphemeralSecret, PublicKey, StaticSecret};
+use zeroize::Zeroize;
 
 use crate::error::{HbError, HbResult};
 
@@ -15,10 +16,10 @@ pub struct X25519KeyPair {
 
 impl Drop for X25519KeyPair {
     fn drop(&mut self) {
-        // Replace the secret key with all-zeros to overwrite internal state.
-        // `x25519_dalek::StaticSecret` does not expose mutable access to its bytes,
-        // so we overwrite the struct field entirely.
-        self.secret_key = StaticSecret::from([0u8; 32]);
+        // Overwrite the secret key with all-zeros to clear internal state.
+        let mut zero_bytes = [0u8; 32];
+        self.secret_key = StaticSecret::from(zero_bytes);
+        zero_bytes.zeroize();
     }
 }
 

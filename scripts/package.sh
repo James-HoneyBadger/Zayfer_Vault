@@ -13,7 +13,11 @@
 
 set -euo pipefail
 
-VERSION="1.0.0"
+# Extract version from workspace Cargo.toml to avoid hardcoding
+VERSION=$(grep -m1 '^version' Cargo.toml | sed 's/.*"\(.*\)".*/\1/')
+if [[ -z "$VERSION" ]]; then
+    VERSION="1.0.0"
+fi
 NAME="hb-zayfer"
 DESCRIPTION="A full-featured encryption/decryption suite"
 MAINTAINER="James Temple <james@honey-badger.org>"

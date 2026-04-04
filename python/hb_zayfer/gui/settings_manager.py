@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +14,7 @@ class SettingsManager:
     def __init__(self, config_dir: Path):
         self.config_dir = config_dir
         self.settings_file = config_dir / "gui_settings.json"
+        self._lock = threading.Lock()
         self.settings: dict[str, Any] = self._load_settings()
     
     def _load_settings(self) -> dict[str, Any]:
@@ -63,12 +65,13 @@ class SettingsManager:
     
     def save(self) -> None:
         """Save settings to disk."""
-        try:
-            self.config_dir.mkdir(parents=True, exist_ok=True)
-            with open(self.settings_file, 'w') as f:
-                json.dump(self.settings, f, indent=2)
-        except Exception as e:
-            print(f"Failed to save settings: {e}")
+        with self._lock:
+            try:
+                self.config_dir.mkdir(parents=True, exist_ok=True)
+                with open(self.settings_file, 'w') as f:
+                    json.dump(self.settings, f, indent=2)
+            except Exception as e:
+                print(f"Failed to save settings: {e}")
     
     def get(self, key: str, default: Any = None) -> Any:
         """Get a setting value by dot-notation key.

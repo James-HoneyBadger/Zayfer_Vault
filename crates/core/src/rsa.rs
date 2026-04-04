@@ -4,6 +4,7 @@ use rsa::{
     pss::{BlindedSigningKey, VerifyingKey as PssVerifyingKey},
     pkcs1::{DecodeRsaPrivateKey, DecodeRsaPublicKey, EncodeRsaPrivateKey, EncodeRsaPublicKey},
     pkcs8::{DecodePrivateKey, DecodePublicKey, EncodePrivateKey, EncodePublicKey, LineEnding},
+    traits::PublicKeyParts,
 };
 use sha2::Sha256;
 use serde::{Deserialize, Serialize};
@@ -140,6 +141,33 @@ pub fn import_private_key_pkcs1_pem(pem_data: &str) -> HbResult<RsaPrivateKey> {
 pub fn import_public_key_pkcs1_pem(pem_data: &str) -> HbResult<RsaPublicKey> {
     RsaPublicKey::from_pkcs1_pem(pem_data)
         .map_err(|e| HbError::InvalidKeyFormat(format!("PKCS#1 PEM import: {e}")))
+}
+
+/// Detect the RSA key size from PEM-encoded key data.
+///
+/// Tries to parse as a private key first (PKCS#8, then PKCS#1), then as a
+/// public key (SPKI, then PKCS#1).  Returns [`RsaKeySize`] based on the
+/// actual modulus bit-length, or an error if parsing fails.
+pub fn detect_key_size(pem_data: &str) -> HbResult<RsaKeySize> {
+    let bits = if let Ok(k) = RsaPrivateKey::from_pkcs8_pem(pem_data) {
+        k.size() * 8
+    } else if let Ok(k) = RsaPrivateKey::from_pkcs1_pem(pem_data) {
+        k.size() * 8
+    } else if let Ok(k) = RsaPublicKey::from_public_key_pem(pem_data) {
+        k.size() * 8
+    } else if let Ok(k) = RsaPublicKey::from_pkcs1_pem(pem_data) {
+        k.size() * 8
+    } else {
+        return Err(HbError::InvalidKeyFormat(
+            "Could not parse RSA PEM to determine key size".into(),
+        ));
+    };
+
+    if bits > 2048 {
+        Ok(RsaKeySize::Rsa4096)
+    } else {
+        Ok(RsaKeySize::Rsa2048)
+    }
 }
 
 /// Compute a fingerprint (SHA-256 of DER-encoded public key) for identification.

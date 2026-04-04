@@ -9,9 +9,19 @@ then explore the reference docs for your interface of choice.
 
 | Document | Description |
 |----------|-------------|
-| [Quick Start](QUICKSTART.md) | Install, encrypt your first file, explore the 13-view GUI |
-| [User Guide](USER_GUIDE.md) | In-depth usage guide for all features |
-| [Installation](../INSTALL.md) | Detailed install instructions (Rust, Python, WASM) |
+| [Quick Start](QUICKSTART.md) | Install, encrypt your first file, and explore the 13-view GUI |
+| [Tutorial: Encryption, Decryption & Passwords](TUTORIAL_ENCRYPTION_PASSWORDS.md) | Step-by-step walkthrough for password safety and practical encryption workflows |
+| [User Guide](USER_GUIDE.md) | In-depth usage guide for all end-user features |
+| [Installation](../INSTALL.md) | Detailed setup instructions for Linux, macOS, and Windows |
+| [Maintenance](MAINTENANCE.md) | Upgrade, backup, audit, and recovery procedures |
+
+### Suggested reading order
+
+1. Start with **[Quick Start](QUICKSTART.md)**.
+2. If you are new to encryption, continue with **[Tutorial: Encryption, Decryption & Passwords](TUTORIAL_ENCRYPTION_PASSWORDS.md)**.
+3. Use **[User Guide](USER_GUIDE.md)** for day-to-day operation.
+4. Keep **[Technical Reference](TECHNICAL_REFERENCE.md)** nearby for exact commands and settings.
+5. Review **[Maintenance](MAINTENANCE.md)** for backups, updates, and recovery planning.
 
 ## API References
 
