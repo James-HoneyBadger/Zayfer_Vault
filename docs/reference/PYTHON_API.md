@@ -1,11 +1,9 @@
 # Python API Reference
 
-**Zayfer Vault v1.0.1**
+**Zayfer Vault v1.1.0**
 
-Complete reference for the `hb_zayfer` Python package — the public API exposed
-via PyO3 bindings to the Rust core. **55+ functions** and **6 classes**.
-
-All heavy cryptographic operations release the GIL and run in native Rust.
+Complete reference for the `hb_zayfer` Python package — the **Rust-backed compatibility API** exposed through PyO3 bindings.
+Heavy cryptographic operations still execute in native Rust.
 
 ---
 
@@ -16,12 +14,13 @@ All heavy cryptographic operations release the GIL and run in native Rust.
 maturin develop --release -m crates/python/Cargo.toml
 
 # Install with extras
-pip install -e ".[all]"       # CLI + GUI + Web + dev
-pip install -e ".[cli]"       # Click CLI only
-pip install -e ".[gui]"       # + PySide6 desktop
-pip install -e ".[web]"       # + FastAPI web server
-pip install -e ".[dev]"       # + pytest, httpx
+pip install -e ".[all]"       # full development environment
+pip install -e ".[gui]"       # desktop GUI compatibility shell
+pip install -e ".[web]"       # Python compatibility web backend
+pip install -e ".[dev]"       # pytest, httpx, dev helpers
 ```
+
+> The recommended end-user launcher paths remain `./run.sh cli`, `./run.sh web`, and `./run.sh gui`.
 
 ---
 
@@ -42,7 +41,7 @@ import hb_zayfer as hbz
 hbz.version() → str
 ```
 
-Returns the library version string (e.g. `"1.0.0"`).
+Returns the library version string (for example, `"1.1.0"`).
 
 ---
 

@@ -255,6 +255,6 @@ Before you rely on the tool for important data, complete this checklist:
 After completing this tutorial, continue with:
 
 - [`USER_GUIDE.md`](USER_GUIDE.md) for complete feature coverage,
-- [`TECHNICAL_REFERENCE.md`](TECHNICAL_REFERENCE.md) for exact commands and parameters,
-- [`../INSTALL.md`](../INSTALL.md) for installation details, and
+- [`TECHNICAL_REFERENCE.md`](../reference/TECHNICAL_REFERENCE.md) for exact commands and parameters,
+- [`../../INSTALL.md`](../../INSTALL.md) for installation details, and
 - [`MAINTENANCE.md`](MAINTENANCE.md) for backups, upgrades, and operational care.

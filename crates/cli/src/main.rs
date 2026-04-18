@@ -10,10 +10,13 @@ use dialoguer::{Confirm, Input, Password};
 use indicatif::{ProgressBar, ProgressStyle};
 
 use hb_zayfer_core::{
-    ed25519, format, kdf, keystore, openpgp, passgen, rsa, shamir, shred, x25519, AuditLogger,
-    AuditOperation, Config, KeyAlgorithm, KeyStore, KeyWrapping, SymmetricAlgorithm,
+    ed25519, format, kdf, keystore, openpgp, passgen, rsa, shamir, shred, x25519, AppInfo,
+    AppPaths, AuditLogger, AuditOperation, Config, ConfigSnapshot, KeyAlgorithm, KeyStore,
+    KeyWrapping, SymmetricAlgorithm, WorkspaceSummary,
 };
 use serde_json::json;
+
+mod platform_server;
 
 /// HB_Zayfer — Encryption/Decryption Suite
 ///
@@ -142,6 +145,19 @@ enum Commands {
     Config {
         #[command(subcommand)]
         action: ConfigAction,
+    },
+
+    /// Show Rust platform status and infrastructure summary
+    Status,
+
+    /// Run the Rust-native web platform
+    Serve {
+        /// Bind address
+        #[arg(long, default_value = "127.0.0.1")]
+        host: String,
+        /// Port number
+        #[arg(short = 'p', long, default_value_t = 8000)]
+        port: u16,
     },
 
     /// Inspect an HBZF encrypted file (show header metadata without decrypting)
@@ -491,6 +507,9 @@ fn main() -> Result<()> {
             ConfigAction::Path => cmd_config_path()?,
         },
 
+        Commands::Status => cmd_status(cli.json)?,
+        Commands::Serve { host, port } => platform_server::serve(&host, port)?,
+
         Commands::Inspect { file } => cmd_inspect(&file)?,
 
         Commands::EncryptDir {
@@ -650,37 +669,45 @@ fn main() -> Result<()> {
 
 // -- Command implementations --
 
-/// Store a generated key-pair and print + audit the result.
-#[allow(clippy::too_many_arguments)]
-fn store_and_report(
-    keystore: &mut KeyStore,
-    fp: &str,
-    priv_bytes: &[u8],
-    pub_bytes: &[u8],
-    passphrase: &str,
-    algorithm: KeyAlgorithm,
-    algo_display: &str,
-    label: &str,
-    pb: &ProgressBar,
-) -> Result<()> {
-    keystore.store_private_key(
-        fp,
-        priv_bytes,
-        passphrase.as_bytes(),
-        algorithm.clone(),
-        label,
-    )?;
-    keystore.store_public_key(fp, pub_bytes, algorithm.clone(), label)?;
-    pb.finish_with_message(format!("{algo_display} key generated"));
-    println!("Fingerprint: {fp}");
-    println!("Label: {label}");
-    audit_log(
-        AuditOperation::KeyGenerated {
-            algorithm: algo_display.into(),
-            fingerprint: fp.to_string(),
-        },
-        Some("source=cli"),
-    );
+fn cmd_status(json_output: bool) -> Result<()> {
+    let info = AppInfo::current();
+    let paths = AppPaths::current()?;
+    let summary = WorkspaceSummary::collect()?;
+    let config = ConfigSnapshot::load()?;
+
+    if json_output {
+        println!(
+            "{}",
+            json!({
+                "brand_name": info.brand_name,
+                "version": info.version,
+                "binary_name": info.binary_name,
+                "app_home": paths.app_home,
+                "config_path": paths.config_path,
+                "audit_path": paths.audit_path,
+                "key_count": summary.key_count,
+                "contact_count": summary.contact_count,
+                "audit_count": summary.audit_count,
+                "default_algorithm": config.default_algorithm,
+                "kdf_preset": config.kdf_preset,
+                "chunk_size": config.chunk_size,
+                "audit_enabled": config.audit_enabled,
+            })
+        );
+    } else {
+        println!("{}", info.window_title());
+        println!("Binary: {}", info.binary_name);
+        println!("App home: {}", paths.app_home.display());
+        println!("Config: {}", paths.config_path.display());
+        println!("Audit log: {}", paths.audit_path.display());
+        println!();
+        println!("Keys: {}", summary.key_count);
+        println!("Contacts: {}", summary.contact_count);
+        println!("Audit entries: {}", summary.audit_count);
+        println!("Default algorithm: {}", config.default_algorithm);
+        println!("KDF preset: {}", config.kdf_preset);
+    }
+
     Ok(())
 }
 
@@ -698,102 +725,42 @@ fn cmd_keygen(
             .interact()?,
     };
 
+    let user_id: Option<String> = if matches!(algorithm, AlgorithmChoice::Pgp) {
+        Some(
+            Input::<String>::new()
+                .with_prompt("User ID (e.g., 'Name <email@example.com>')")
+                .interact_text()?,
+        )
+    } else {
+        None
+    };
+
     let pb = ProgressBar::new_spinner();
     pb.set_style(ProgressStyle::default_spinner().template("{spinner:.green} {msg}")?);
     pb.set_message("Generating key pair...");
     pb.enable_steady_tick(std::time::Duration::from_millis(100));
 
-    match algorithm {
-        AlgorithmChoice::Rsa2048 => {
-            let kp = rsa::generate_keypair(rsa::RsaKeySize::Rsa2048)?;
-            let fp = rsa::fingerprint(&kp.public_key)?;
-            let priv_pem = rsa::export_private_key_pem(&kp.private_key)?;
-            let pub_pem = rsa::export_public_key_pem(&kp.public_key)?;
-            store_and_report(
-                keystore,
-                &fp,
-                priv_pem.as_bytes(),
-                pub_pem.as_bytes(),
-                &passphrase,
-                KeyAlgorithm::Rsa2048,
-                "RSA-2048",
-                label,
-                &pb,
-            )?;
-        }
-        AlgorithmChoice::Rsa4096 => {
-            let kp = rsa::generate_keypair(rsa::RsaKeySize::Rsa4096)?;
-            let fp = rsa::fingerprint(&kp.public_key)?;
-            let priv_pem = rsa::export_private_key_pem(&kp.private_key)?;
-            let pub_pem = rsa::export_public_key_pem(&kp.public_key)?;
-            store_and_report(
-                keystore,
-                &fp,
-                priv_pem.as_bytes(),
-                pub_pem.as_bytes(),
-                &passphrase,
-                KeyAlgorithm::Rsa4096,
-                "RSA-4096",
-                label,
-                &pb,
-            )?;
-        }
-        AlgorithmChoice::Ed25519 => {
-            let kp = ed25519::generate_keypair();
-            let fp = ed25519::fingerprint(&kp.verifying_key);
-            let priv_pem = ed25519::export_signing_key_pem(&kp.signing_key)?;
-            let pub_pem = ed25519::export_verifying_key_pem(&kp.verifying_key)?;
-            store_and_report(
-                keystore,
-                &fp,
-                priv_pem.as_bytes(),
-                pub_pem.as_bytes(),
-                &passphrase,
-                KeyAlgorithm::Ed25519,
-                "Ed25519",
-                label,
-                &pb,
-            )?;
-        }
-        AlgorithmChoice::X25519 => {
-            let kp = x25519::generate_keypair();
-            let fp = x25519::fingerprint(&kp.public_key);
-            let priv_raw = x25519::export_secret_key_raw(&kp.secret_key);
-            let pub_raw = x25519::export_public_key_raw(&kp.public_key);
-            store_and_report(
-                keystore,
-                &fp,
-                &priv_raw,
-                &pub_raw,
-                &passphrase,
-                KeyAlgorithm::X25519,
-                "X25519",
-                label,
-                &pb,
-            )?;
-        }
-        AlgorithmChoice::Pgp => {
-            let user_id: String = Input::new()
-                .with_prompt("User ID (e.g., 'Name <email@example.com>')")
-                .interact_text()?;
+    let requested_algorithm = match algorithm {
+        AlgorithmChoice::Rsa2048 => "rsa2048",
+        AlgorithmChoice::Rsa4096 => "rsa4096",
+        AlgorithmChoice::Ed25519 => "ed25519",
+        AlgorithmChoice::X25519 => "x25519",
+        AlgorithmChoice::Pgp => "pgp",
+    };
 
-            let cert = hb_zayfer_core::openpgp::generate_cert(&user_id)?;
-            let fp = hb_zayfer_core::openpgp::cert_fingerprint(&cert);
-            let pub_armor = hb_zayfer_core::openpgp::export_public_key(&cert)?;
-            let sec_armor = hb_zayfer_core::openpgp::export_secret_key(&cert)?;
-            store_and_report(
-                keystore,
-                &fp,
-                sec_armor.as_bytes(),
-                pub_armor.as_bytes(),
-                &passphrase,
-                KeyAlgorithm::Pgp,
-                "PGP",
-                label,
-                &pb,
-            )?;
-            println!("User ID: {user_id}");
-        }
+    let created = hb_zayfer_core::services::generate_and_store_key(
+        keystore,
+        requested_algorithm,
+        label,
+        &passphrase,
+        user_id.as_deref(),
+    )?;
+
+    pb.finish_with_message(format!("{} key generated", created.algorithm));
+    println!("Fingerprint: {}", created.fingerprint);
+    println!("Label: {}", created.label);
+    if let Some(user_id) = user_id {
+        println!("User ID: {user_id}");
     }
 
     Ok(())

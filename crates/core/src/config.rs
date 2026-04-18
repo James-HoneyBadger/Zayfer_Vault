@@ -99,6 +99,10 @@ pub struct GuiConfig {
     #[serde(default = "default_true")]
     pub show_password_strength: bool,
 
+    /// Clipboard auto-clear timeout in seconds.
+    #[serde(default = "default_clipboard_auto_clear")]
+    pub clipboard_auto_clear: u32,
+
     /// Window geometry (x, y, width, height)
     pub window_geometry: Option<(i32, i32, i32, i32)>,
 }
@@ -109,6 +113,7 @@ impl Default for GuiConfig {
             dark_mode: false,
             recent_files: Vec::new(),
             show_password_strength: true,
+            clipboard_auto_clear: default_clipboard_auto_clear(),
             window_geometry: None,
         }
     }
@@ -212,18 +217,23 @@ impl Config {
 
     /// Get the default config path (~/.hb_zayfer/config.toml).
     pub fn default_path() -> HbResult<PathBuf> {
-        let home = dirs::home_dir()
-            .ok_or_else(|| HbError::Config("Could not determine home directory".into()))?;
-        Ok(home.join(".hb_zayfer").join("config.toml"))
+        let base = std::env::var("HB_ZAYFER_HOME")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| {
+                dirs::home_dir()
+                    .unwrap_or_else(|| PathBuf::from("."))
+                    .join(".hb_zayfer")
+            });
+        Ok(base.join("config.toml"))
     }
 
     /// Set a configuration value by key.
     pub fn set(&mut self, key: &str, value: &str) -> HbResult<()> {
         match key {
-            "default-algorithm" | "default_algorithm" => {
+            "default-algorithm" | "default_algorithm" | "cipher" => {
                 self.default_symmetric_algorithm = match value.to_lowercase().as_str() {
                     "aes" | "aes-256-gcm" | "aes256gcm" => SymmetricAlgorithm::Aes256Gcm,
-                    "chacha" | "chacha20" | "chacha20-poly1305" => {
+                    "chacha" | "chacha20" | "chacha20-poly1305" | "chacha20poly1305" => {
                         SymmetricAlgorithm::ChaCha20Poly1305
                     }
                     _ => return Err(HbError::Config(format!("Invalid algorithm: {}", value))),
@@ -238,6 +248,13 @@ impl Config {
                     _ => return Err(HbError::Config(format!("Invalid KDF preset: {}", value))),
                 };
                 self.default_kdf = self.kdf_preset.params();
+            }
+            "kdf" => {
+                self.default_kdf = match value.to_lowercase().as_str() {
+                    "argon2" | "argon2id" => KdfParams::default(),
+                    "scrypt" => KdfParams::scrypt(15, 8, 1),
+                    _ => return Err(HbError::Config(format!("Invalid KDF algorithm: {}", value))),
+                };
             }
             "chunk-size" | "chunk_size" => {
                 let size: usize = value
@@ -263,6 +280,11 @@ impl Config {
                     .parse()
                     .map_err(|_| HbError::Config(format!("Invalid boolean: {}", value)))?;
             }
+            "clipboard-auto-clear" | "clipboard_auto_clear" => {
+                self.gui.clipboard_auto_clear = value.parse().map_err(|_| {
+                    HbError::Config(format!("Invalid clipboard timeout: {}", value))
+                })?;
+            }
             "color" => {
                 self.cli.color = value
                     .parse()
@@ -286,15 +308,25 @@ impl Config {
     /// Get a configuration value by key as a string.
     pub fn get(&self, key: &str) -> HbResult<String> {
         match key {
-            "default-algorithm" | "default_algorithm" => {
-                Ok(format!("{:?}", self.default_symmetric_algorithm))
+            "default-algorithm" | "default_algorithm" | "cipher" => {
+                Ok(match self.default_symmetric_algorithm {
+                    SymmetricAlgorithm::Aes256Gcm => "AES-256-GCM".to_string(),
+                    SymmetricAlgorithm::ChaCha20Poly1305 => "ChaCha20-Poly1305".to_string(),
+                })
             }
             "kdf-preset" | "kdf_preset" => Ok(format!("{:?}", self.kdf_preset)),
+            "kdf" => Ok(match &self.default_kdf {
+                KdfParams::Argon2id(_) => "Argon2id".to_string(),
+                KdfParams::Scrypt(_) => "scrypt".to_string(),
+            }),
             "chunk-size" | "chunk_size" => Ok(self.chunk_size.to_string()),
             "audit-log" | "audit_log" | "enable-audit-log" | "enable_audit_log" => {
                 Ok(self.enable_audit_log.to_string())
             }
             "dark-mode" | "dark_mode" => Ok(self.gui.dark_mode.to_string()),
+            "clipboard-auto-clear" | "clipboard_auto_clear" => {
+                Ok(self.gui.clipboard_auto_clear.to_string())
+            }
             "color" => Ok(self.cli.color.to_string()),
             "progress" => Ok(self.cli.progress.to_string()),
             "verbosity" => Ok(self.cli.verbosity.to_string()),
@@ -328,6 +360,10 @@ fn default_true() -> bool {
 
 fn default_verbosity() -> u8 {
     1
+}
+
+fn default_clipboard_auto_clear() -> u32 {
+    30
 }
 
 fn default_kdf_preset() -> KdfPreset {

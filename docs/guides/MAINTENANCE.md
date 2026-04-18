@@ -231,7 +231,7 @@ Use this checklist for regular operations:
 
 ## Related Documentation
 
-- [`../INSTALL.md`](../INSTALL.md)
+- [`../../INSTALL.md`](../../INSTALL.md)
 - [`USER_GUIDE.md`](USER_GUIDE.md)
-- [`TECHNICAL_REFERENCE.md`](TECHNICAL_REFERENCE.md)
+- [`TECHNICAL_REFERENCE.md`](../reference/TECHNICAL_REFERENCE.md)
 - [`TUTORIAL_ENCRYPTION_PASSWORDS.md`](TUTORIAL_ENCRYPTION_PASSWORDS.md)

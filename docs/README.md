@@ -1,7 +1,13 @@
 # Zayfer Vault Documentation
 
-Welcome to the Zayfer Vault documentation. Start with the **Quick Start** guide,
-then explore the reference docs for your interface of choice.
+This documentation set reflects the **current Rust-first configuration** of Zayfer Vault.
+Use the launcher for the supported paths:
+
+- `./run.sh gui` — desktop GUI
+- `./run.sh web` — Rust-native browser platform
+- `./run.sh cli ...` — Rust CLI
+
+> Product branding is **Zayfer Vault**, while compatibility names such as `hb_zayfer` and `HB_ZAYFER_*` remain in package imports and environment variables.
 
 ---
 
@@ -9,42 +15,30 @@ then explore the reference docs for your interface of choice.
 
 | Document | Description |
 |----------|-------------|
-| [Quick Start](QUICKSTART.md) | Install, encrypt your first file, and explore the 14-view GUI |
-| [Tutorial: Encryption, Decryption & Passwords](TUTORIAL_ENCRYPTION_PASSWORDS.md) | Step-by-step walkthrough for password safety and practical encryption workflows |
-| [User Guide](USER_GUIDE.md) | In-depth usage guide for all end-user features |
-| [Installation](../INSTALL.md) | Detailed setup instructions for Linux, macOS, and Windows |
-| [Maintenance](MAINTENANCE.md) | Upgrade, backup, audit, and recovery procedures |
+| [Quick Start](guides/QUICKSTART.md) | Install and launch the GUI, web app, or CLI in a few minutes |
+| [Installation](../INSTALL.md) | Platform setup, dependencies, and troubleshooting |
+| [User Guide](guides/USER_GUIDE.md) | Day-to-day usage across encryption, keys, backup, and audit |
+| [Tutorial: Encryption, Decryption & Passwords](guides/TUTORIAL_ENCRYPTION_PASSWORDS.md) | Guided hands-on walkthrough |
+| [Maintenance](guides/MAINTENANCE.md) | Upgrade, recovery, and operational checks |
+| [Secure Communications](guides/SECURE_COMMUNICATIONS.md) | Practical encryption and signing guide |
 
-### Suggested reading order
-
-1. Start with **[Quick Start](QUICKSTART.md)**.
-2. If you are new to encryption, continue with **[Tutorial: Encryption, Decryption & Passwords](TUTORIAL_ENCRYPTION_PASSWORDS.md)**.
-3. Use **[User Guide](USER_GUIDE.md)** for day-to-day operation.
-4. Keep **[Technical Reference](TECHNICAL_REFERENCE.md)** nearby for exact commands and settings.
-5. Review **[Maintenance](MAINTENANCE.md)** for backups, updates, and recovery planning.
-
-## API References
+## Reference
 
 | Document | Description |
 |----------|-------------|
-| [Python API](PYTHON_API.md) | Complete reference for 55+ Python functions and 6 classes |
-| [Rust API](RUST_API.md) | Complete reference for all 20 Rust modules |
-| [CLI Reference](CLI.md) | All 20+ CLI commands with examples |
-| [Web & GUI](WEB_GUI.md) | Desktop GUI (14 views) and REST API (30 endpoints) |
+| [CLI Reference](reference/CLI.md) | Current Rust CLI commands and examples |
+| [Web & GUI](guides/WEB_GUI.md) | PySide6 desktop GUI and Rust-native web platform |
+| [Python API](reference/PYTHON_API.md) | PyO3-backed Python bindings and compatibility layer |
+| [Rust API](reference/RUST_API.md) | Core library modules and public Rust APIs |
+| [HBZF Format](reference/HBZF_FORMAT.md) | Container format details |
+| [Security](reference/SECURITY.md) | Threat model, security properties, and operational cautions |
+| [Technical Reference](reference/TECHNICAL_REFERENCE.md) | Quick command and configuration cheat sheet |
 
-## Technical
-
-| Document | Description |
-|----------|-------------|
-| [Architecture](ARCHITECTURE.md) | Crate layout, module diagram, data flow, design decisions |
-| [HBZF Format](HBZF_FORMAT.md) | Binary file format specification with compression layer |
-| [Security](SECURITY.md) | Algorithms, memory protections, threat model, limitations |
-| [Technical Reference](TECHNICAL_REFERENCE.md) | Compact cheat sheet for all commands, functions, and endpoints |
-
-## Project
+## Project Information
 
 | Document | Description |
 |----------|-------------|
-| [Contributing](CONTRIBUTING.md) | Dev setup, code standards, testing, PR workflow |
-| [Changelog](../CHANGELOG.md) | Release history (v0.1.0 → v1.1.0) |
-| [Secure Communications](SECURE_COMMUNICATIONS.md) | End-to-end encrypted messaging guide |
+| [Architecture](project/ARCHITECTURE.md) | Workspace layout, runtime boundaries, and data flow |
+| [Contributing](project/CONTRIBUTING.md) | Development workflow and contribution setup |
+| [Changelog](../CHANGELOG.md) | Release history |
+| [Refactoring Notes](refactoring/README.md) | Long-form architectural planning and progress |

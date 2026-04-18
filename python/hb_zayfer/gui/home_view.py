@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (
     QGridLayout,
 )
 
-import hb_zayfer as hbz
+from hb_zayfer.services import AppInfo, WorkspaceSummary
 
 
 class HomeView(QWidget):
@@ -30,7 +30,7 @@ class HomeView(QWidget):
         layout.setContentsMargins(20, 16, 20, 16)
         layout.setSpacing(14)
 
-        title = QLabel("Welcome to Zayfer Vault")
+        title = QLabel(f"Welcome to {AppInfo.current().brand_name}")
         title.setStyleSheet("font-size: 22px; font-weight: 700;")
         layout.addWidget(title)
 
@@ -101,22 +101,7 @@ class HomeView(QWidget):
 
     def refresh(self) -> None:
         """Refresh key, contact, and audit counts."""
-        key_count = 0
-        contact_count = 0
-        audit_count = 0
-
-        try:
-            ks = hbz.KeyStore()
-            key_count = len(ks.list_keys())
-            contact_count = len(ks.list_contacts())
-        except Exception:
-            pass
-
-        try:
-            audit_count = hbz.AuditLogger().entry_count()
-        except Exception:
-            pass
-
-        self.keys_value.setText(str(key_count))
-        self.contacts_value.setText(str(contact_count))
-        self.audit_value.setText(str(audit_count))
+        summary = WorkspaceSummary.collect()
+        self.keys_value.setText(str(summary.key_count))
+        self.contacts_value.setText(str(summary.contact_count))
+        self.audit_value.setText(str(summary.audit_count))

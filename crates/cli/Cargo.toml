@@ -17,8 +17,17 @@ clap_complete = "4"
 anyhow.workspace = true
 dialoguer.workspace = true
 indicatif.workspace = true
+serde.workspace = true
 serde_json.workspace = true
 base64.workspace = true
 hex.workspace = true
 rand.workspace = true
 rand_core.workspace = true
+axum = { version = "0.7", features = ["multipart"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net"] }
+tower-http = { version = "0.5", features = ["fs"] }
+
+[dev-dependencies]
+http-body-util = "0.1"
+tempfile = "3"
+tower = { version = "0.5", features = ["util"] }

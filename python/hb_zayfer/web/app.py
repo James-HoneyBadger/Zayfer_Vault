@@ -26,7 +26,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from hb_zayfer.web.routes import router
-import hb_zayfer as hbz
+from hb_zayfer.services import AppInfo
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -77,10 +77,11 @@ def create_app() -> FastAPI:
     # across unit tests or between independently created FastAPI instances.
     limiter = _RateLimiter(rate_limit, rate_window)
 
+    info = AppInfo.current()
     app = FastAPI(
-        title="HB_Zayfer",
-        description="Encryption/Decryption Suite — Web Interface",
-        version=hbz.version(),
+        title=info.api_title,
+        description=f"{info.description} — Web Interface",
+        version=info.version,
     )
 
     # CORS — restrict to localhost origins

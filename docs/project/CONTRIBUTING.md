@@ -19,60 +19,25 @@ covers project setup, code standards, testing, and the pull-request workflow.
 
 ## Repository Layout
 
-```
+```text
 HB_Zayfer/
-├── Cargo.toml                # Workspace root
-├── pyproject.toml             # Maturin / Python packaging
 ├── crates/
-│   ├── core/                  # hb_zayfer_core — 20 Rust modules
-│   │   ├── src/
-│   │   │   ├── lib.rs
-│   │   │   ├── aes_gcm.rs        # AES-256-GCM
-│   │   │   ├── chacha20.rs       # ChaCha20-Poly1305
-│   │   │   ├── rsa.rs            # RSA-2048/4096
-│   │   │   ├── ed25519.rs        # Ed25519 signatures
-│   │   │   ├── x25519.rs         # X25519 key agreement
-│   │   │   ├── openpgp.rs        # OpenPGP (Sequoia)
-│   │   │   ├── kdf.rs            # Argon2id & scrypt
-│   │   │   ├── format.rs         # HBZF container
-│   │   │   ├── keystore.rs       # Key + contact storage
-│   │   │   ├── audit.rs          # Audit logging
-│   │   │   ├── backup.rs         # Backup/restore
-│   │   │   ├── config.rs         # Configuration
-│   │   │   ├── compression.rs    # Deflate layer
-│   │   │   ├── secure_mem.rs     # mlock secure memory
-│   │   │   ├── shred.rs          # Secure file shredding
-│   │   │   ├── passgen.rs        # Password generation
-│   │   │   ├── shamir.rs         # Shamir's Secret Sharing
-│   │   │   ├── stego.rs          # LSB steganography
-│   │   │   ├── qr.rs             # QR key exchange URIs
-│   │   │   └── error.rs          # Error types
-│   │   ├── tests/
-│   │   │   └── integration.rs    # Integration tests
-│   │   └── benches/
-│   │       └── crypto_benches.rs
-│   ├── cli/                   # hb_zayfer_cli — Clap CLI
-│   │   └── src/main.rs
-│   ├── python/                # hb_zayfer_python — PyO3 bindings
-│   │   └── src/lib.rs
-│   └── wasm/                  # hb_zayfer_wasm — wasm-bindgen
-│       └── src/lib.rs
+│   ├── core/      # Rust crypto, storage, audit, backup, config, shared services
+│   ├── cli/       # Rust CLI plus the Rust-native web server
+│   ├── python/    # PyO3 bridge for Python consumers and the desktop GUI
+│   └── wasm/      # Browser/Node WebAssembly target
 ├── python/
-│   └── hb_zayfer/             # Python package
-│       ├── __init__.py
-│       ├── _native.pyi        # Type stubs
-│       ├── cli.py             # Click CLI
-│       ├── gui/               # PySide6 desktop GUI (14 views)
-│       └── web/               # FastAPI web server
-├── scripts/
-│   ├── build-wasm.sh          # WASM build script
-│   └── package.sh             # Multi-platform packaging
+│   └── hb_zayfer/
+│       ├── gui/   # PySide6 desktop compatibility shell
+│       ├── web/   # Browser assets and Python compatibility backend
+│       └── __init__.py
 ├── tests/
-│   └── python/
-│       ├── test_crypto.py     # Cryptographic tests
-│       └── test_web.py        # Web API tests
-└── docs/                      # Documentation
+│   └── python/    # Python and web compatibility regression tests
+├── scripts/       # Packaging and WASM helpers
+└── docs/          # Documentation
 ```
+
+The current product direction is **Rust-first**: launcher, CLI, and web runtime are centered in the Rust workspace, while Python remains for bindings and the desktop shell.
 
 ---
 
@@ -146,16 +111,13 @@ pytest tests/python/test_web.py -v
 cargo bench -p hb_zayfer_core
 ```
 
-### Test Counts
+### Test Coverage Areas
 
-| Suite | Count |
-|-------|-------|
-| Rust unit tests | ~85 |
-| Rust integration tests | ~41 |
-| Rust doc tests | ~7 |
-| Python tests | ~42 |
-| Web API tests | ~8 |
-| **Total** | **~238** |
+| Area | Command |
+|------|---------|
+| Rust workspace checks | `cargo test --workspace` |
+| Python compatibility tests | `pytest tests/python/ -v` |
+| Headless smoke suite | `HB_ZAYFER_SKIP_ONBOARDING=1 QT_QPA_PLATFORM=offscreen ./run.sh test` |
 
 ### Writing Tests
 
@@ -180,8 +142,8 @@ Every new feature should include tests. Aim for:
 5. Add integration tests to `crates/core/tests/integration.rs`
 6. Add Python bindings in `crates/python/src/lib.rs`
 7. Add CLI commands in `crates/cli/src/main.rs`
-8. Add web routes in `python/hb_zayfer/web/routes.py`
-9. Update type stubs in `python/hb_zayfer/_native.pyi`
+8. If the feature is browser-facing, add or update routes in `crates/cli/src/platform_server.rs`
+9. Update Python bindings or stubs in `crates/python/src/lib.rs` and `python/hb_zayfer/_native.pyi` as needed
 10. Update documentation
 
 ---
@@ -200,8 +162,8 @@ Every new feature should include tests. Aim for:
 1. Fork the repository
 2. Create a feature branch: `git checkout -b feat/my-feature`
 3. Make your changes with tests
-4. Run the full test suite: `cargo test --workspace && pytest tests/python/ -v`
-5. Run lints: `cargo fmt --check && cargo clippy -- -D warnings`
+4. Run the full verification set: `cargo test --workspace && pytest tests/python/ -v`
+5. Run lints: `cargo fmt --check && cargo clippy --workspace --all-targets -- -D warnings`
 6. Commit with a descriptive message
 7. Open a pull request against `main`
 

@@ -7,13 +7,15 @@ import threading
 from pathlib import Path
 from typing import Any
 
+from hb_zayfer.services import AppPaths
+
 
 class SettingsManager:
     """Manages application settings persistence."""
     
-    def __init__(self, config_dir: Path):
-        self.config_dir = config_dir
-        self.settings_file = config_dir / "gui_settings.json"
+    def __init__(self, config_dir: Path | None = None):
+        self.config_dir = config_dir or AppPaths.current().config_dir
+        self.settings_file = self.config_dir / "gui_settings.json"
         self._lock = threading.Lock()
         self.settings: dict[str, Any] = self._load_settings()
     

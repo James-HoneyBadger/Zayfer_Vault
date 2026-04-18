@@ -1012,9 +1012,9 @@ After completing this tutorial:
 ## Additional Resources
 
 - [USER_GUIDE.md](USER_GUIDE.md) - Complete feature reference
-- [SECURITY.md](SECURITY.md) - Threat model and security architecture
-- [CLI.md](CLI.md) - Command-line reference
-- [PYTHON_API.md](PYTHON_API.md) - API documentation for automation
+- [SECURITY.md](../reference/SECURITY.md) - Threat model and security architecture
+- [CLI.md](../reference/CLI.md) - Command-line reference
+- [PYTHON_API.md](../reference/PYTHON_API.md) - API documentation for automation
 
 ---
 

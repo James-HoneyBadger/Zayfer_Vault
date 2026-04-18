@@ -1,92 +1,63 @@
 # Architecture
 
-**Zayfer Vault v1.0.1**
+**Zayfer Vault v1.1.0**
 
-This document describes the internal architecture of Zayfer Vault, a full-featured
-encryption/decryption suite built with a **Rust core**, **Python bindings**
-(via PyO3), and a **WASM module** (via wasm-bindgen).
+This document describes the current **Rust-first** architecture of Zayfer Vault.
+Rust owns the cryptographic core, the primary CLI, and the browser-facing server.
+Python remains for the PyO3 compatibility bridge and the desktop GUI shell.
 
 ---
 
 ## High-Level Overview
 
-```
-┌──────────────────── User Interfaces ─────────────────────┐
-│                                                          │
-│   Rust CLI          Python CLI          Desktop GUI      │
-│   (clap)            (Click + Rich)      (PySide6)        │
-│                                                          │
-│              Web UI (FastAPI + vanilla JS)                │
-│                                                          │
-├──────────────── Python Bindings (PyO3) ──────────────────┤
-│                                                          │
-│   hb_zayfer._native    (crates/python — cdylib)          │
-│   55+ functions, 6 classes                               │
-│                                                          │
-├──────────────────── Rust Core Library ───────────────────┤
-│                                                          │
-│   hb_zayfer_core       (crates/core — rlib)              │
-│                                                          │
-│   ┌─────────┐ ┌───────────┐ ┌───────┐ ┌─────────┐       │
-│   │ aes_gcm │ │ chacha20  │ │  rsa  │ │ ed25519 │       │
-│   └─────────┘ └───────────┘ └───────┘ └─────────┘       │
-│   ┌─────────┐ ┌───────────┐ ┌───────┐ ┌─────────┐       │
-│   │ x25519  │ │  openpgp  │ │  kdf  │ │ format  │       │
-│   └─────────┘ └───────────┘ └───────┘ └─────────┘       │
-│   ┌──────────┐ ┌─────────┐ ┌────────┐ ┌─────────┐       │
-│   │ keystore │ │  audit  │ │ backup │ │  config │       │
-│   └──────────┘ └─────────┘ └────────┘ └─────────┘       │
-│   ┌─────────────┐ ┌────────────┐ ┌─────────┐            │
-│   │ compression │ │ secure_mem │ │  error  │            │
-│   └─────────────┘ └────────────┘ └─────────┘            │
-│   ┌───────┐ ┌─────────┐ ┌────────┐ ┌───────┐            │
-│   │ shred │ │ passgen │ │ shamir │ │ stego │            │
-│   └───────┘ └─────────┘ └────────┘ └───────┘            │
-│   ┌──────┐                                               │
-│   │  qr  │                                               │
-│   └──────┘                                               │
-│                                                          │
-├──────────────── WASM Module (standalone) ────────────────┤
-│                                                          │
-│   hb_zayfer_wasm     (crates/wasm — wasm-bindgen)        │
-│   13 functions: AES, ChaCha20, Ed25519, X25519, KDF      │
-│                                                          │
-└──────────────────────────────────────────────────────────┘
+```text
+                ./run.sh
+                   │
+     ┌─────────────┼─────────────┐
+     │             │             │
+   gui           cli           web
+     │             │             │
+PySide6 shell   Rust CLI    Rust-native server
+     │             └──────┬──────┘
+     └────────── PyO3 / services ──────────┐
+                                           │
+                                  hb_zayfer_core
+                                           │
+                                      shared crypto,
+                                  keystore, audit, backup,
+                                   config, platform services
+
+hb_zayfer_wasm remains a standalone browser/Node target.
 ```
 
 ---
 
 ## Workspace Crates
 
-The Cargo workspace (`Cargo.toml`) contains four crates with a shared
-version (`1.0.1`):
+The Cargo workspace contains four primary crates:
 
 | Crate | Path | Type | Purpose |
 |-------|------|------|---------|
-| `hb_zayfer_core` | `crates/core` | `rlib` | All cryptographic operations, file format, key storage, audit, backup, and security utilities |
-| `hb_zayfer_cli` | `crates/cli` | `bin` | Rust-native CLI (clap + dialoguer + indicatif), 20+ commands |
-| `hb_zayfer_python` | `crates/python` | `cdylib` | PyO3 bindings → `hb_zayfer._native`, 55+ functions, 6 classes |
-| `hb_zayfer_wasm` | `crates/wasm` | `cdylib` | WASM module (wasm-bindgen), 13 browser-ready functions |
+| `hb_zayfer_core` | `crates/core` | `rlib` | Cryptography, storage, audit, backup, config, platform metadata, and shared service helpers |
+| `hb_zayfer_cli` | `crates/cli` | `bin` | Primary Rust CLI plus the Rust-native web platform |
+| `hb_zayfer_python` | `crates/python` | `cdylib` | PyO3 bridge exposed as `hb_zayfer._native` |
+| `hb_zayfer_wasm` | `crates/wasm` | `cdylib` | Standalone WebAssembly module |
 
 ### Dependency Flow
 
-```
-hb_zayfer_cli ──────┐
-                     ├──► hb_zayfer_core
-hb_zayfer_python ───┘
-
-hb_zayfer_wasm ──────── (standalone — no core dependency)
+```text
+hb_zayfer_cli ───────────────► hb_zayfer_core
+hb_zayfer_python ───────────► hb_zayfer_core
+hb_zayfer_wasm ─────────────► standalone WASM-friendly implementation
 ```
 
-The CLI and Python bindings depend on `hb_zayfer_core`. The WASM crate is
-standalone (reimplements core algorithms using pure-Rust crates compatible
-with `wasm32-unknown-unknown`, since Sequoia/OpenPGP is not WASM-compatible).
+Important recent runtime additions include `platform.rs`, `services.rs`, and `platform_server.rs`, which keep the CLI and browser server aligned around the same Rust-side behavior.
 
 ---
 
 ## Core Library Modules
 
-The core library contains **20 public modules**:
+The core library contains **20+ public modules**, including newer Rust-first runtime helpers such as `platform` and `services`:
 
 ### `aes_gcm` — AES-256-GCM
 
@@ -164,18 +135,19 @@ Chunk index is also appended to AAD to prevent chunk reordering.
 
 On-disk layout at `~/.hb_zayfer/` (or `$HB_ZAYFER_HOME`):
 
-```
+```text
 ~/.hb_zayfer/
 ├── keys/
-│   ├── private/<fingerprint>.key  (v2 envelope: KDF params + AES-GCM encrypted)
-│   └── public/<fingerprint>.pub   (plaintext key material)
-├── keyring.json       (KeyMetadata index with usage constraints & expiry)
-├── contacts.json      (Contact ↔ key associations)
-├── audit.json         (Tamper-evident operation log with HMAC chain)
-├── config.toml        (Rust core configuration — TOML)
-├── config.json        (GUI / web configuration — JSON)
-└── gui_settings.json  (GUI preferences: theme, geometry, defaults)
+│   ├── private/<fingerprint>.key
+│   └── public/<fingerprint>.pub
+├── keyring.json       # Key metadata index
+├── contacts.json      # Contact associations
+├── audit.log          # Tamper-evident audit chain
+├── config.toml        # Core runtime configuration
+└── gui_settings.json  # Desktop preferences
 ```
+
+Older compatibility flows may create additional files, but the current Rust-first runtime centers on the paths above.
 
 **Key types include**: `KeyAlgorithm` (Rsa2048, Rsa4096, Ed25519, X25519, Pgp),
 `KeyUsage` (Signing, Encryption, KeyAgreement, Authentication),
@@ -279,13 +251,17 @@ Re-exports all `_native` symbols into the top-level `hb_zayfer` namespace.
 RSA, Ed25519, X25519, OpenPGP, HBZF format, utilities, audit logging,
 password generation, Shamir SSS, steganography, secure shredding, QR exchange.
 
-### Click CLI (`python/hb_zayfer/cli.py`)
+### CLI and Launcher Routing
 
-Entry point: `hb-zayfer`. Commands: `keygen`, `encrypt`, `decrypt`, `sign`,
-`verify`, `encrypt-text`, `decrypt-text`. Sub-command groups: `keys` (list,
-import, export, delete), `contacts` (list, add, remove, link), `backup`
-(create, restore, verify), `audit` (show, verify, export). Uses `rich` for
-colored output and status spinners.
+The current supported CLI surface is the Rust binary launched by:
+
+```bash
+./run.sh cli <command>
+hb-zayfer <command>
+```
+
+Key operations such as `keygen`, `encrypt`, `decrypt`, `sign`, `verify`, `backup`, `audit`, `config`, `status`, and `serve` now route through Rust directly.
+The older Python packaging entrypoints remain only as compatibility helpers.
 
 ### PySide6 GUI (`python/hb_zayfer/gui/`)
 
@@ -339,28 +315,29 @@ colored output and status spinners.
 - Dark/light theme switching (persisted in `gui_settings.json`)
 - Window geometry and settings persistence across sessions
 
-### FastAPI Web UI (`python/hb_zayfer/web/`)
+### Rust-native Web Platform
 
-**30 API routes** across these categories:
+The browser-facing server now lives in `crates/cli/src/platform_server.rs` and is launched with:
 
-| Category | Endpoints |
-|----------|-----------|
-| Info | `GET /version` |
-| Text encrypt/decrypt | `POST /encrypt/text`, `POST /decrypt/text` |
-| File encrypt/decrypt | `POST /encrypt/file`, `POST /decrypt/file` |
-| Key management | `POST /keygen`, `GET /keys`, `DELETE /keys/{fp}`, `GET /keys/{fp}/public` |
-| Signing | `POST /sign`, `POST /verify` |
-| Contacts | `GET /contacts`, `POST /contacts`, `DELETE /contacts/{name}`, `POST /contacts/link` |
-| Audit | `GET /audit/recent`, `GET /audit/verify`, `GET /audit/count`, `POST /audit/export` |
-| Backup | `POST /backup/create`, `POST /backup/verify`, `POST /backup/restore` |
-| Config | `GET /config`, `GET /config/{key}`, `PUT /config/{key}` |
-| Password gen | `POST /passgen` |
-| Shamir SSS | `POST /shamir/split`, `POST /shamir/combine` |
-| QR exchange | `POST /qr/encode`, `POST /qr/decode` |
+```bash
+./run.sh web
+# or
+./run.sh cli serve --port 8000
+```
 
-- Static SPA served from `web/static/` (HTML + JS + CSS).
-- Optional bearer-token auth via `HB_ZAYFER_API_TOKEN`.
-- CORS restricted to localhost origins.
+Current Rust-managed browser routes cover:
+
+- health and status
+- keys and contacts
+- text and file encryption/decryption
+- sign and verify
+- audit summaries
+- backup create/verify/restore
+- config reads and updates
+- password generation
+
+The browser assets are still served from `python/hb_zayfer/web/static/`.
+A separate Python web backend is retained for compatibility and tests, but it is no longer the primary runtime path.
 
 ---
 

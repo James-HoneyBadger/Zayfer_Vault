@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
     QCheckBox,
 )
 
-import hb_zayfer as hbz
+from hb_zayfer.services import KeyService
 from hb_zayfer.gui.workers import CryptoWorker
 from hb_zayfer.gui.password_strength import PasswordStrengthMeter
 from hb_zayfer.gui.audit_utils import log_key_generated
@@ -169,33 +169,13 @@ class KeygenView(QWidget):
     @staticmethod
     def _generate_key(algorithm: str, label: str, uid: str, passphrase: bytes) -> str:
         """Generate a key and store it. Returns info string."""
-        ks = hbz.KeyStore()
-
-        if algorithm in ("rsa2048", "rsa4096"):
-            bits = 2048 if algorithm == "rsa2048" else 4096
-            priv_pem, pub_pem = hbz.rsa_generate(bits)
-            fp = hbz.rsa_fingerprint(pub_pem)
-            ks.store_private_key(fp, priv_pem.encode(), passphrase, algorithm, label)
-            ks.store_public_key(fp, pub_pem.encode(), algorithm, label)
-        elif algorithm == "ed25519":
-            sk_pem, vk_pem = hbz.ed25519_generate()
-            fp = hbz.ed25519_fingerprint(vk_pem)
-            ks.store_private_key(fp, sk_pem.encode(), passphrase, algorithm, label)
-            ks.store_public_key(fp, vk_pem.encode(), algorithm, label)
-        elif algorithm == "x25519":
-            sk_raw, pk_raw = hbz.x25519_generate()
-            fp = hbz.x25519_fingerprint(pk_raw)
-            ks.store_private_key(fp, sk_raw, passphrase, algorithm, label)
-            ks.store_public_key(fp, pk_raw, algorithm, label)
-        elif algorithm == "pgp":
-            pub_arm, sec_arm = hbz.pgp_generate(uid)
-            fp = hbz.pgp_fingerprint(pub_arm)
-            ks.store_private_key(fp, sec_arm.encode(), passphrase, algorithm, label)
-            ks.store_public_key(fp, pub_arm.encode(), algorithm, label)
-        else:
-            raise ValueError(f"Unknown algorithm: {algorithm}")
-
-        return f"Algorithm: {algorithm.upper()}\nLabel: {label}\nFingerprint: {fp}"
+        result = KeyService.generate_key(
+            algorithm=algorithm,
+            label=label,
+            passphrase=passphrase,
+            user_id=uid,
+        )
+        return result.to_display_text()
 
     def _on_gen_done(self, info: object) -> None:
         self.result_text.setVisible(True)

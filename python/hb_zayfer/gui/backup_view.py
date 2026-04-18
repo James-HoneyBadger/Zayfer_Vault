@@ -27,7 +27,7 @@ from PySide6.QtWidgets import (
     QProgressBar,
 )
 
-import hb_zayfer as hbz
+from hb_zayfer.services import BackupService
 from hb_zayfer.gui.workers import CryptoWorker
 
 
@@ -212,19 +212,15 @@ class BackupView(QWidget):
 
     @staticmethod
     def _create_backup_work(dest: str, passphrase: bytes, label: str | None):
-        ks = hbz.KeyStore()
-        ks.create_backup(dest, passphrase, label)
-        return dest, ks.verify_backup(dest, passphrase)
+        return dest, BackupService.create_backup(dest, passphrase, label)
 
     @staticmethod
     def _verify_backup_work(path: str, passphrase: bytes):
-        ks = hbz.KeyStore()
-        return ks.verify_backup(path, passphrase)
+        return BackupService.verify_backup(path, passphrase)
 
     @staticmethod
     def _restore_backup_work(path: str, passphrase: bytes):
-        ks = hbz.KeyStore()
-        return ks.restore_backup(path, passphrase)
+        return BackupService.restore_backup(path, passphrase)
 
     # ------------------------------------------------------------------
     # Create backup

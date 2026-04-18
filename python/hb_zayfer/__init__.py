@@ -1,4 +1,4 @@
-"""HB_Zayfer — Full-featured encryption/decryption suite.
+"""Zayfer Vault — Full-featured encryption/decryption suite.
 
 This package exposes the Rust-powered cryptographic core via a clean Python API.
 All heavy cryptographic operations run in native Rust with the GIL released.
@@ -103,6 +103,17 @@ from hb_zayfer._native import (
     AuditEntry,
     AuditLogger,
 )
+from hb_zayfer.services import (
+    AppInfo,
+    AppPaths,
+    AuditService,
+    BackupService,
+    ConfigService,
+    CryptoService,
+    KeyService,
+    SignatureService,
+    WorkspaceSummary,
+)
 
 __all__ = [
     "version",
@@ -183,6 +194,16 @@ __all__ = [
     "AuditLogger",
     # Version
     "__version__",
+    # Shared services
+    "AppInfo",
+    "AppPaths",
+    "AuditService",
+    "BackupService",
+    "ConfigService",
+    "CryptoService",
+    "KeyService",
+    "SignatureService",
+    "WorkspaceSummary",
 ]
 
 __version__ = version()

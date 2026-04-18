@@ -70,7 +70,7 @@ If you are new to Zayfer Vault or to encryption in general, use this order:
 1. [`QUICKSTART.md`](QUICKSTART.md) — fastest way to launch and verify the app
 2. [`TUTORIAL_ENCRYPTION_PASSWORDS.md`](TUTORIAL_ENCRYPTION_PASSWORDS.md) — safe password and encryption walkthrough
 3. [`USER_GUIDE.md`](USER_GUIDE.md) — full day-to-day usage reference
-4. [`TECHNICAL_REFERENCE.md`](TECHNICAL_REFERENCE.md) — exact commands, parameters, and endpoints
+4. [`TECHNICAL_REFERENCE.md`](../reference/TECHNICAL_REFERENCE.md) — exact commands, parameters, and endpoints
 5. [`MAINTENANCE.md`](MAINTENANCE.md) — backup, upgrade, and recovery procedures
 
 ### Safety-First Setup Checklist
@@ -616,7 +616,7 @@ for k in ks.list_keys():
     print(f"{k.label}: {k.algorithm} ({k.fingerprint[:16]}..)")
 ```
 
-See [PYTHON_API.md](PYTHON_API.md) for the full reference.
+See [PYTHON_API.md](../reference/PYTHON_API.md) for the full reference.
 
 ---
 
@@ -669,7 +669,7 @@ hb-zayfer config list
 
 **See also:**
 [Quick Start](QUICKSTART.md) ·
-[CLI Reference](CLI.md) ·
-[Python API](PYTHON_API.md) ·
-[Security](SECURITY.md) ·
+[CLI Reference](../reference/CLI.md) ·
+[Python API](../reference/PYTHON_API.md) ·
+[Security](../reference/SECURITY.md) ·
 [Secure Communications](SECURE_COMMUNICATIONS.md)

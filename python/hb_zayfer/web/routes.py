@@ -14,6 +14,16 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 import hb_zayfer as hbz
+from hb_zayfer.services import (
+    AppInfo,
+    AppPaths,
+    AuditService,
+    BackupService,
+    ConfigService,
+    CryptoService,
+    KeyService,
+    SignatureService,
+)
 
 router = APIRouter()
 
@@ -42,14 +52,9 @@ def _audit_safe(fn, *args, **kwargs) -> None:
 def _require_home_path(raw_path: str, field_name: str) -> Path:
     """Resolve a user-supplied path and ensure it stays within the home dir."""
     try:
-        resolved = Path(raw_path).expanduser().resolve()
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"Invalid {field_name}: {exc}") from exc
-
-    home = Path.home().resolve()
-    if not resolved.is_relative_to(home):
-        raise HTTPException(status_code=400, detail=f"{field_name} must be within user's home directory")
-    return resolved
+        return AppPaths.current().resolve_user_path(raw_path, field_name)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 # ---------------------------------------------------------------------------
@@ -148,7 +153,7 @@ class VersionResponse(BaseModel):
 
 @router.get("/version", response_model=VersionResponse)
 def get_version():
-    return VersionResponse(version=hbz.version())
+    return VersionResponse(version=AppInfo.current().version)
 
 
 # ---------------------------------------------------------------------------
@@ -158,20 +163,8 @@ def get_version():
 @router.post("/encrypt/text", response_model=EncryptTextResponse)
 def encrypt_text(req: EncryptTextRequest):
     try:
-        encrypted = hbz.encrypt_data(
-            req.plaintext.encode("utf-8"),
-            algorithm=req.algorithm,
-            wrapping="password",
-            passphrase=req.passphrase.encode("utf-8"),
-        )
-        _audit_safe(
-            hbz.audit_log_file_encrypted,
-            req.algorithm.upper(),
-            "web:text",
-            len(req.plaintext.encode("utf-8")),
-            "source=web, endpoint=/api/encrypt/text",
-        )
-        return EncryptTextResponse(ciphertext_b64=base64.b64encode(encrypted).decode())
+        ciphertext_b64 = CryptoService.encrypt_text(req.plaintext, req.passphrase, req.algorithm)
+        return EncryptTextResponse(ciphertext_b64=ciphertext_b64)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -179,16 +172,8 @@ def encrypt_text(req: EncryptTextRequest):
 @router.post("/decrypt/text", response_model=DecryptTextResponse)
 def decrypt_text(req: DecryptTextRequest):
     try:
-        data = base64.b64decode(req.ciphertext_b64)
-        plaintext = hbz.decrypt_data(data, passphrase=req.passphrase.encode("utf-8"))
-        _audit_safe(
-            hbz.audit_log_file_decrypted,
-            "WEB:TEXT",
-            "web:text",
-            len(plaintext),
-            "source=web, endpoint=/api/decrypt/text",
-        )
-        return DecryptTextResponse(plaintext=plaintext.decode("utf-8", errors="replace"))
+        plaintext = CryptoService.decrypt_text(req.ciphertext_b64, req.passphrase)
+        return DecryptTextResponse(plaintext=plaintext)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -200,40 +185,19 @@ def decrypt_text(req: DecryptTextRequest):
 @router.post("/keygen", response_model=KeygenResponse)
 def generate_key(req: KeygenRequest):
     try:
-        ks = hbz.KeyStore()
-        pw = req.passphrase.encode("utf-8")
-
-        if req.algorithm in ("rsa2048", "rsa4096"):
-            bits = 2048 if req.algorithm == "rsa2048" else 4096
-            priv_pem, pub_pem = hbz.rsa_generate(bits)
-            fp = hbz.rsa_fingerprint(pub_pem)
-            ks.store_private_key(fp, priv_pem.encode(), pw, req.algorithm, req.label)
-            ks.store_public_key(fp, pub_pem.encode(), req.algorithm, req.label)
-        elif req.algorithm == "ed25519":
-            sk_pem, vk_pem = hbz.ed25519_generate()
-            fp = hbz.ed25519_fingerprint(vk_pem)
-            ks.store_private_key(fp, sk_pem.encode(), pw, req.algorithm, req.label)
-            ks.store_public_key(fp, vk_pem.encode(), req.algorithm, req.label)
-        elif req.algorithm == "x25519":
-            sk_raw, pk_raw = hbz.x25519_generate()
-            fp = hbz.x25519_fingerprint(pk_raw)
-            ks.store_private_key(fp, sk_raw, pw, req.algorithm, req.label)
-            ks.store_public_key(fp, pk_raw, req.algorithm, req.label)
-        elif req.algorithm == "pgp":
-            uid = req.user_id or req.label
-            if not uid or len(uid) > 256:
-                raise HTTPException(status_code=400, detail="PGP user_id must be 1–256 characters")
-            pub_arm, sec_arm = hbz.pgp_generate(uid)
-            fp = hbz.pgp_fingerprint(pub_arm)
-            ks.store_private_key(fp, sec_arm.encode(), pw, req.algorithm, req.label)
-            ks.store_public_key(fp, pub_arm.encode(), req.algorithm, req.label)
-        else:
-            raise HTTPException(status_code=400, detail=f"Unknown algorithm: {req.algorithm}")
-
-        _audit_safe(hbz.audit_log_key_generated, req.algorithm.upper(), fp, "source=web, endpoint=/api/keygen")
-        return KeygenResponse(fingerprint=fp, algorithm=req.algorithm, label=req.label)
-    except HTTPException:
-        raise
+        result = KeyService.generate_key(
+            algorithm=req.algorithm,
+            label=req.label,
+            passphrase=req.passphrase.encode("utf-8"),
+            user_id=req.user_id,
+        )
+        return KeygenResponse(
+            fingerprint=result.fingerprint,
+            algorithm=result.algorithm,
+            label=result.label,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -245,23 +209,15 @@ def generate_key(req: KeygenRequest):
 @router.post("/sign", response_model=SignResponse)
 def sign_message(req: SignRequest):
     try:
-        ks = hbz.KeyStore()
-        message = base64.b64decode(req.message_b64)
-        priv_data = ks.load_private_key(req.fingerprint, req.passphrase.encode("utf-8"))
-
-        if req.algorithm == "ed25519":
-            sig = hbz.ed25519_sign(priv_data.decode(), message)
-        elif req.algorithm == "rsa":
-            sig = hbz.rsa_sign(priv_data.decode(), message)
-        elif req.algorithm == "pgp":
-            sig = hbz.pgp_sign(message, priv_data.decode())
-        else:
-            raise HTTPException(status_code=400, detail=f"Unknown algorithm: {req.algorithm}")
-
-        _audit_safe(hbz.audit_log_data_signed, req.algorithm.upper(), req.fingerprint, "source=web, endpoint=/api/sign")
-        return SignResponse(signature_b64=base64.b64encode(sig).decode())
-    except HTTPException:
-        raise
+        signature_b64 = SignatureService.sign_message(
+            message_b64=req.message_b64,
+            fingerprint=req.fingerprint,
+            passphrase=req.passphrase,
+            algorithm=req.algorithm,
+        )
+        return SignResponse(signature_b64=signature_b64)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -269,24 +225,15 @@ def sign_message(req: SignRequest):
 @router.post("/verify", response_model=VerifyResponse)
 def verify_message(req: VerifyRequest):
     try:
-        ks = hbz.KeyStore()
-        message = base64.b64decode(req.message_b64)
-        signature = base64.b64decode(req.signature_b64)
-        pub_data = ks.load_public_key(req.fingerprint)
-
-        if req.algorithm == "ed25519":
-            valid = hbz.ed25519_verify(pub_data.decode(), message, signature)
-        elif req.algorithm == "rsa":
-            valid = hbz.rsa_verify(pub_data.decode(), message, signature)
-        elif req.algorithm == "pgp":
-            _, valid = hbz.pgp_verify(signature, pub_data.decode())
-        else:
-            raise HTTPException(status_code=400, detail=f"Unknown algorithm: {req.algorithm}")
-
-        _audit_safe(hbz.audit_log_signature_verified, req.algorithm.upper(), req.fingerprint, bool(valid))
+        valid = SignatureService.verify_message(
+            message_b64=req.message_b64,
+            signature_b64=req.signature_b64,
+            fingerprint=req.fingerprint,
+            algorithm=req.algorithm,
+        )
         return VerifyResponse(valid=valid)
-    except HTTPException:
-        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -298,7 +245,6 @@ def verify_message(req: VerifyRequest):
 @router.get("/keys", response_model=list[KeyMetadataOut])
 def list_keys():
     try:
-        ks = hbz.KeyStore()
         return [
             KeyMetadataOut(
                 fingerprint=k.fingerprint,
@@ -308,7 +254,7 @@ def list_keys():
                 has_private=k.has_private,
                 has_public=k.has_public,
             )
-            for k in ks.list_keys()
+            for k in KeyService.list_keys()
         ]
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -317,9 +263,7 @@ def list_keys():
 @router.delete("/keys/{fingerprint}")
 def delete_key(fingerprint: str):
     try:
-        ks = hbz.KeyStore()
-        ks.delete_key(fingerprint)
-        _audit_safe(hbz.audit_log_key_deleted, fingerprint, "source=web, endpoint=/api/keys/{fingerprint}")
+        KeyService.delete_key(fingerprint)
         return {"status": "deleted"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -328,8 +272,7 @@ def delete_key(fingerprint: str):
 @router.get("/keys/{fingerprint}/public")
 def export_public_key(fingerprint: str):
     try:
-        ks = hbz.KeyStore()
-        pub_data = ks.load_public_key(fingerprint)
+        pub_data = KeyService.load_public_key(fingerprint)
         return {"fingerprint": fingerprint, "public_key_b64": base64.b64encode(pub_data).decode()}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -342,7 +285,6 @@ def export_public_key(fingerprint: str):
 @router.get("/contacts", response_model=list[ContactOut])
 def list_contacts():
     try:
-        ks = hbz.KeyStore()
         return [
             ContactOut(
                 name=c.name,
@@ -351,7 +293,7 @@ def list_contacts():
                 notes=c.notes,
                 created_at=c.created_at,
             )
-            for c in ks.list_contacts()
+            for c in KeyService.list_contacts()
         ]
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -360,9 +302,7 @@ def list_contacts():
 @router.post("/contacts")
 def add_contact(req: ContactRequest):
     try:
-        ks = hbz.KeyStore()
-        ks.add_contact(req.name, email=req.email, notes=req.notes)
-        _audit_safe(hbz.audit_log_contact_added, req.name, "source=web, endpoint=/api/contacts")
+        KeyService.add_contact(req.name, email=req.email, notes=req.notes)
         return {"status": "created", "name": req.name}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -371,9 +311,7 @@ def add_contact(req: ContactRequest):
 @router.delete("/contacts/{name}")
 def remove_contact(name: str):
     try:
-        ks = hbz.KeyStore()
-        ks.remove_contact(name)
-        _audit_safe(hbz.audit_log_contact_deleted, name, "source=web, endpoint=/api/contacts/{name}")
+        KeyService.remove_contact(name)
         return {"status": "deleted"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -382,8 +320,7 @@ def remove_contact(name: str):
 @router.post("/contacts/link")
 def link_key_to_contact(req: LinkKeyRequest):
     try:
-        ks = hbz.KeyStore()
-        ks.associate_key_with_contact(req.contact_name, req.fingerprint)
+        KeyService.link_key_to_contact(req.contact_name, req.fingerprint)
         return {"status": "linked"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -532,8 +469,6 @@ class AuditVerifyResponse(BaseModel):
 def audit_recent(limit: int = 50):
     """Return the most recent audit log entries."""
     try:
-        logger = hbz.AuditLogger()
-        entries = logger.recent_entries(limit)
         return [
             AuditEntryOut(
                 timestamp=e.timestamp,
@@ -542,7 +477,7 @@ def audit_recent(limit: int = 50):
                 entry_hash=e.entry_hash,
                 note=e.note,
             )
-            for e in entries
+            for e in AuditService.recent_entries(limit)
         ]
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -552,8 +487,7 @@ def audit_recent(limit: int = 50):
 def audit_verify():
     """Verify audit log hash-chain integrity."""
     try:
-        logger = hbz.AuditLogger()
-        return AuditVerifyResponse(valid=logger.verify_integrity())
+        return AuditVerifyResponse(valid=AuditService.verify_integrity())
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -562,8 +496,7 @@ def audit_verify():
 def audit_count():
     """Return total number of audit entries."""
     try:
-        logger = hbz.AuditLogger()
-        return {"count": logger.entry_count()}
+        return {"count": AuditService.entry_count()}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -573,10 +506,8 @@ def audit_export(destination: str):
     """Export the audit log to a given path on the server."""
     dest = _require_home_path(destination, "destination")
     try:
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        logger = hbz.AuditLogger()
-        logger.export(str(dest))
-        return {"status": "exported", "destination": str(dest)}
+        exported = AuditService.export(dest)
+        return {"status": "exported", "destination": str(exported)}
     except HTTPException:
         raise
     except Exception as e:
@@ -613,10 +544,7 @@ def create_backup(req: BackupRequest):
     """Create an encrypted backup of the keyring."""
     out = _require_home_path(req.output_path, "output_path")
     try:
-        out.parent.mkdir(parents=True, exist_ok=True)
-        ks = hbz.KeyStore()
-        ks.create_backup(str(out), req.passphrase.encode("utf-8"), req.label)
-        manifest = ks.verify_backup(str(out), req.passphrase.encode("utf-8"))
+        manifest = BackupService.create_backup(out, req.passphrase, req.label)
         return BackupManifestOut(
             created_at=manifest.created_at,
             private_key_count=manifest.private_key_count,
@@ -635,8 +563,7 @@ def verify_backup(req: RestoreRequest):
     """Verify a backup file without restoring it."""
     bpath = _require_home_path(req.backup_path, "backup_path")
     try:
-        ks = hbz.KeyStore()
-        manifest = ks.verify_backup(str(bpath), req.passphrase.encode("utf-8"))
+        manifest = BackupService.verify_backup(bpath, req.passphrase)
         return BackupManifestOut(
             created_at=manifest.created_at,
             private_key_count=manifest.private_key_count,
@@ -655,8 +582,7 @@ def restore_backup(req: RestoreRequest):
     """Restore a backup, importing keys and contacts."""
     bpath = _require_home_path(req.backup_path, "backup_path")
     try:
-        ks = hbz.KeyStore()
-        manifest = ks.restore_backup(str(bpath), req.passphrase.encode("utf-8"))
+        manifest = BackupService.restore_backup(bpath, req.passphrase)
         return BackupManifestOut(
             created_at=manifest.created_at,
             private_key_count=manifest.private_key_count,
@@ -671,56 +597,15 @@ def restore_backup(req: RestoreRequest):
 
 
 # ---------------------------------------------------------------------------
-# Config — standalone load/save (no GUI dependency)
+# Config — shared config service
 # ---------------------------------------------------------------------------
-
-def _web_config_path() -> Path:
-    """Return path to config.json inside the keystore directory."""
-    try:
-        ks = hbz.KeyStore()
-        return Path(ks.base_path) / "config.json"
-    except Exception:
-        return Path.home() / ".hb_zayfer" / "config.json"
-
-
-_CONFIG_DEFAULTS = {
-    "cipher": "AES-256-GCM",
-    "kdf": "Argon2id",
-    "argon2_memory_mib": 64,
-    "argon2_iterations": 3,
-    "dark_mode": True,
-    "clipboard_auto_clear": 30,
-}
-
-
-def _web_load_config() -> dict:
-    """Load persisted settings, returning defaults on any error."""
-    p = _web_config_path()
-    cfg = dict(_CONFIG_DEFAULTS)
-    if p.exists():
-        try:
-            with open(p, encoding="utf-8") as f:
-                cfg.update(json.load(f))
-        except Exception:
-            pass
-    return cfg
-
-
-def _web_save_config(cfg: dict) -> None:
-    """Persist settings to config.json (atomic write)."""
-    p = _web_config_path()
-    p.parent.mkdir(parents=True, exist_ok=True)
-    tmp = p.with_suffix(".tmp")
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(cfg, f, indent=2)
-    tmp.rename(p)
 
 
 @router.get("/config")
 def get_config():
     """Return all configuration settings."""
     try:
-        return _web_load_config()
+        return ConfigService.load()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -729,10 +614,9 @@ def get_config():
 def get_config_key(key: str):
     """Return a single configuration value."""
     try:
-        cfg = _web_load_config()
-        if key not in cfg:
-            raise HTTPException(status_code=404, detail=f"Unknown config key: {key}")
-        return {"key": key, "value": cfg[key]}
+        return {"key": key, "value": ConfigService.get_value(key)}
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"Unknown config key: {key}")
     except HTTPException:
         raise
     except Exception as e:
@@ -747,10 +631,8 @@ class ConfigUpdateRequest(BaseModel):
 def set_config_key(key: str, req: ConfigUpdateRequest):
     """Set a configuration value."""
     try:
-        cfg = _web_load_config()
-        cfg[key] = req.value
-        _web_save_config(cfg)
-        return {"key": key, "value": req.value}
+        value = ConfigService.set_value(key, req.value)
+        return {"key": key, "value": value}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 

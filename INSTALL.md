@@ -1,8 +1,8 @@
 # Installation Guide
 
-**Zayfer Vault v1.0.1**
+**Zayfer Vault v1.1.0**
 
-Complete installation instructions for the Zayfer Vault encryption suite on Linux, macOS, and Windows.
+Complete installation instructions for the current **Rust-first** Zayfer Vault workspace on Linux, macOS, and Windows.
 
 ---
 
@@ -35,8 +35,10 @@ Install these packages using your system's package manager:
 **Ubuntu/Debian:**
 ```bash
 sudo apt-get update
-sudo apt-get install -y pkg-config libssl-dev nettle-dev build-essential python3-venv
+sudo apt-get install -y pkg-config libssl-dev nettle-dev build-essential python3-venv libxcb-cursor0
 ```
+
+> `libxcb-cursor0` is required for the PySide6 desktop GUI on many Linux setups.
 
 **Arch Linux:**
 ```bash
@@ -89,12 +91,9 @@ python3 -m venv .venv
 source .venv/bin/activate  # Linux/macOS
 # OR: .venv\Scripts\activate on Windows
 
-# Install Python build tools and dependencies
-pip install --upgrade pip
-pip install maturin
-
-# Install application with all extras (GUI, CLI, Web)
-pip install PySide6 click rich fastapi uvicorn python-multipart
+# Install Python build tools and project extras
+pip install --upgrade pip maturin
+pip install -e ".[all]"
 
 # Build and install the Rust extension
 maturin develop --release -m crates/python/Cargo.toml
@@ -214,23 +213,25 @@ Choose the feature set you need:
 pip install -e ".[all]"
 ```
 
-**Option B: Install specific features**
+**Option B: Install specific Python extras**
 ```bash
-# GUI only (PySide6)
+# GUI compatibility shell
 pip install -e ".[gui]"
 
-# CLI only (Click + Rich)
+# Python packaging / compatibility CLI helpers
 pip install -e ".[cli]"
 
-# Web server only (FastAPI + Uvicorn)
+# Python compatibility web backend
 pip install -e ".[web]"
 
 # Development tools (pytest, httpx)
 pip install -e ".[dev]"
 
-# Combine multiple features
+# Combine multiple extras
 pip install -e ".[gui,cli,web]"
 ```
+
+> The primary supported CLI and web runtime paths are still `./run.sh cli ...` and `./run.sh web`, both routed through Rust.
 
 **Option C: Manual dependency installation**
 ```bash
@@ -265,13 +266,13 @@ maturin build --release -m crates/python/Cargo.toml
 python -c "import hb_zayfer; print(f'Version: {hb_zayfer.version()}')"
 
 # Test CLI is available
-hb-zayfer --help
+./run.sh cli --help
 
 # Test GUI launches (if installed)
-python -m hb_zayfer.gui &
+./run.sh gui
 
 # Test web server (if installed)
-hb-zayfer-web --help
+./run.sh web
 ```
 
 ### Step 8: Build WASM Module (Optional)
@@ -425,6 +426,9 @@ pip list | grep PySide6
 # Reinstall if missing
 pip install --force-reinstall PySide6
 
+# Install the common Linux Qt/XCB dependency if needed
+sudo apt-get install -y libxcb-cursor0
+
 # Check for display server (Linux)
 echo $DISPLAY  # Should show something like ":0"
 ```
@@ -510,7 +514,7 @@ After successful installation:
    python -m hb_zayfer.gui.app
    ```
 
-3. **Join the community**: Report issues or contribute at https://github.com/James-HoneyBadger/HB_Zayfer
+3. **Join the community**: Report issues or contribute at https://github.com/James-HoneyBadger/Zayfer_Vault
 
 ---
 
@@ -568,6 +572,6 @@ rustup self uninstall
 ---
 
 For additional help, see:
-- GitHub Issues: https://github.com/James-HoneyBadger/HB_Zayfer/issues
+- GitHub Issues: https://github.com/James-HoneyBadger/Zayfer_Vault/issues
 - Documentation: `docs/README.md`
 - Security Policy: `docs/SECURITY.md`

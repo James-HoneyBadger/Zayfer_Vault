@@ -1,6 +1,6 @@
 # Security Design & Audit Notes
 
-**Zayfer Vault v1.0.1**
+**Zayfer Vault v1.1.0**
 
 This document details the security posture of Zayfer Vault: algorithms chosen,
 key management practices, memory protections, supply-chain considerations,

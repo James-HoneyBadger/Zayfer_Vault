@@ -19,6 +19,8 @@ PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VENV_DIR="$PROJECT_DIR/.venv"
 PYTHON="${VENV_DIR}/bin/python"
 MATURIN_MANIFEST="crates/python/Cargo.toml"
+APP_NAME="Zayfer Vault"
+APP_VERSION="$(awk -F'"' '/^version = / {print $2; exit}' "$PROJECT_DIR/Cargo.toml")"
 
 # ── Colours ──────────────────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
@@ -163,7 +165,7 @@ main() {
     # Handle help flags
     case "$mode" in
         -h|--help|help)
-            echo "Zayfer Vault v1.0.1 — Encryption/Decryption Suite"
+            echo "$APP_NAME v$APP_VERSION — Encryption/Decryption Suite"
             echo ""
             echo "Usage: $0 [MODE] [OPTIONS]"
             echo ""
@@ -186,7 +188,7 @@ main() {
     esac
 
     printf "\n${BOLD}  ╔══════════════════════════════════════╗${NC}\n"
-    printf "${BOLD}  ║     🔐  Zayfer Vault v1.0.1  🔐     ║${NC}\n"
+    printf "${BOLD}  ║     🔐  ${APP_NAME} v${APP_VERSION}  🔐     ║${NC}\n"
     printf "${BOLD}  ╚══════════════════════════════════════╝${NC}\n\n"
 
     if [[ "$mode" == "doctor" ]]; then
@@ -194,9 +196,16 @@ main() {
         exit 0
     fi
 
-    ensure_venv
-    ensure_deps "$mode"
-    ensure_native
+    case "$mode" in
+        gui|build|test)
+            ensure_venv
+            ensure_deps "$mode"
+            ensure_native
+            ;;
+        web|cli)
+            check_rust || exit 1
+            ;;
+    esac
 
     printf "\n"
 
@@ -207,12 +216,12 @@ main() {
             ;;
         web)
             shift
-            info "Starting web server…"
-            exec python -m hb_zayfer.web "$@"
+            info "Starting Rust web platform…"
+            exec cargo run --quiet --bin hb-zayfer -- serve "$@"
             ;;
         cli)
             shift
-            exec python -m hb_zayfer.cli "$@"
+            exec cargo run --quiet --bin hb-zayfer -- "$@"
             ;;
         build)
             ok "Build complete — native extension is ready."

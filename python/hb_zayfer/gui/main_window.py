@@ -8,8 +8,6 @@ users generate keys or review settings before handling real data.
 from __future__ import annotations
 
 import os
-from pathlib import Path
-
 from PySide6.QtCore import Qt, QSize, QTimer
 from PySide6.QtGui import QIcon, QAction, QKeySequence
 from PySide6.QtWidgets import (
@@ -44,6 +42,7 @@ from hb_zayfer.gui.statusbar import StatusBar
 from hb_zayfer.gui.notifications import NotificationManager
 from hb_zayfer.gui.settings_manager import SettingsManager
 from hb_zayfer.gui.about_dialog import AboutDialog
+from hb_zayfer.services import AppInfo, AppPaths
 import hb_zayfer as hbz
 
 
@@ -54,13 +53,13 @@ class MainWindow(QMainWindow):
         super().__init__()
         
         # Initialize settings manager
-        config_dir = Path.home() / ".hb_zayfer"
-        self.settings = SettingsManager(config_dir)
+        self.settings = SettingsManager(AppPaths.current().config_dir)
         
         # Initialize notification manager
         self.notifications = NotificationManager(self)
-        
-        self.setWindowTitle(f"Zayfer Vault v{hbz.version()}")
+
+        self.app_info = AppInfo.current()
+        self.setWindowTitle(self.app_info.window_title)
         self.setMinimumSize(900, 600)
         
         # Restore window geometry from settings
