@@ -1,6 +1,6 @@
 # Installation Guide
 
-**Zayfer Vault v1.1.0**
+**Zayfer Vault v1.1.1**
 
 Complete installation instructions for the current **Rust-first** Zayfer Vault workspace on Linux, macOS, and Windows.
 

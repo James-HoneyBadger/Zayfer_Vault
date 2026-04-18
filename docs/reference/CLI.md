@@ -1,6 +1,6 @@
 # CLI Reference
 
-This page documents the **current Rust CLI** shipped with Zayfer Vault v1.1.0.
+This page documents the **current Rust CLI** shipped with Zayfer Vault v1.1.1.
 It matches the launcher paths used by the project today:
 
 ```bash

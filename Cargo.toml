@@ -3,7 +3,7 @@ members = ["crates/core", "crates/cli", "crates/python", "crates/wasm"]
 resolver = "2"
 
 [workspace.package]
-version = "1.1.0"
+version = "1.1.1"
 edition = "2021"
 authors = ["James Temple <james@honey-badger.org>"]
 license = "MIT"

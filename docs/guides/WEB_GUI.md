@@ -1,6 +1,6 @@
 # Web & Desktop GUI Reference
 
-This guide reflects the **current runtime split** in Zayfer Vault v1.1.0:
+This guide reflects the **current runtime split** in Zayfer Vault v1.1.1:
 
 - **Desktop GUI**: PySide6 application backed by the native Rust extension
 - **Web platform**: browser UI served by the **Rust-native** `serve` command

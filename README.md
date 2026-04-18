@@ -4,7 +4,7 @@ A full-featured cryptographic toolkit with a **Rust core**, **Rust-native platfo
 **Python bindings**, **WebAssembly module**, and multiple user interfaces: **Rust CLI**,
 **desktop GUI** (PySide6 compatibility shell), **browser-based web UI**, and a **WASM-powered web target**.
 
-**Version 1.1.0** — Zayfer Vault by James Temple / Honey Badger Universe
+**Version 1.1.1** — Zayfer Vault by James Temple / Honey Badger Universe
 
 ---
 

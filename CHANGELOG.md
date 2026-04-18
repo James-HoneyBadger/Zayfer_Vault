@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.1] — 2026-04-18
+
+### Changed
+
+- Consolidated the Rust-native platform runtime for CLI and browser workflows.
+- Reorganized the documentation set into clearer guides, reference, and project sections.
+- Refreshed GitHub repository metadata to match the current Rust-first product positioning.
+
+### Improved
+
+- Tightened release-readiness across docs, workspace structure, and repository presentation.
+
 ## [1.1.0] — 2026-04-18
 
 ### Added

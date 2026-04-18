@@ -1,6 +1,6 @@
 # Rust API Reference
 
-**`hb_zayfer_core` v1.1.0**
+**`hb_zayfer_core` v1.1.1**
 
 Complete reference for the Rust core library. **20 public modules**, organised
 into symmetric crypto, asymmetric crypto, format/container, key management,

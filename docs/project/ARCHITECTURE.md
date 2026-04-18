@@ -1,6 +1,6 @@
 # Architecture
 
-**Zayfer Vault v1.1.0**
+**Zayfer Vault v1.1.1**
 
 This document describes the current **Rust-first** architecture of Zayfer Vault.
 Rust owns the cryptographic core, the primary CLI, and the browser-facing server.

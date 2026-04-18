@@ -1,6 +1,6 @@
 # HBZF File Format Specification
 
-**Zayfer Vault v1.1.0**
+**Zayfer Vault v1.1.1**
 
 **Version**: 1 (`0x01`)
 **Status**: Stable

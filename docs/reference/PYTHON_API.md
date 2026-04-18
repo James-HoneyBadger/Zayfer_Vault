@@ -1,6 +1,6 @@
 # Python API Reference
 
-**Zayfer Vault v1.1.0**
+**Zayfer Vault v1.1.1**
 
 Complete reference for the `hb_zayfer` Python package — the **Rust-backed compatibility API** exposed through PyO3 bindings.
 Heavy cryptographic operations still execute in native Rust.
@@ -41,7 +41,7 @@ import hb_zayfer as hbz
 hbz.version() → str
 ```
 
-Returns the library version string (for example, `"1.1.0"`).
+Returns the library version string (for example, `"1.1.1"`).
 
 ---
 
