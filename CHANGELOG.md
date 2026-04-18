@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.0] — 2026-04-18
+
+### Added
+
+- Added a polished Home dashboard and expanded secure messaging workflow for the desktop GUI.
+- Expanded the browser UI to expose more of the platform’s encryption, key, and utility features.
+
+### Changed
+
+- Rebranded the user-facing application from HB Zayfer to Zayfer Vault while preserving internal compatibility.
+- Refined launcher diagnostics and onboarding so setup and recovery are clearer on fresh installs.
+
+### Improved
+
+- Tightened documentation across the install, quickstart, maintenance, and technical reference guides.
+- Cleaned up strict Rust lint issues and release verification so CI stays green across workspace targets.
+
 ## [1.0.1] — 2026-04-04
 
 ### Security

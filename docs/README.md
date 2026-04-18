@@ -46,5 +46,5 @@ then explore the reference docs for your interface of choice.
 | Document | Description |
 |----------|-------------|
 | [Contributing](CONTRIBUTING.md) | Dev setup, code standards, testing, PR workflow |
-| [Changelog](../CHANGELOG.md) | Release history (v0.1.0 → v1.0.1) |
+| [Changelog](../CHANGELOG.md) | Release history (v0.1.0 → v1.1.0) |
 | [Secure Communications](SECURE_COMMUNICATIONS.md) | End-to-end encrypted messaging guide |
