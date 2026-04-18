@@ -1,6 +1,6 @@
 # Contributing Guide
 
-Thank you for your interest in contributing to **HB Zayfer**! This guide
+Thank you for your interest in contributing to **Zayfer Vault**! This guide
 covers project setup, code standards, testing, and the pull-request workflow.
 
 ---

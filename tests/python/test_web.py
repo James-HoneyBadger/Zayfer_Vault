@@ -1,4 +1,4 @@
-"""Tests for the HB Zayfer web API routes.
+"""Tests for the Zayfer Vault web API routes.
 
 Run with:  pytest tests/python/test_web.py -v
 Requires : maturin develop  (to build native module first)

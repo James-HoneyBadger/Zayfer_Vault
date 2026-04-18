@@ -215,7 +215,7 @@ build_appimage() {
     # Desktop entry
     cat > "$APP_DIR/$NAME.desktop" <<EOF
 [Desktop Entry]
-Name=HB Zayfer
+Name=Zayfer Vault
 Comment=$DESCRIPTION
 Exec=$NAME
 Icon=$NAME
@@ -249,7 +249,7 @@ build_macos() {
     log "Building macOS .app bundle…"
     CLI_BIN=$(build_cli)
 
-    APP_BUNDLE="$DIST_DIR/HB Zayfer.app"
+    APP_BUNDLE="$DIST_DIR/Zayfer Vault.app"
     rm -rf "$APP_BUNDLE"
     mkdir -p "$APP_BUNDLE/Contents/MacOS"
     mkdir -p "$APP_BUNDLE/Contents/Resources"
@@ -264,7 +264,7 @@ build_macos() {
 <plist version="1.0">
 <dict>
     <key>CFBundleName</key>
-    <string>HB Zayfer</string>
+    <string>Zayfer Vault</string>
     <key>CFBundleIdentifier</key>
     <string>org.honey-badger.hb-zayfer</string>
     <key>CFBundleVersion</key>
@@ -286,7 +286,7 @@ EOF
     # Optionally create DMG
     if command -v hdiutil &>/dev/null; then
         DMG_FILE="$DIST_DIR/${NAME}-${VERSION}.dmg"
-        hdiutil create -volname "HB Zayfer" -srcfolder "$APP_BUNDLE" -ov "$DMG_FILE"
+        hdiutil create -volname "Zayfer Vault" -srcfolder "$APP_BUNDLE" -ov "$DMG_FILE"
         log "DMG created at $DMG_FILE"
     fi
 }

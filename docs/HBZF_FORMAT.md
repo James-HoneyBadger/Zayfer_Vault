@@ -1,6 +1,6 @@
 # HBZF File Format Specification
 
-**HB Zayfer v1.0.0**
+**Zayfer Vault v1.0.1**
 
 **Version**: 1 (`0x01`)
 **Status**: Stable
@@ -9,7 +9,7 @@
 
 ## Overview
 
-HBZF (HB Zayfer Format) is a binary file format for authenticated streaming
+HBZF (Zayfer Vault Format) is a binary file format for authenticated streaming
 encryption. It supports multiple symmetric ciphers, key derivation functions,
 and key wrapping modes.
 
@@ -204,7 +204,7 @@ symmetric_key = HKDF-SHA256(shared_secret, info="HB_Zayfer X25519 encryption key
 
 ## Compression Layer
 
-HB Zayfer optionally compresses plaintext before encryption. Compression is
+Zayfer Vault optionally compresses plaintext before encryption. Compression is
 applied **inside** the encrypted container so that an observer cannot
 determine whether compression was used.
 

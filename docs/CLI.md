@@ -1,8 +1,8 @@
 # CLI Reference
 
-**HB Zayfer v1.0.0**
+**Zayfer Vault v1.0.1**
 
-HB Zayfer provides two command-line interfaces: a **Python CLI** (Click-based,
+Zayfer Vault provides two command-line interfaces: a **Python CLI** (Click-based,
 installed via pip) and a **Rust CLI** (compiled binary via Cargo).
 
 Both CLIs expose the same core functionality. The Python CLI has richer output

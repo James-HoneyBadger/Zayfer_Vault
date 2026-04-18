@@ -1,6 +1,6 @@
-# HB Zayfer Documentation
+# Zayfer Vault Documentation
 
-Welcome to the HB Zayfer documentation. Start with the **Quick Start** guide,
+Welcome to the Zayfer Vault documentation. Start with the **Quick Start** guide,
 then explore the reference docs for your interface of choice.
 
 ---

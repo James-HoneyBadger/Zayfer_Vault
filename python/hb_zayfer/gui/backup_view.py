@@ -147,7 +147,7 @@ class BackupView(QWidget):
             self,
             "Save Backup As",
             self.backup_path_input.text(),
-            "HB Zayfer Backup (*.hbzf-backup);;All Files (*)",
+            "Zayfer Vault Backup (*.hbzf-backup);;All Files (*)",
         )
         if path:
             self.backup_path_input.setText(path)
@@ -157,7 +157,7 @@ class BackupView(QWidget):
             self,
             "Open Backup File",
             str(Path.home()),
-            "HB Zayfer Backup (*.hbzf-backup);;All Files (*)",
+            "Zayfer Vault Backup (*.hbzf-backup);;All Files (*)",
         )
         if path:
             self.restore_path_input.setText(path)

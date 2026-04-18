@@ -1,4 +1,4 @@
-"""Tests for the HB Zayfer Python bindings.
+"""Tests for the Zayfer Vault Python bindings.
 
 These tests exercise the native (_native) module exposed through hb_zayfer,
 covering symmetric ciphers, KDF, RSA, Ed25519, X25519, OpenPGP, the HBZF

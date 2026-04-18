@@ -1,9 +1,9 @@
-# HB Zayfer User Guide
+# Zayfer Vault User Guide
 
-Complete guide for users of the HB Zayfer encryption suite. Covers all four
+Complete guide for users of the Zayfer Vault encryption suite. Covers all four
 interfaces (Desktop GUI, CLI, Python API, Web UI) and common workflows.
 
-**Version 1.0.0** — HB Zayfer Encryption Suite
+**Version 1.0.1** — Zayfer Vault Encryption Suite
 
 ---
 
@@ -30,9 +30,9 @@ interfaces (Desktop GUI, CLI, Python API, Web UI) and common workflows.
 
 ## Introduction
 
-### What is HB Zayfer?
+### What is Zayfer Vault?
 
-HB Zayfer is a comprehensive encryption toolkit that provides:
+Zayfer Vault is a comprehensive encryption toolkit that provides:
 
 - **File encryption** with AES-256-GCM or ChaCha20-Poly1305
 - **Public-key cryptography** using RSA, Ed25519, and X25519
@@ -65,7 +65,7 @@ All interfaces share the same keystore at `~/.hb_zayfer/`.
 
 ### Documentation Map
 
-If you are new to HB Zayfer or to encryption in general, use this order:
+If you are new to Zayfer Vault or to encryption in general, use this order:
 
 1. [`QUICKSTART.md`](QUICKSTART.md) — fastest way to launch and verify the app
 2. [`TUTORIAL_ENCRYPTION_PASSWORDS.md`](TUTORIAL_ENCRYPTION_PASSWORDS.md) — safe password and encryption walkthrough
@@ -89,7 +89,7 @@ Before storing important data, make sure you have done the following:
 
 ### First Launch
 
-HB Zayfer creates:
+Zayfer Vault creates:
 
 ```
 ~/.hb_zayfer/
@@ -447,7 +447,7 @@ Forgotten passphrases cannot be recovered — Argon2id + AES-256-GCM is irrevers
 
 ### Audit Log
 
-HB Zayfer logs all cryptographic operations with a tamper-evident hash chain.
+Zayfer Vault logs all cryptographic operations with a tamper-evident hash chain.
 
 #### GUI
 

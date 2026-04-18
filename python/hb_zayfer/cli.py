@@ -1,4 +1,4 @@
-"""HB_Zayfer CLI — Click-based command-line interface.
+"""Zayfer Vault CLI — Click-based command-line interface.
 
 Entry point: ``hb-zayfer`` (installed via pip).
 """
@@ -113,7 +113,7 @@ def _prompt_passphrase(confirm: bool = False) -> bytes:
 @click.group()
 @click.version_option(version=hbz.version(), prog_name="hb-zayfer")
 def cli() -> None:
-    """HB_Zayfer — Encryption / Decryption Suite."""
+    """Zayfer Vault — Encryption / Decryption Suite."""
 
 
 # ---------------------------------------------------------------------------

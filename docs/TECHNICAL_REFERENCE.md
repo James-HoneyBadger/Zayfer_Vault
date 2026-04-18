@@ -1,6 +1,6 @@
 # Technical Reference
 
-**HB Zayfer v1.0.0**
+**Zayfer Vault v1.0.1**
 
 Compact reference card for all algorithms, CLI commands, Python functions,
 REST endpoints, configuration keys, and file formats.

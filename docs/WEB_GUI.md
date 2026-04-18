@@ -1,8 +1,8 @@
 # Web & Desktop GUI Reference
 
-**HB Zayfer v1.0.0**
+**Zayfer Vault v1.0.1**
 
-HB Zayfer provides two graphical interfaces:
+Zayfer Vault provides two graphical interfaces:
 
 - **Desktop GUI** — PySide6 (Qt 6) native application with 13 sidebar views
 - **Web GUI** — FastAPI server with 30 REST API endpoints and a
@@ -25,23 +25,24 @@ python -m hb_zayfer.gui
 python python/hb_zayfer/gui/app.py
 ```
 
-### Views (13)
+### Views (14)
 
 | # | View | Icon | Shortcut | Description |
 |---|------|------|----------|-------------|
-| 1 | Encrypt | 🔐 | Alt+1 | Encrypt files or text (AES/ChaCha, password/RSA/X25519 wrapping) |
-| 2 | Decrypt | 🔓 | Alt+2 | Decrypt `.hbzf` files or text blobs |
-| 3 | Key Gen | 🔑 | Alt+3 | Generate RSA, Ed25519, X25519, and OpenPGP key pairs |
-| 4 | Keyring | 📦 | Alt+4 | Browse, search, import, export, and delete stored keys |
-| 5 | Contacts | 👥 | Alt+5 | Manage contacts and link public keys |
-| 6 | Sign | ✍️ | Alt+6 | Sign files or messages with Ed25519, RSA-PSS, or PGP |
-| 7 | Verify | ✔️ | Alt+7 | Verify signatures against stored or pasted public keys |
-| 8 | PassGen | 🔐 | Alt+8 | Random password & diceware passphrase generator with entropy meter |
-| 9 | Messaging | 💬 | Alt+9 | End-to-end encrypted message composition & reading |
-| 10 | QR Exchange | 📱 | — | Encode/scan `hbzf-key://` URIs for contactless key exchange |
-| 11 | Settings | ⚙️ | — | Theme, font size, default algorithm, KDF preset, confirm-shred toggle |
-| 12 | Audit Log | 📋 | Alt+0 | Browse, verify, and export the tamper-evident audit trail |
-| 13 | Backup | 💾 | — | Create, verify, and restore encrypted keystore backups |
+| 1 | Home | 🏠 | — | Overview dashboard with quick actions, counts, and onboarding guidance |
+| 2 | Encrypt | 🔐 | Alt+1 | Encrypt files or text (AES/ChaCha, password/RSA/X25519 wrapping) |
+| 3 | Decrypt | 🔓 | Alt+2 | Decrypt `.hbzf` files or text blobs |
+| 4 | Key Gen | 🔑 | Alt+3 | Generate RSA, Ed25519, X25519, and OpenPGP key pairs |
+| 5 | Keyring | 📦 | Alt+4 | Browse, search, import, export, and delete stored keys |
+| 6 | Contacts | 👥 | Alt+5 | Manage contacts and link public keys |
+| 7 | Sign | ✍️ | Alt+6 | Sign files or messages with Ed25519, RSA-PSS, or PGP |
+| 8 | Verify | ✔️ | Alt+7 | Verify signatures against stored or pasted public keys |
+| 9 | PassGen | 🔐 | Alt+8 | Random password & diceware passphrase generator with entropy meter |
+| 10 | Messaging | 💬 | Alt+9 | End-to-end encrypted message composition & reading |
+| 11 | QR Exchange | 📱 | — | Encode/scan `hbzf-key://` URIs for contactless key exchange |
+| 12 | Settings | ⚙️ | — | Theme, font size, default algorithm, KDF preset, confirm-shred toggle |
+| 13 | Audit Log | 📋 | Alt+0 | Browse, verify, and export the tamper-evident audit trail |
+| 14 | Backup | 💾 | — | Create, verify, and restore encrypted keystore backups |
 
 ### Source Files
 
@@ -102,12 +103,16 @@ uvicorn hb_zayfer.web.app:app --reload
 
 The web server serves a single-page dashboard at `/` with:
 
-- Encrypt / Decrypt forms (text & file upload)
+- Home overview with version, key/contact counts, and quick actions
+- Encrypt / Decrypt forms for both text and file upload/download workflows
 - Key generation panel
 - Key list with export/delete
 - Contact management
-- Audit log viewer
-- Backup controls
+- Sign / verify tools
+- Password and passphrase generator
+- Audit log viewer and integrity check
+- Backup create, verify, and restore controls
+- Settings editor for common defaults
 - Interactive API docs at `/docs` (Swagger UI) and `/redoc`
 
 ### Static Assets

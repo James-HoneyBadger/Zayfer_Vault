@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ──────────────────────────────────────────────────────────────────────
-#  HB Zayfer — Application Launcher
+#  Zayfer Vault — Application Launcher
 #
 #  Usage:
 #    ./run.sh              Launch the desktop GUI (default)
@@ -10,6 +10,7 @@
 #    ./run.sh cli [ARGS]   Run a CLI command
 #    ./run.sh build        Rebuild the native extension only
 #    ./run.sh test         Run the full test suite
+#    ./run.sh doctor       Show environment diagnostics
 #    ./run.sh -h|--help    Show this help message
 # ──────────────────────────────────────────────────────────────────────
 set -euo pipefail
@@ -33,9 +34,48 @@ check_rust() {
     if ! command -v cargo &>/dev/null; then
         err "Rust toolchain not found."
         err "Install via: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"
-        exit 1
+        return 1
     fi
     ok "Rust $(rustc --version | awk '{print $2}')"
+    return 0
+}
+
+# ── 1b. Environment diagnostics ─────────────────────────────────────
+doctor() {
+    info "Environment diagnostics"
+
+    if command -v python3 &>/dev/null; then
+        ok "python3: $(python3 --version 2>&1)"
+    else
+        err "python3: not found"
+    fi
+
+    if command -v cargo &>/dev/null; then
+        ok "cargo: $(cargo --version 2>&1)"
+    else
+        warn "cargo: not found (only needed when building the native extension)"
+    fi
+
+    if [[ -d "$VENV_DIR" ]]; then
+        ok "virtualenv present at $VENV_DIR"
+    else
+        warn "virtualenv missing — it will be created on first run"
+    fi
+
+    local so_path
+    so_path=$(find_native_lib)
+    if [[ -n "$so_path" ]]; then
+        ok "native extension found: $so_path"
+    else
+        warn "native extension not found — a Rust build will be required"
+    fi
+}
+
+# ── 1c. Native extension discovery ──────────────────────────────────
+find_native_lib() {
+    local search_paths=("$PROJECT_DIR/python")
+    [[ -d "$VENV_DIR" ]] && search_paths+=("$VENV_DIR")
+    find "${search_paths[@]}" -type f \( -name "_native*.so" -o -name "_native*.pyd" -o -name "_native*.dylib" \) 2>/dev/null | head -1 || true
 }
 
 # ── 2. Create / activate virtual environment ─────────────────────────
@@ -93,7 +133,7 @@ ensure_deps() {
 ensure_native() {
     # Rebuild if the shared library is missing or any Rust source is newer
     local so_path
-    so_path=$(find "$PROJECT_DIR/python" "$VENV_DIR" -type f \( -name "_native*.so" -o -name "_native*.pyd" -o -name "_native*.dylib" \) 2>/dev/null | head -1)
+    so_path=$(find_native_lib)
 
     local need_build=0
     if [[ -z "$so_path" ]]; then
@@ -106,6 +146,7 @@ ensure_native() {
     fi
 
     if [[ $need_build -eq 1 ]]; then
+        check_rust || exit 1
         info "Building native extension (this may take a minute)…"
         maturin develop --release -m "$MATURIN_MANIFEST"
         ok "Native extension built"
@@ -122,7 +163,7 @@ main() {
     # Handle help flags
     case "$mode" in
         -h|--help|help)
-            echo "HB Zayfer v1.0.1 — Encryption/Decryption Suite"
+            echo "Zayfer Vault v1.0.1 — Encryption/Decryption Suite"
             echo ""
             echo "Usage: $0 [MODE] [OPTIONS]"
             echo ""
@@ -132,6 +173,7 @@ main() {
             echo "  cli [ARGS]    Run a CLI command"
             echo "  build         Rebuild the native extension only"
             echo "  test          Run the full test suite"
+            echo "  doctor        Show environment diagnostics"
             echo "  -h, --help    Show this help message"
             echo ""
             echo "Examples:"
@@ -144,10 +186,14 @@ main() {
     esac
 
     printf "\n${BOLD}  ╔══════════════════════════════════════╗${NC}\n"
-    printf "${BOLD}  ║     🔐  HB Zayfer  v1.0.1  🔐      ║${NC}\n"
+    printf "${BOLD}  ║     🔐  Zayfer Vault v1.0.1  🔐     ║${NC}\n"
     printf "${BOLD}  ╚══════════════════════════════════════╝${NC}\n\n"
 
-    check_rust
+    if [[ "$mode" == "doctor" ]]; then
+        doctor
+        exit 0
+    fi
+
     ensure_venv
     ensure_deps "$mode"
     ensure_native
@@ -172,6 +218,7 @@ main() {
             ok "Build complete — native extension is ready."
             ;;
         test)
+            check_rust || exit 1
             info "Running Rust tests…"
             cargo test --workspace
             printf "\n"
@@ -180,7 +227,7 @@ main() {
             ;;
         *)
             err "Unknown mode: $mode"
-            echo "Usage: $0 [gui|web|cli|build|test]"
+            echo "Usage: $0 [gui|web|cli|build|test|doctor]"
             exit 1
             ;;
     esac

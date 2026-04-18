@@ -1,10 +1,10 @@
-# HB Zayfer — Encryption / Decryption Suite
+# Zayfer Vault — Encryption / Decryption Suite
 
 A full-featured cryptographic toolkit with a **Rust core**, **Python bindings**,
 **WebAssembly module**, and four user interfaces: **CLI**, **desktop GUI** (PySide6),
 **browser-based web UI** (FastAPI + vanilla JS), and a **WASM-powered web target**.
 
-**Version 1.0.1** — Created by James Temple / Honey Badger Universe
+**Version 1.0.1** — Zayfer Vault by James Temple / Honey Badger Universe
 
 ---
 
@@ -85,7 +85,7 @@ pip install -e ".[all]"
 maturin develop --release -m crates/python/Cargo.toml
 
 # Verify installation
-python -c "import hb_zayfer; print(f'HB Zayfer v{hb_zayfer.version()}')"
+python -c "import hb_zayfer; print(f'Zayfer Vault v{hb_zayfer.version()}')"
 ```
 
 ---
@@ -98,10 +98,11 @@ python -c "import hb_zayfer; print(f'HB Zayfer v{hb_zayfer.version()}')"
 hb-zayfer-gui
 ```
 
-The GUI provides a sidebar with thirteen views:
+The GUI provides a sidebar with fourteen views:
 
 | View | Shortcut | Description |
 |------|----------|-------------|
+| 🏠 **Home** | — | Overview dashboard with counts, quick actions, and first-step guidance |
 | 🔐 **Encrypt** | `Alt+1` | File/text encryption with algorithm & recipient selection, drag-and-drop |
 | 🔓 **Decrypt** | `Alt+2` | File/text decryption with auto-detected wrapping mode |
 | 🔑 **Key Gen** | `Alt+3` | Generate key pairs (RSA, Ed25519, X25519, PGP) with strength meter |
@@ -326,7 +327,7 @@ HB_Zayfer/
 
 ## HBZF File Format
 
-The custom **HBZF** (HB Zayfer Format) uses authenticated streaming encryption:
+The custom **HBZF** (Zayfer Vault Format) uses authenticated streaming encryption:
 
 | Offset | Field | Size |
 |--------|-------|------|
@@ -384,7 +385,7 @@ cargo test --workspace && pytest tests/python/ -v
 
 ### 🎯 Quick Links
 
-**New to HB Zayfer?** Start here:
+**New to Zayfer Vault?** Start here:
 1. [Install](INSTALL.md) → 2. [Quick Start](docs/QUICKSTART.md) → 3. [User Guide](docs/USER_GUIDE.md)
 
 **Want secure communications?** Follow the tutorial:

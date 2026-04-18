@@ -1,8 +1,8 @@
 # Quick Start Guide
 
-Get up and running with HB Zayfer in 10 minutes.
+Get up and running with Zayfer Vault in 10 minutes.
 
-**Version 1.0.0** — HB Zayfer Encryption Suite
+**Version 1.0.1** — Zayfer Vault Encryption Suite
 
 ---
 
@@ -47,7 +47,7 @@ pip install maturin
 pip install -e ".[all]"
 maturin develop --release -m crates/python/Cargo.toml
 
-python -c "import hb_zayfer; print(f'HB Zayfer v{hb_zayfer.version()}')" 
+python -c "import hb_zayfer; print(f'Zayfer Vault v{hb_zayfer.version()}')" 
 ```
 
 **Having trouble?** See [INSTALL.md](../INSTALL.md) for platform-specific troubleshooting.

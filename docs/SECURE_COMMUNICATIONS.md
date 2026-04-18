@@ -1,6 +1,6 @@
 # Secure Communications Tutorial
 
-A step-by-step guide to establishing secure communication channels using HB Zayfer. Learn how to exchange keys safely, encrypt messages, verify identities, and maintain operational security.
+A step-by-step guide to establishing secure communication channels using Zayfer Vault. Learn how to exchange keys safely, encrypt messages, verify identities, and maintain operational security.
 
 ---
 
@@ -62,7 +62,7 @@ Does NOT protect against:
 #### Phase 1: Alice Generates Keys
 
 ```bash
-# Alice activates HB Zayfer
+# Alice activates Zayfer Vault
 source ~/.cargo/env  # Load Rust environment
 source .venv/bin/activate  # Activate virtual environment
 
@@ -136,7 +136,7 @@ scp alice-*.pub alice@example.com:/var/www/html/keys/
 gpg --encrypt --recipient old-contact@example.com alice-signing-2026.pub
 
 # Option C: Post fingerprint publicly
-echo "My HB Zayfer key fingerprints:"
+echo "My Zayfer Vault key fingerprints:"
 echo "Signing: a1b2c3d4e5f6789012345678901234567890abcdef"
 echo "Encryption: e5f6g7h8i9j0123456789012345678901234567890abc"
 ```
@@ -356,7 +356,7 @@ sha256sum sensitive-docs.tar.gz
 # Step 6: Extract
 tar xzf sensitive-docs.tar.gz
 
-# Step 7: Secure cleanup (using HB Zayfer's built-in shredder)
+# Step 7: Secure cleanup (using Zayfer Vault's built-in shredder)
 hb-zayfer shred sensitive-docs.hbzf --passes 7
 hb-zayfer shred sensitive-docs.tar.gz --passes 7
 # Keep only extracted documents
@@ -450,7 +450,7 @@ hb-zayfer shred meeting-notice.txt
 Instead of encrypting separately for each recipient, use a shared group password:
 
 ```bash
-# Step 1: Generate strong random password using HB Zayfer
+# Step 1: Generate strong random password using Zayfer Vault
 hb-zayfer passgen --length 32
 # Or generate a memorable passphrase
 hb-zayfer passgen --passphrase --words 8
@@ -574,7 +574,7 @@ To achieve forward secrecy (past messages stay secure if current key is compromi
 5. **Destroy plaintext after reading**
 
 ```bash
-# Secure file destruction after reading (HB Zayfer built-in shredder)
+# Secure file destruction after reading (Zayfer Vault built-in shredder)
 hb-zayfer shred decrypted-message.txt --passes 7
 
 # Encrypted file can be kept (can't be decrypted after key deletion)
@@ -691,7 +691,7 @@ upload-file encrypted.hbzf
 ```
 Subject: URGENT: Key Compromise Notification
 
-My HB Zayfer signing key (fingerprint: a1b2c3d4...) may be compromised.
+My Zayfer Vault signing key (fingerprint: a1b2c3d4...) may be compromised.
 
 DO NOT:
 - Trust messages signed with this key after 2026-03-08

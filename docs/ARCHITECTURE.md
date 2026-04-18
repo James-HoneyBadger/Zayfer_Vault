@@ -1,8 +1,8 @@
 # Architecture
 
-**HB Zayfer v1.0.0**
+**Zayfer Vault v1.0.1**
 
-This document describes the internal architecture of HB Zayfer, a full-featured
+This document describes the internal architecture of Zayfer Vault, a full-featured
 encryption/decryption suite built with a **Rust core**, **Python bindings**
 (via PyO3), and a **WASM module** (via wasm-bindgen).
 

@@ -3,11 +3,11 @@
 ## Our Commitment
 
 We are committed to providing a welcoming and inspiring community for all.
-HB Zayfer is dedicated to fostering an open, friendly, and collaborative
+Zayfer Vault is dedicated to fostering an open, friendly, and collaborative
 environment that embraces diversity and inclusivity.
 
 This Code of Conduct outlines expectations for participation in our community
-and applies to all spaces managed by the HB Zayfer project, including but not
+and applies to all spaces managed by the Zayfer Vault project, including but not
 limited to:
 
 - GitHub repositories and discussions
@@ -123,7 +123,7 @@ These are excellent resources for building inclusive communities.
 
 We actively welcome and encourage participation from people of all backgrounds.
 We believe that diversity of thought, experience, and perspective strengthens
-our community and makes HB Zayfer better for everyone.
+our community and makes Zayfer Vault better for everyone.
 
 We are committed to:
 

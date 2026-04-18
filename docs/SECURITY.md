@@ -1,8 +1,8 @@
 # Security Design & Audit Notes
 
-**HB Zayfer v1.0.0**
+**Zayfer Vault v1.0.1**
 
-This document details the security posture of HB Zayfer: algorithms chosen,
+This document details the security posture of Zayfer Vault: algorithms chosen,
 key management practices, memory protections, supply-chain considerations,
 and known limitations.
 
@@ -243,7 +243,7 @@ Optional deflate compression is applied inside the HBZF container:
   inside the encrypted payload, so an attacker cannot determine whether
   compression was used
 - **CRIME/BREACH note**: Compression of secret data alongside attacker-
-  controlled data can leak information via ciphertext length. HB Zayfer's
+  controlled data can leak information via ciphertext length. Zayfer Vault's
   HBZF format does not mix user-controlled AAD into the compressed payload,
   mitigating this vector. However, file-size side channels remain for any
   encrypted format.

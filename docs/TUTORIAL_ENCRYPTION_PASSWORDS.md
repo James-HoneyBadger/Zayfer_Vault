@@ -1,6 +1,6 @@
 # Tutorial: Encryption, Decryption, and Password Hygiene
 
-A practical, security-first walkthrough for HB Zayfer users.
+A practical, security-first walkthrough for Zayfer Vault users.
 
 **Audience:** first-time users, operators, and anyone who wants a safe workflow for protecting files, messages, and passwords.
 
@@ -212,7 +212,7 @@ hb-zayfer verify document.pdf document.pdf.sig --key <your-public-key>
 ### Do
 
 - store secrets in a **password manager**,
-- back up the password manager and the HB Zayfer keystore separately,
+- back up the password manager and the Zayfer Vault keystore separately,
 - use a **different passphrase** for encrypted backups,
 - rotate passwords if you suspect exposure.
 

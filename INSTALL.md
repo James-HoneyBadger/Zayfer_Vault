@@ -1,8 +1,8 @@
 # Installation Guide
 
-**HB Zayfer v1.0.0**
+**Zayfer Vault v1.0.1**
 
-Complete installation instructions for HB Zayfer encryption suite on Linux, macOS, and Windows.
+Complete installation instructions for the Zayfer Vault encryption suite on Linux, macOS, and Windows.
 
 ---
 
@@ -100,7 +100,7 @@ pip install PySide6 click rich fastapi uvicorn python-multipart
 maturin develop --release -m crates/python/Cargo.toml
 
 # Verify installation
-python -c "import hb_zayfer; print(f'✓ HB Zayfer {hb_zayfer.version()} installed successfully')"
+python -c "import hb_zayfer; print(f'✓ Zayfer Vault {hb_zayfer.version()} installed successfully')"
 ```
 
 ---
@@ -131,7 +131,7 @@ If you prefer manual setup, follow the steps below.
 
 ### Step 1: Install Rust Toolchain
 
-HB Zayfer's core cryptographic engine is written in Rust. Install it using rustup:
+Zayfer Vault's core cryptographic engine is written in Rust. Install it using rustup:
 
 ```bash
 # Download and install Rust
@@ -180,7 +180,7 @@ source .venv/bin/activate  # Linux/macOS
 .venv\Scripts\activate.bat # Windows CMD
 ```
 
-> **Note**: You need to activate the virtual environment every time you open a new terminal to work with HB Zayfer.
+> **Note**: You need to activate the virtual environment every time you open a new terminal to work with Zayfer Vault.
 
 ### Step 4: Install Python Build Tools
 
@@ -263,7 +263,7 @@ hb-zayfer-web --help
 
 ### Step 8: Build WASM Module (Optional)
 
-If you want to use HB Zayfer in the browser or Node.js:
+If you want to use Zayfer Vault in the browser or Node.js:
 
 ```bash
 # Install wasm-pack

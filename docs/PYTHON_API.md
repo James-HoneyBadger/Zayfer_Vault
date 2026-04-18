@@ -1,6 +1,6 @@
 # Python API Reference
 
-**HB Zayfer v1.0.0**
+**Zayfer Vault v1.0.1**
 
 Complete reference for the `hb_zayfer` Python package — the public API exposed
 via PyO3 bindings to the Rust core. **55+ functions** and **6 classes**.

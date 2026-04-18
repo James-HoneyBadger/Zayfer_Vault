@@ -3,73 +3,151 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>HB Zayfer — Encryption Suite</title>
+    <title>Zayfer Vault — Encryption Suite</title>
     <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body>
     <aside id="sidebar">
-        <div class="logo">🔐 HB&nbsp;Zayfer</div>
+        <div class="logo">🔐 Zayfer&nbsp;Vault</div>
         <nav>
-            <button class="nav-btn active" data-page="encrypt">Encrypt</button>
+            <button class="nav-btn active" data-page="home">Home</button>
+            <button class="nav-btn" data-page="encrypt">Encrypt</button>
             <button class="nav-btn" data-page="decrypt">Decrypt</button>
             <button class="nav-btn" data-page="keygen">Key Generation</button>
             <button class="nav-btn" data-page="keyring">Keyring</button>
             <button class="nav-btn" data-page="contacts">Contacts</button>
             <button class="nav-btn" data-page="sign-verify">Sign / Verify</button>
+            <button class="nav-btn" data-page="passwords">Passwords</button>
+            <button class="nav-btn" data-page="audit">Audit</button>
+            <button class="nav-btn" data-page="backup">Backup</button>
+            <button class="nav-btn" data-page="settings">Settings</button>
         </nav>
-        <div class="sidebar-footer" id="version-label">v—</div>
+        <div class="sidebar-footer">
+            <div id="version-label">v—</div>
+            <div class="muted small">Local security dashboard</div>
+        </div>
     </aside>
 
     <main id="content">
-        <!-- ============================================================= -->
-        <!-- ENCRYPT PAGE                                                  -->
-        <!-- ============================================================= -->
-        <section class="page active" id="page-encrypt">
-            <h1>Encrypt Text</h1>
-            <div class="card">
-                <label for="enc-algo">Algorithm</label>
-                <select id="enc-algo">
-                    <option value="aes" selected>AES-256-GCM</option>
-                    <option value="chacha">ChaCha20-Poly1305</option>
-                </select>
+        <section class="page active" id="page-home">
+            <h1>Security Dashboard</h1>
+            <div class="stat-grid">
+                <div class="stat-card">
+                    <div class="stat-label">Version</div>
+                    <div class="stat-value" id="home-version">—</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Keys</div>
+                    <div class="stat-value" id="home-keys">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Contacts</div>
+                    <div class="stat-value" id="home-contacts">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Audit Entries</div>
+                    <div class="stat-value" id="home-audit">0</div>
+                </div>
+            </div>
 
-                <label for="enc-passphrase">Passphrase</label>
-                <input id="enc-passphrase" type="password" placeholder="Enter passphrase…" />
+            <div class="card section-gap">
+                <h2>Quick Actions</h2>
+                <div class="row wrap-row">
+                    <button class="btn-primary quick-nav" data-nav="encrypt">Encrypt Text or File</button>
+                    <button class="btn-secondary quick-nav" data-nav="keygen">Generate a Key</button>
+                    <button class="btn-secondary quick-nav" data-nav="passwords">Generate a Password</button>
+                    <button class="btn-secondary quick-nav" data-nav="audit">Review Audit Log</button>
+                    <button class="btn-secondary quick-nav" data-nav="backup">Create a Backup</button>
+                </div>
+            </div>
 
-                <label for="enc-plaintext">Plaintext</label>
-                <textarea id="enc-plaintext" rows="6" placeholder="Type or paste text to encrypt…"></textarea>
-
-                <button class="btn-primary" id="btn-encrypt">Encrypt</button>
-
-                <label for="enc-output">Ciphertext (Base64)</label>
-                <textarea id="enc-output" rows="6" readonly></textarea>
-                <button class="btn-secondary btn-copy" data-target="enc-output">Copy</button>
+            <div class="card section-gap">
+                <h2>Recommended First Steps</h2>
+                <ul class="list">
+                    <li>Create your first key pair for signing or recipient encryption.</li>
+                    <li>Add a contact and link their public key.</li>
+                    <li>Encrypt a test file and confirm you can decrypt it.</li>
+                    <li>Create an encrypted backup after your keyring is ready.</li>
+                </ul>
             </div>
         </section>
 
-        <!-- ============================================================= -->
-        <!-- DECRYPT PAGE                                                  -->
-        <!-- ============================================================= -->
+        <section class="page" id="page-encrypt">
+            <h1>Encrypt</h1>
+            <div class="card-grid">
+                <div class="card">
+                    <h2>Encrypt Text</h2>
+                    <label for="enc-algo">Algorithm</label>
+                    <select id="enc-algo">
+                        <option value="aes" selected>AES-256-GCM</option>
+                        <option value="chacha">ChaCha20-Poly1305</option>
+                    </select>
+
+                    <label for="enc-passphrase">Passphrase</label>
+                    <input id="enc-passphrase" type="password" placeholder="Enter passphrase…" />
+
+                    <label for="enc-plaintext">Plaintext</label>
+                    <textarea id="enc-plaintext" rows="6" placeholder="Type or paste text to encrypt…"></textarea>
+
+                    <button class="btn-primary" id="btn-encrypt">Encrypt Text</button>
+
+                    <label for="enc-output">Ciphertext (Base64)</label>
+                    <textarea id="enc-output" rows="6" readonly></textarea>
+                    <button class="btn-secondary btn-copy" data-target="enc-output">Copy</button>
+                </div>
+
+                <div class="card">
+                    <h2>Encrypt File</h2>
+                    <label for="enc-file-algo">Algorithm</label>
+                    <select id="enc-file-algo">
+                        <option value="aes" selected>AES-256-GCM</option>
+                        <option value="chacha">ChaCha20-Poly1305</option>
+                    </select>
+
+                    <label for="enc-file-passphrase">Passphrase</label>
+                    <input id="enc-file-passphrase" type="password" placeholder="Enter passphrase for file encryption…" />
+
+                    <label for="enc-file-input">Select file</label>
+                    <input id="enc-file-input" type="file" />
+
+                    <button class="btn-primary" id="btn-encrypt-file">Encrypt &amp; Download</button>
+                    <p class="muted">Downloads an encrypted HBZF file to your browser.</p>
+                </div>
+            </div>
+        </section>
+
         <section class="page" id="page-decrypt">
-            <h1>Decrypt Text</h1>
-            <div class="card">
-                <label for="dec-passphrase">Passphrase</label>
-                <input id="dec-passphrase" type="password" placeholder="Enter passphrase…" />
+            <h1>Decrypt</h1>
+            <div class="card-grid">
+                <div class="card">
+                    <h2>Decrypt Text</h2>
+                    <label for="dec-passphrase">Passphrase</label>
+                    <input id="dec-passphrase" type="password" placeholder="Enter passphrase…" />
 
-                <label for="dec-ciphertext">Ciphertext (Base64)</label>
-                <textarea id="dec-ciphertext" rows="6" placeholder="Paste Base64-encoded ciphertext…"></textarea>
+                    <label for="dec-ciphertext">Ciphertext (Base64)</label>
+                    <textarea id="dec-ciphertext" rows="6" placeholder="Paste Base64-encoded ciphertext…"></textarea>
 
-                <button class="btn-primary" id="btn-decrypt">Decrypt</button>
+                    <button class="btn-primary" id="btn-decrypt">Decrypt Text</button>
 
-                <label for="dec-output">Plaintext</label>
-                <textarea id="dec-output" rows="6" readonly></textarea>
-                <button class="btn-secondary btn-copy" data-target="dec-output">Copy</button>
+                    <label for="dec-output">Plaintext</label>
+                    <textarea id="dec-output" rows="6" readonly></textarea>
+                    <button class="btn-secondary btn-copy" data-target="dec-output">Copy</button>
+                </div>
+
+                <div class="card">
+                    <h2>Decrypt File</h2>
+                    <label for="dec-file-passphrase">Passphrase</label>
+                    <input id="dec-file-passphrase" type="password" placeholder="Enter passphrase used to encrypt the file…" />
+
+                    <label for="dec-file-input">Select encrypted file</label>
+                    <input id="dec-file-input" type="file" />
+
+                    <button class="btn-primary" id="btn-decrypt-file">Decrypt &amp; Download</button>
+                    <p class="muted">Downloads the recovered plaintext file to your browser.</p>
+                </div>
             </div>
         </section>
 
-        <!-- ============================================================= -->
-        <!-- KEY GENERATION PAGE                                           -->
-        <!-- ============================================================= -->
         <section class="page" id="page-keygen">
             <h1>Key Generation</h1>
             <div class="card">
@@ -101,9 +179,6 @@
             </div>
         </section>
 
-        <!-- ============================================================= -->
-        <!-- KEYRING PAGE                                                  -->
-        <!-- ============================================================= -->
         <section class="page" id="page-keyring">
             <h1>Keyring</h1>
             <div class="card">
@@ -126,13 +201,10 @@
             </div>
         </section>
 
-        <!-- ============================================================= -->
-        <!-- CONTACTS PAGE                                                 -->
-        <!-- ============================================================= -->
         <section class="page" id="page-contacts">
             <h1>Contacts</h1>
             <div class="card">
-                <div class="row">
+                <div class="row wrap-row">
                     <input id="ct-name" type="text" placeholder="Name" />
                     <input id="ct-email" type="email" placeholder="Email (optional)" />
                     <button class="btn-primary" id="btn-add-contact">Add</button>
@@ -154,53 +226,152 @@
             </div>
         </section>
 
-        <!-- ============================================================= -->
-        <!-- SIGN / VERIFY PAGE                                            -->
-        <!-- ============================================================= -->
         <section class="page" id="page-sign-verify">
             <h1>Sign &amp; Verify</h1>
+            <div class="card-grid">
+                <div class="card">
+                    <h2>Sign Message</h2>
+                    <label for="sig-algo">Algorithm</label>
+                    <select id="sig-algo">
+                        <option value="ed25519">Ed25519</option>
+                        <option value="rsa">RSA-PSS</option>
+                        <option value="pgp">OpenPGP</option>
+                    </select>
+                    <label for="sig-fp">Key Fingerprint</label>
+                    <input id="sig-fp" type="text" placeholder="Fingerprint of signing key" />
+                    <label for="sig-pass">Passphrase</label>
+                    <input id="sig-pass" type="password" placeholder="Private key passphrase…" />
+                    <label for="sig-msg">Message</label>
+                    <textarea id="sig-msg" rows="4" placeholder="Message to sign…"></textarea>
+                    <button class="btn-primary" id="btn-sign">Sign</button>
+                    <label for="sig-out">Signature (Base64)</label>
+                    <textarea id="sig-out" rows="3" readonly></textarea>
+                    <button class="btn-secondary btn-copy" data-target="sig-out">Copy</button>
+                </div>
 
-            <div class="card">
-                <h2>Sign Message</h2>
-                <label for="sig-algo">Algorithm</label>
-                <select id="sig-algo">
-                    <option value="ed25519">Ed25519</option>
-                    <option value="rsa">RSA-PSS</option>
-                    <option value="pgp">OpenPGP</option>
-                </select>
-                <label for="sig-fp">Key Fingerprint</label>
-                <input id="sig-fp" type="text" placeholder="Fingerprint of signing key" />
-                <label for="sig-pass">Passphrase</label>
-                <input id="sig-pass" type="password" placeholder="Private key passphrase…" />
-                <label for="sig-msg">Message</label>
-                <textarea id="sig-msg" rows="4" placeholder="Message to sign…"></textarea>
-                <button class="btn-primary" id="btn-sign">Sign</button>
-                <label for="sig-out">Signature (Base64)</label>
-                <textarea id="sig-out" rows="3" readonly></textarea>
-                <button class="btn-secondary btn-copy" data-target="sig-out">Copy</button>
+                <div class="card">
+                    <h2>Verify Signature</h2>
+                    <label for="ver-algo">Algorithm</label>
+                    <select id="ver-algo">
+                        <option value="ed25519">Ed25519</option>
+                        <option value="rsa">RSA-PSS</option>
+                        <option value="pgp">OpenPGP</option>
+                    </select>
+                    <label for="ver-fp">Key Fingerprint</label>
+                    <input id="ver-fp" type="text" placeholder="Fingerprint of public key" />
+                    <label for="ver-msg">Message</label>
+                    <textarea id="ver-msg" rows="4" placeholder="Original message…"></textarea>
+                    <label for="ver-sig">Signature (Base64)</label>
+                    <textarea id="ver-sig" rows="3" placeholder="Paste signature…"></textarea>
+                    <button class="btn-primary" id="btn-verify">Verify</button>
+                    <div id="ver-result" class="result-box hidden"></div>
+                </div>
             </div>
+        </section>
 
-            <div class="card" style="margin-top:1.5rem;">
-                <h2>Verify Signature</h2>
-                <label for="ver-algo">Algorithm</label>
-                <select id="ver-algo">
-                    <option value="ed25519">Ed25519</option>
-                    <option value="rsa">RSA-PSS</option>
-                    <option value="pgp">OpenPGP</option>
+        <section class="page" id="page-passwords">
+            <h1>Password &amp; Passphrase Generator</h1>
+            <div class="card">
+                <label for="pg-mode">Mode</label>
+                <select id="pg-mode">
+                    <option value="password" selected>Random Password</option>
+                    <option value="passphrase">Diceware-style Passphrase</option>
                 </select>
-                <label for="ver-fp">Key Fingerprint</label>
-                <input id="ver-fp" type="text" placeholder="Fingerprint of public key" />
-                <label for="ver-msg">Message</label>
-                <textarea id="ver-msg" rows="4" placeholder="Original message…"></textarea>
-                <label for="ver-sig">Signature (Base64)</label>
-                <textarea id="ver-sig" rows="3" placeholder="Paste signature…"></textarea>
-                <button class="btn-primary" id="btn-verify">Verify</button>
-                <div id="ver-result" class="result-box hidden"></div>
+
+                <div id="pg-length-wrap">
+                    <label for="pg-length">Length</label>
+                    <input id="pg-length" type="number" min="8" max="128" value="20" />
+                </div>
+
+                <div id="pg-words-wrap" class="hidden">
+                    <label for="pg-words">Words</label>
+                    <input id="pg-words" type="number" min="3" max="12" value="6" />
+                </div>
+
+                <label for="pg-separator">Separator</label>
+                <input id="pg-separator" type="text" value="-" maxlength="3" />
+
+                <label for="pg-exclude">Exclude characters</label>
+                <input id="pg-exclude" type="text" placeholder="e.g. 0OIl1" />
+
+                <button class="btn-primary" id="btn-passgen">Generate</button>
+
+                <label for="pg-output">Result</label>
+                <textarea id="pg-output" rows="4" readonly></textarea>
+                <div id="pg-meta" class="muted"></div>
+                <button class="btn-secondary btn-copy" data-target="pg-output">Copy</button>
+            </div>
+        </section>
+
+        <section class="page" id="page-audit">
+            <h1>Audit Log</h1>
+            <div class="card">
+                <div class="row wrap-row">
+                    <button class="btn-secondary" id="btn-refresh-audit">Refresh</button>
+                    <button class="btn-primary" id="btn-verify-audit">Verify Integrity</button>
+                    <div class="muted">Total entries: <strong id="audit-count-label">0</strong></div>
+                </div>
+                <div id="audit-verify-result" class="result-box hidden"></div>
+                <table id="audit-table">
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Operation</th>
+                            <th>Note</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+                <p id="audit-empty" class="muted hidden">No audit entries yet.</p>
+            </div>
+        </section>
+
+        <section class="page" id="page-backup">
+            <h1>Backup &amp; Restore</h1>
+            <div class="card">
+                <label for="bk-path">Backup path</label>
+                <input id="bk-path" type="text" placeholder="e.g. ~/.hb_zayfer/backups/my-backup.hbzf" />
+
+                <label for="bk-label">Backup label</label>
+                <input id="bk-label" type="text" placeholder="Optional label for this backup" />
+
+                <label for="bk-pass">Passphrase</label>
+                <input id="bk-pass" type="password" placeholder="Passphrase to protect or verify the backup" />
+
+                <div class="row wrap-row">
+                    <button class="btn-primary" id="btn-backup-create">Create Backup</button>
+                    <button class="btn-secondary" id="btn-backup-verify">Verify Backup</button>
+                    <button class="btn-secondary" id="btn-backup-restore">Restore Backup</button>
+                </div>
+
+                <div id="bk-result" class="result-box hidden"></div>
+            </div>
+        </section>
+
+        <section class="page" id="page-settings">
+            <h1>Settings</h1>
+            <div class="card">
+                <label for="cfg-cipher">Default cipher</label>
+                <select id="cfg-cipher">
+                    <option value="AES-256-GCM">AES-256-GCM</option>
+                    <option value="ChaCha20-Poly1305">ChaCha20-Poly1305</option>
+                </select>
+
+                <label for="cfg-kdf">KDF</label>
+                <select id="cfg-kdf">
+                    <option value="Argon2id">Argon2id</option>
+                    <option value="scrypt">scrypt</option>
+                </select>
+
+                <label for="cfg-clipboard">Clipboard auto-clear (seconds)</label>
+                <input id="cfg-clipboard" type="number" min="0" max="600" value="30" />
+
+                <button class="btn-primary" id="btn-save-settings">Save Settings</button>
+                <div id="cfg-result" class="result-box hidden"></div>
             </div>
         </section>
     </main>
 
-    <!-- Toast notification -->
     <div id="toast" class="toast hidden"></div>
 
     <script src="/static/app.js"></script>

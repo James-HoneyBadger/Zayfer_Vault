@@ -5,7 +5,7 @@ build-backend = "maturin"
 [project]
 name = "hb_zayfer"
 version = "1.0.1"
-description = "A full-featured encryption/decryption suite with GUI, CLI, and web interfaces"
+description = "Zayfer Vault — a full-featured encryption and secure communications suite with GUI, CLI, and web interfaces"
 license = { text = "MIT" }
 authors = [{name = "James Temple", email = "james@honey-badger.org"}]
 requires-python = ">=3.10"

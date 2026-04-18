@@ -1,5 +1,5 @@
 /* ==========================================================================
-   HB Zayfer – Dark‑theme Web UI
+   Zayfer Vault – Dark‑theme Web UI
    Palette adapted from PySide6 GUI (dark=30,30,30  accent=0,122,204)
    ========================================================================== */
 
@@ -125,7 +125,45 @@ h2 {
     border: 1px solid var(--border);
     border-radius: var(--radius);
     padding: 1.5rem;
-    max-width: 720px;
+    max-width: none;
+    box-shadow: 0 6px 18px rgba(0,0,0,.12);
+}
+
+.card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 1rem;
+}
+
+.stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 1rem;
+}
+
+.stat-card {
+    background: linear-gradient(180deg, #262626 0%, #222 100%);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1rem 1.1rem;
+}
+
+.stat-label {
+    color: var(--fg-muted);
+    font-size: .8rem;
+    margin-bottom: .35rem;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+}
+
+.stat-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #fff;
+}
+
+.section-gap {
+    margin-top: 1rem;
 }
 
 /* === Form elements === */
@@ -274,6 +312,30 @@ td {
 }
 .row input {
     flex: 1;
+}
+.wrap-row {
+    flex-wrap: wrap;
+}
+
+.small {
+    font-size: .75rem;
+}
+
+.list {
+    padding-left: 1rem;
+}
+
+.list li {
+    margin: .35rem 0;
+}
+
+input[type="file"] {
+    width: 100%;
+    background: var(--bg);
+    border: 1px dashed var(--border);
+    border-radius: var(--radius);
+    color: var(--fg);
+    padding: .75rem;
 }
 
 /* === Toast === */

@@ -1,7 +1,7 @@
 """Main window with sidebar navigation and stacked views.
 
 The main window coordinates persistent settings, notification toasts, the
-13-page navigation stack, and the first-run onboarding prompt that helps new
+14-page navigation stack, and the first-run onboarding prompt that helps new
 users generate keys or review settings before handling real data.
 """
 
@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
 )
 
+from hb_zayfer.gui.home_view import HomeView
 from hb_zayfer.gui.encrypt_view import EncryptView
 from hb_zayfer.gui.decrypt_view import DecryptView
 from hb_zayfer.gui.keygen_view import KeygenView
@@ -59,7 +60,7 @@ class MainWindow(QMainWindow):
         # Initialize notification manager
         self.notifications = NotificationManager(self)
         
-        self.setWindowTitle(f"HB Zayfer Encryption Suite v{hbz.version()}")
+        self.setWindowTitle(f"Zayfer Vault v{hbz.version()}")
         self.setMinimumSize(900, 600)
         
         # Restore window geometry from settings
@@ -92,19 +93,20 @@ class MainWindow(QMainWindow):
         file_menu.addAction("E&xit", self.close, "Ctrl+Q")
 
         view_menu = menu.addMenu("&View")
-        view_menu.addAction("&Encrypt", lambda: self.sidebar.setCurrentRow(0), "Alt+1")
-        view_menu.addAction("&Decrypt", lambda: self.sidebar.setCurrentRow(1), "Alt+2")
-        view_menu.addAction("Key &Generation", lambda: self.sidebar.setCurrentRow(2), "Alt+3")
-        view_menu.addAction("&Keyring", lambda: self.sidebar.setCurrentRow(3), "Alt+4")
-        view_menu.addAction("&Contacts", lambda: self.sidebar.setCurrentRow(4), "Alt+5")
-        view_menu.addAction("S&ign", lambda: self.sidebar.setCurrentRow(5), "Alt+6")
-        view_menu.addAction("&Verify", lambda: self.sidebar.setCurrentRow(6), "Alt+7")
-        view_menu.addAction("&Password Gen", lambda: self.sidebar.setCurrentRow(7), "Alt+8")
-        view_menu.addAction("&Messaging", lambda: self.sidebar.setCurrentRow(8), "Alt+9")
-        view_menu.addAction("Q&R Exchange", lambda: self.sidebar.setCurrentRow(9))
-        view_menu.addAction("&Settings", lambda: self.sidebar.setCurrentRow(10))
-        view_menu.addAction("&Audit Log", lambda: self.sidebar.setCurrentRow(11), "Alt+0")
-        view_menu.addAction("&Backup", lambda: self.sidebar.setCurrentRow(12))
+        view_menu.addAction("&Home", lambda: self.sidebar.setCurrentRow(0))
+        view_menu.addAction("&Encrypt", lambda: self.sidebar.setCurrentRow(1), "Alt+1")
+        view_menu.addAction("&Decrypt", lambda: self.sidebar.setCurrentRow(2), "Alt+2")
+        view_menu.addAction("Key &Generation", lambda: self.sidebar.setCurrentRow(3), "Alt+3")
+        view_menu.addAction("&Keyring", lambda: self.sidebar.setCurrentRow(4), "Alt+4")
+        view_menu.addAction("&Contacts", lambda: self.sidebar.setCurrentRow(5), "Alt+5")
+        view_menu.addAction("S&ign", lambda: self.sidebar.setCurrentRow(6), "Alt+6")
+        view_menu.addAction("&Verify", lambda: self.sidebar.setCurrentRow(7), "Alt+7")
+        view_menu.addAction("&Password Gen", lambda: self.sidebar.setCurrentRow(8), "Alt+8")
+        view_menu.addAction("&Messaging", lambda: self.sidebar.setCurrentRow(9), "Alt+9")
+        view_menu.addAction("Q&R Exchange", lambda: self.sidebar.setCurrentRow(10))
+        view_menu.addAction("&Settings", lambda: self.sidebar.setCurrentRow(11))
+        view_menu.addAction("&Audit Log", lambda: self.sidebar.setCurrentRow(12), "Alt+0")
+        view_menu.addAction("&Backup", lambda: self.sidebar.setCurrentRow(13))
 
         help_menu = menu.addMenu("&Help")
         about_action = QAction("&About", self)
@@ -137,6 +139,7 @@ class MainWindow(QMainWindow):
         self.sidebar.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
         pages = [
+            ("🏠 Home", "Overview and quick actions"),
             ("🔐 Encrypt", "Encrypt files or text"),
             ("🔓 Decrypt", "Decrypt files or text"),
             ("🔑 Key Gen", "Generate key pairs"),
@@ -167,6 +170,7 @@ class MainWindow(QMainWindow):
 
         # Stacked widget (views)
         self.stack = QStackedWidget()
+        self.home_view = HomeView(self.sidebar.setCurrentRow)
         self.encrypt_view = EncryptView()
         self.decrypt_view = DecryptView()
         self.keygen_view = KeygenView()
@@ -181,6 +185,7 @@ class MainWindow(QMainWindow):
         self.audit_view = AuditView()
         self.backup_view = BackupView()
 
+        self.stack.addWidget(self.home_view)
         self.stack.addWidget(self.encrypt_view)
         self.stack.addWidget(self.decrypt_view)
         self.stack.addWidget(self.keygen_view)
@@ -201,22 +206,25 @@ class MainWindow(QMainWindow):
     def _on_page_changed(self, index: int) -> None:
         self.stack.setCurrentIndex(index)
         # Refresh data views when switching and update status bar
-        view_names = ["Encrypt", "Decrypt", "Key Generation", "Keyring", "Contacts", "Sign", "Verify", "Password Gen", "Messaging", "QR Exchange", "Settings", "Audit Log", "Backup"]
+        view_names = ["Home", "Encrypt", "Decrypt", "Key Generation", "Keyring", "Contacts", "Sign", "Verify", "Password Gen", "Messaging", "QR Exchange", "Settings", "Audit Log", "Backup"]
         if index < len(view_names):
             self.status_bar.set_message(f"Viewing: {view_names[index]}")
-        
-        if index == 0:  # Encrypt - apply default cipher from settings
+
+        if index == 0:  # Home
+            self.home_view.refresh()
+            self.status_bar.clear_count()
+        elif index == 1:  # Encrypt - apply default cipher from settings
             self._apply_settings_to_encrypt()
             self.status_bar.clear_count()
-        elif index == 3:  # Keyring
+        elif index == 4:  # Keyring
             self.keyring_view.refresh()
             if hasattr(self.keyring_view, 'all_keys'):
                 self.status_bar.set_count("Keys", len(self.keyring_view.all_keys))
-        elif index == 4:  # Contacts
+        elif index == 5:  # Contacts
             self.contacts_view.refresh()
             if hasattr(self.contacts_view, 'all_contacts'):
                 self.status_bar.set_count("Contacts", len(self.contacts_view.all_contacts))
-        elif index == 11:  # Audit Log
+        elif index == 12:  # Audit Log
             self.audit_view.refresh()
             self.status_bar.clear_count()
         else:
@@ -241,7 +249,7 @@ class MainWindow(QMainWindow):
 
         box = QMessageBox(self)
         box.setIcon(QMessageBox.Icon.Information)
-        box.setWindowTitle("Welcome to HB Zayfer")
+        box.setWindowTitle("Welcome to Zayfer Vault")
         box.setText("No keys were found yet.")
         box.setInformativeText(
             "Start by generating your first key pair, or review settings before encrypting with a passphrase."
@@ -256,10 +264,10 @@ class MainWindow(QMainWindow):
         self.settings.save()
 
         if box.clickedButton() == create_btn:
-            self.sidebar.setCurrentRow(2)
+            self.sidebar.setCurrentRow(3)
             self.status_bar.set_message("Welcome — generate your first key pair to get started")
         elif box.clickedButton() == settings_btn:
-            self.sidebar.setCurrentRow(10)
+            self.sidebar.setCurrentRow(11)
             self.status_bar.set_message("Welcome — review your settings before first use")
 
     # ---------------------------------------------------------------
@@ -294,10 +302,10 @@ class MainWindow(QMainWindow):
     def _focus_search(self) -> None:
         """Focus search box in current view if available."""
         current_index = self.stack.currentIndex()
-        if current_index == 3:  # Keyring
+        if current_index == 4:  # Keyring
             self.keyring_view.search_input.setFocus()
             self.keyring_view.search_input.selectAll()
-        elif current_index == 4:  # Contacts
+        elif current_index == 5:  # Contacts
             self.contacts_view.search_input.setFocus()
             self.contacts_view.search_input.selectAll()
     
@@ -316,10 +324,13 @@ class MainWindow(QMainWindow):
     def _refresh_current_view(self) -> None:
         """Refresh current view if supported."""
         current_index = self.stack.currentIndex()
-        if current_index == 3:  # Keyring
+        if current_index == 0:  # Home
+            self.home_view.refresh()
+            self.notifications.show_info("Overview refreshed")
+        elif current_index == 4:  # Keyring
             self.keyring_view.refresh()
             self.notifications.show_info("Keyring refreshed")
-        elif current_index == 4:  # Contacts
+        elif current_index == 5:  # Contacts
             self.contacts_view.refresh()
             self.notifications.show_info("Contacts refreshed")
     

@@ -1,6 +1,6 @@
 # Maintenance Guide
 
-Operational maintenance, upgrades, and recovery procedures for HB Zayfer.
+Operational maintenance, upgrades, and recovery procedures for Zayfer Vault.
 
 This document is intended for desktop users, administrators, and maintainers who want the application to remain **secure, recoverable, and up to date**.
 
@@ -92,7 +92,7 @@ rustup default stable
 
 ### Why rebuild after updates?
 
-HB Zayfer uses a Rust core exposed to Python via PyO3. If:
+Zayfer Vault uses a Rust core exposed to Python via PyO3. If:
 
 - Python version changes,
 - Rust dependencies change, or

@@ -14,7 +14,7 @@ class AboutDialog(QDialog):
     
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("About HB Zayfer")
+        self.setWindowTitle("About Zayfer Vault")
         self.setMinimumWidth(500)
         self.setMinimumHeight(400)
         
@@ -23,7 +23,7 @@ class AboutDialog(QDialog):
         layout.setContentsMargins(24, 24, 24, 24)
         
         # Title
-        title = QLabel("🔐 HB Zayfer")
+        title = QLabel("🔐 Zayfer Vault")
         title_font = QFont()
         title_font.setPointSize(24)
         title_font.setBold(True)
@@ -44,7 +44,7 @@ class AboutDialog(QDialog):
         desc.setHtml("""
             <div style='font-size: 13px; line-height: 1.6;'>
             <h3>Encryption Suite</h3>
-            <p><b>HB Zayfer</b> is a comprehensive encryption suite implementing modern cryptographic
+            <p><b>Zayfer Vault</b> is a comprehensive encryption suite implementing modern cryptographic
             primitives with a focus on security and usability.</p>
             
             <h4>Features:</h4>
