@@ -67,8 +67,8 @@ For most users, this one-command installation will set up everything:
 
 ```bash
 # Clone the repository and let the launcher handle setup
-git clone https://github.com/James-HoneyBadger/HB_Zayfer.git
-cd HB_Zayfer
+git clone https://github.com/James-HoneyBadger/Zayfer_Vault.git
+cd Zayfer_Vault
 ./run.sh              # Creates venv, installs deps, builds native extension, launches GUI
 ./run.sh web          # Start the web interface instead
 ./run.sh cli --help   # Show CLI help
@@ -78,7 +78,7 @@ cd HB_Zayfer
 
 ```bash
 # Navigate to project directory
-cd /path/to/HB_Zayfer
+cd /path/to/Zayfer_Vault
 
 # Install Rust
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
@@ -110,18 +110,31 @@ python -c "import hb_zayfer; print(f'✓ Zayfer Vault {hb_zayfer.version()} inst
 The included `run.sh` script handles the entire setup automatically:
 
 ```bash
-git clone https://github.com/James-HoneyBadger/HB_Zayfer.git
-cd HB_Zayfer
+git clone https://github.com/James-HoneyBadger/Zayfer_Vault.git
+cd Zayfer_Vault
 ./run.sh              # Creates venv, installs deps, builds native ext, launches GUI
 ./run.sh web          # Web server
 ./run.sh cli --help   # CLI commands
 ./run.sh build        # Build only (no launch)
+./run.sh doctor       # Show environment diagnostics
 ./run.sh test         # Run full test suite
 ```
 
 The script checks for Rust, creates/activates the venv, installs missing
 Python packages, rebuilds the native extension when Rust sources change,
 and launches the requested interface.
+
+### Branding and Compatibility Note
+
+The product is now called **Zayfer Vault**, but some internal identifiers still
+use the original compatibility names:
+
+- Python package: `hb_zayfer`
+- Environment variables: `HB_ZAYFER_*`
+- Native module: `hb_zayfer._native`
+
+This is expected and helps preserve backward compatibility for scripts,
+imports, and existing installations.
 
 If you prefer manual setup, follow the steps below.
 
@@ -157,8 +170,8 @@ rustup default stable
 ### Step 2: Clone Repository (if not already done)
 
 ```bash
-git clone https://github.com/James-HoneyBadger/HB_Zayfer.git
-cd HB_Zayfer
+git clone https://github.com/James-HoneyBadger/Zayfer_Vault.git
+cd Zayfer_Vault
 ```
 
 ### Step 3: Setup Python Virtual Environment

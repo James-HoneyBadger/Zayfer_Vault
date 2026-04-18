@@ -41,12 +41,12 @@ const UNCOMPRESSED_MAGIC: u8 = 0x00;
 /// If compression doesn't reduce size, returns the original with header (`0x00`).
 pub fn compress(data: &[u8]) -> HbResult<Vec<u8>> {
     let mut encoder = DeflateEncoder::new(Vec::new(), Compression::default());
-    encoder.write_all(data).map_err(|e| {
-        HbError::Io(format!("Compression write failed: {e}"))
-    })?;
-    let compressed = encoder.finish().map_err(|e| {
-        HbError::Io(format!("Compression finish failed: {e}"))
-    })?;
+    encoder
+        .write_all(data)
+        .map_err(|e| HbError::Io(format!("Compression write failed: {e}")))?;
+    let compressed = encoder
+        .finish()
+        .map_err(|e| HbError::Io(format!("Compression finish failed: {e}")))?;
 
     // Only use compressed form if it's actually smaller
     if compressed.len() < data.len() {
@@ -75,9 +75,9 @@ pub fn decompress(data: &[u8]) -> HbResult<Vec<u8>> {
         COMPRESSED_MAGIC => {
             let mut decoder = DeflateDecoder::new(&data[1..]);
             let mut decompressed = Vec::new();
-            decoder.read_to_end(&mut decompressed).map_err(|e| {
-                HbError::Io(format!("Decompression failed: {e}"))
-            })?;
+            decoder
+                .read_to_end(&mut decompressed)
+                .map_err(|e| HbError::Io(format!("Decompression failed: {e}")))?;
             Ok(decompressed)
         }
         other => Err(HbError::InvalidFormat(format!(

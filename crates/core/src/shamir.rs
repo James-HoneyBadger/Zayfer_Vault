@@ -67,10 +67,14 @@ const GF_INV_TABLE: [u8; 256] = {
                 let mut bb = power;
                 let mut j = 0;
                 while j < 8 {
-                    if bb & 1 != 0 { r ^= aa; }
+                    if bb & 1 != 0 {
+                        r ^= aa;
+                    }
                     let high = aa & 0x80;
                     aa <<= 1;
-                    if high != 0 { aa ^= 0x1B; }
+                    if high != 0 {
+                        aa ^= 0x1B;
+                    }
                     bb >>= 1;
                     j += 1;
                 }
@@ -83,10 +87,14 @@ const GF_INV_TABLE: [u8; 256] = {
                 let mut bb = power;
                 let mut j = 0;
                 while j < 8 {
-                    if bb & 1 != 0 { r ^= aa; }
+                    if bb & 1 != 0 {
+                        r ^= aa;
+                    }
                     let high = aa & 0x80;
                     aa <<= 1;
-                    if high != 0 { aa ^= 0x1B; }
+                    if high != 0 {
+                        aa ^= 0x1B;
+                    }
                     bb >>= 1;
                     j += 1;
                 }
@@ -140,14 +148,17 @@ pub fn split(secret: &[u8], n: u8, k: u8) -> HbResult<Vec<Share>> {
         return Err(HbError::InvalidFormat("Secret must not be empty".into()));
     }
     if k < 2 || n < k {
-        return Err(HbError::InvalidFormat(
-            format!("Invalid parameters: need 2 <= k <= n <= 255, got k={k}, n={n}"),
-        ));
+        return Err(HbError::InvalidFormat(format!(
+            "Invalid parameters: need 2 <= k <= n <= 255, got k={k}, n={n}"
+        )));
     }
 
     let mut rng = OsRng;
     let mut shares: Vec<Share> = (1..=n)
-        .map(|x| Share { x, data: Vec::with_capacity(secret.len()) })
+        .map(|x| Share {
+            x,
+            data: Vec::with_capacity(secret.len()),
+        })
         .collect();
 
     // For each byte of the secret, generate a random polynomial of degree k-1
@@ -177,7 +188,9 @@ pub fn combine(shares: &[Share]) -> HbResult<Vec<u8>> {
     }
     let len = shares[0].data.len();
     if shares.iter().any(|s| s.data.len() != len) {
-        return Err(HbError::InvalidFormat("All shares must have the same length".into()));
+        return Err(HbError::InvalidFormat(
+            "All shares must have the same length".into(),
+        ));
     }
 
     // Check for duplicate x-coordinates
@@ -185,7 +198,9 @@ pub fn combine(shares: &[Share]) -> HbResult<Vec<u8>> {
     xs.sort();
     xs.dedup();
     if xs.len() != shares.len() {
-        return Err(HbError::InvalidFormat("Duplicate share x-coordinates".into()));
+        return Err(HbError::InvalidFormat(
+            "Duplicate share x-coordinates".into(),
+        ));
     }
 
     let mut secret = Vec::with_capacity(len);
@@ -200,9 +215,11 @@ pub fn combine(shares: &[Share]) -> HbResult<Vec<u8>> {
 
             // Compute Lagrange basis polynomial L_i(0)
             let mut basis = 1u8;
-            for j in 0..k {
-                if i == j { continue; }
-                let xj = shares[j].x;
+            for (j, share) in shares.iter().enumerate().take(k) {
+                if i == j {
+                    continue;
+                }
+                let xj = share.x;
                 // L_i(0) = prod(0 - xj) / (xi - xj) = prod(xj) / prod(xi ^ xj)
                 // In GF(2^8): 0 - xj = xj, and xi - xj = xi ^ xj
                 let num = xj;
@@ -272,12 +289,7 @@ mod tests {
         let shares = split(secret, 4, 3).unwrap();
 
         // All 4-choose-3 subsets should work
-        let subsets = vec![
-            vec![0, 1, 2],
-            vec![0, 1, 3],
-            vec![0, 2, 3],
-            vec![1, 2, 3],
-        ];
+        let subsets = vec![vec![0, 1, 2], vec![0, 1, 3], vec![0, 2, 3], vec![1, 2, 3]];
         for sub in subsets {
             let selected: Vec<Share> = sub.iter().map(|&i| shares[i].clone()).collect();
             let recovered = combine(&selected).unwrap();
@@ -317,6 +329,6 @@ mod tests {
     fn test_invalid_params() {
         assert!(split(b"hi", 1, 2).is_err()); // n < k
         assert!(split(b"hi", 3, 1).is_err()); // k < 2
-        assert!(split(b"", 3, 2).is_err());   // empty secret
+        assert!(split(b"", 3, 2).is_err()); // empty secret
     }
 }

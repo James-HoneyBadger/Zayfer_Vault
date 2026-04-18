@@ -62,7 +62,7 @@ HB_Zayfer/
 │       ├── __init__.py
 │       ├── _native.pyi        # Type stubs
 │       ├── cli.py             # Click CLI
-│       ├── gui/               # PySide6 desktop GUI (13 views)
+│       ├── gui/               # PySide6 desktop GUI (14 views)
 │       └── web/               # FastAPI web server
 ├── scripts/
 │   ├── build-wasm.sh          # WASM build script
@@ -81,8 +81,8 @@ HB_Zayfer/
 The quickest way:
 
 ```bash
-git clone https://github.com/<owner>/HB_Zayfer.git
-cd HB_Zayfer
+git clone https://github.com/<owner>/Zayfer_Vault.git
+cd Zayfer_Vault
 ./run.sh build    # Creates venv, installs deps, builds native extension
 ```
 
@@ -90,8 +90,8 @@ Or manually:
 
 ```bash
 # 1. Clone
-git clone https://github.com/<owner>/HB_Zayfer.git
-cd HB_Zayfer
+git clone https://github.com/<owner>/Zayfer_Vault.git
+cd Zayfer_Vault
 
 # 2. Create virtual environment
 python -m venv .venv

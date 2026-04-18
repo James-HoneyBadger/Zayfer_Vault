@@ -20,6 +20,27 @@ Design goals:
 - **Tamper-resistant**: chunk reordering, duplication, and truncation are detected.
 - **Flexible key management**: password-based, RSA-OAEP, and X25519-ECDH wrapping.
 
+### Relationship to Secure Messaging Packages
+
+HBZF is the **binary encryption container** used for file and in-memory
+payload encryption. The desktop Messaging view adds a separate JSON envelope
+around HBZF ciphertext for easy copy/paste sharing.
+
+That higher-level message package currently uses:
+
+- `format: "hbz-message"`
+- `version: 1`
+- `created_at`
+- `recipient_fingerprint`
+- `recipient_algorithm`
+- `sender_fingerprint` (optional)
+- `signature_algorithm` (optional)
+- `ciphertext_b64`
+- `signature_b64` (optional)
+
+This JSON wrapper is **not** a replacement for HBZF. It is an application-level
+transport envelope whose encrypted payload remains standard HBZF bytes.
+
 ---
 
 ## Binary Layout
@@ -192,6 +213,8 @@ symmetric_key = HKDF-SHA256(shared_secret, info="HB_Zayfer X25519 encryption key
 ```
 
 The ephemeral public key is stored in the header. No salt is used for HKDF.
+The HKDF `info` string intentionally retains the legacy internal name for
+compatibility with existing encrypted payloads.
 
 Decryption:
 

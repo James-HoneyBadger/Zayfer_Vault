@@ -46,6 +46,22 @@ Does NOT protect against:
 - **Zero-day exploits**: Unknown vulnerabilities
 - **Quantum computers**: (Use post-quantum algorithms when available)
 
+### A Note on the Messaging View
+
+Zayfer Vault's desktop Messaging view is designed for **short, shareable
+messages**. It creates a JSON message package that includes metadata such as the
+recipient fingerprint, optional sender fingerprint, and a base64-encoded HBZF
+ciphertext payload.
+
+This means:
+
+- you can safely paste or send the package through ordinary channels,
+- the encrypted body still uses the same authenticated HBZF protection model,
+- optional signatures let the recipient verify who sent the message.
+
+For large files or archives, continue using the normal file-encryption workflow
+rather than the messaging panel.
+
 ---
 
 ## Scenario 1: First Contact

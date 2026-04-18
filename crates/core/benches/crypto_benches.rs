@@ -1,5 +1,5 @@
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
-use hb_zayfer_core::format::{encrypt_bytes, decrypt_bytes, SymmetricAlgorithm};
+use hb_zayfer_core::format::{decrypt_bytes, encrypt_bytes, SymmetricAlgorithm};
 use hb_zayfer_core::kdf::{derive_key, generate_salt, KdfParams};
 
 fn bench_kdf(c: &mut Criterion) {

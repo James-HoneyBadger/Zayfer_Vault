@@ -9,7 +9,7 @@ then explore the reference docs for your interface of choice.
 
 | Document | Description |
 |----------|-------------|
-| [Quick Start](QUICKSTART.md) | Install, encrypt your first file, and explore the 13-view GUI |
+| [Quick Start](QUICKSTART.md) | Install, encrypt your first file, and explore the 14-view GUI |
 | [Tutorial: Encryption, Decryption & Passwords](TUTORIAL_ENCRYPTION_PASSWORDS.md) | Step-by-step walkthrough for password safety and practical encryption workflows |
 | [User Guide](USER_GUIDE.md) | In-depth usage guide for all end-user features |
 | [Installation](../INSTALL.md) | Detailed setup instructions for Linux, macOS, and Windows |
@@ -30,7 +30,7 @@ then explore the reference docs for your interface of choice.
 | [Python API](PYTHON_API.md) | Complete reference for 55+ Python functions and 6 classes |
 | [Rust API](RUST_API.md) | Complete reference for all 20 Rust modules |
 | [CLI Reference](CLI.md) | All 20+ CLI commands with examples |
-| [Web & GUI](WEB_GUI.md) | Desktop GUI (13 views) and REST API (30 endpoints) |
+| [Web & GUI](WEB_GUI.md) | Desktop GUI (14 views) and REST API (30 endpoints) |
 
 ## Technical
 
@@ -46,5 +46,5 @@ then explore the reference docs for your interface of choice.
 | Document | Description |
 |----------|-------------|
 | [Contributing](CONTRIBUTING.md) | Dev setup, code standards, testing, PR workflow |
-| [Changelog](../CHANGELOG.md) | Release history (v0.1.0 → v1.0.0) |
+| [Changelog](../CHANGELOG.md) | Release history (v0.1.0 → v1.0.1) |
 | [Secure Communications](SECURE_COMMUNICATIONS.md) | End-to-end encrypted messaging guide |

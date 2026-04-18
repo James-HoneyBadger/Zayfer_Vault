@@ -69,9 +69,7 @@ fn aes_encrypt<'py>(
     let k = key.to_vec();
     let p = plaintext.to_vec();
     let a = aad.to_vec();
-    let (nonce, ct) = py
-        .detach(|| aes_gcm::encrypt(&k, &p, &a))
-        .map_err(to_py)?;
+    let (nonce, ct) = py.detach(|| aes_gcm::encrypt(&k, &p, &a)).map_err(to_py)?;
     Ok((PyBytes::new(py, &nonce), PyBytes::new(py, &ct)))
 }
 
@@ -109,9 +107,7 @@ fn chacha_encrypt<'py>(
     let k = key.to_vec();
     let p = plaintext.to_vec();
     let a = aad.to_vec();
-    let (nonce, ct) = py
-        .detach(|| chacha20::encrypt(&k, &p, &a))
-        .map_err(to_py)?;
+    let (nonce, ct) = py.detach(|| chacha20::encrypt(&k, &p, &a)).map_err(to_py)?;
     Ok((PyBytes::new(py, &nonce), PyBytes::new(py, &ct)))
 }
 
@@ -216,9 +212,7 @@ fn rsa_encrypt<'py>(
 ) -> PyResult<Bound<'py, PyBytes>> {
     let pk = hrsa::import_public_key_pem(public_pem).map_err(to_py)?;
     let pt = plaintext.to_vec();
-    let ct = py
-        .detach(move || hrsa::encrypt(&pk, &pt))
-        .map_err(to_py)?;
+    let ct = py.detach(move || hrsa::encrypt(&pk, &pt)).map_err(to_py)?;
     Ok(PyBytes::new(py, &ct))
 }
 
@@ -231,9 +225,7 @@ fn rsa_decrypt<'py>(
 ) -> PyResult<Bound<'py, PyBytes>> {
     let sk = hrsa::import_private_key_pem(private_pem).map_err(to_py)?;
     let ct = ciphertext.to_vec();
-    let pt = py
-        .detach(move || hrsa::decrypt(&sk, &ct))
-        .map_err(to_py)?;
+    let pt = py.detach(move || hrsa::decrypt(&sk, &ct)).map_err(to_py)?;
     Ok(PyBytes::new(py, &pt))
 }
 
@@ -246,9 +238,7 @@ fn rsa_sign<'py>(
 ) -> PyResult<Bound<'py, PyBytes>> {
     let sk = hrsa::import_private_key_pem(private_pem).map_err(to_py)?;
     let msg = message.to_vec();
-    let sig = py
-        .detach(move || hrsa::sign(&sk, &msg))
-        .map_err(to_py)?;
+    let sig = py.detach(move || hrsa::sign(&sk, &msg)).map_err(to_py)?;
     Ok(PyBytes::new(py, &sig))
 }
 
@@ -499,9 +489,7 @@ fn build_kdf_params(
             }
             let iters = kdf_iterations.unwrap_or(3);
             if iters < 1 {
-                return Err(PyValueError::new_err(
-                    "kdf_iterations must be at least 1",
-                ));
+                return Err(PyValueError::new_err("kdf_iterations must be at least 1"));
             }
             Ok(kdf::KdfParams::argon2id(mem, iters, 1))
         }
@@ -521,6 +509,7 @@ fn build_kdf_params(
 }
 
 #[pyfunction]
+#[allow(clippy::too_many_arguments)]
 #[pyo3(signature = (
     plaintext,
     algorithm = "aes",
@@ -561,10 +550,10 @@ fn encrypt_data<'py>(
     // Build EncryptParams based on wrapping mode
     let params = match wrapping {
         "password" => {
-            let pw = passphrase.ok_or_else(|| {
-                PyValueError::new_err("passphrase required for password mode")
-            })?;
-            let kdf_params = build_kdf_params(kdf, kdf_memory_kib, kdf_iterations, kdf_log_n, kdf_r, kdf_p)?;
+            let pw = passphrase
+                .ok_or_else(|| PyValueError::new_err("passphrase required for password mode"))?;
+            let kdf_params =
+                build_kdf_params(kdf, kdf_memory_kib, kdf_iterations, kdf_log_n, kdf_r, kdf_p)?;
             let salt = kdf::generate_salt(16);
             let key = kdf::derive_key(pw, &salt, &kdf_params).map_err(to_py)?;
             format::EncryptParams {
@@ -721,6 +710,7 @@ fn decrypt_data<'py>(
 /// Same parameter semantics as `encrypt_data` but operates on file paths.
 /// Returns the number of bytes written.
 #[pyfunction]
+#[allow(clippy::too_many_arguments)]
 #[pyo3(signature = (
     input_path,
     output_path,
@@ -760,10 +750,10 @@ fn encrypt_file(
 
     let params = match wrapping {
         "password" => {
-            let pw = passphrase.ok_or_else(|| {
-                PyValueError::new_err("passphrase required for password mode")
-            })?;
-            let kdf_params = build_kdf_params(kdf, kdf_memory_kib, kdf_iterations, kdf_log_n, kdf_r, kdf_p)?;
+            let pw = passphrase
+                .ok_or_else(|| PyValueError::new_err("passphrase required for password mode"))?;
+            let kdf_params =
+                build_kdf_params(kdf, kdf_memory_kib, kdf_iterations, kdf_log_n, kdf_r, kdf_p)?;
             let salt = kdf::generate_salt(16);
             let key = kdf::derive_key(pw, &salt, &kdf_params).map_err(to_py)?;
             format::EncryptParams {
@@ -895,9 +885,10 @@ fn decrypt_file(
                     HbError::InvalidFormat("secret_raw required for X25519 mode".into())
                 })?;
                 let sk = x::import_secret_key_raw(&sr)?;
-                let eph_bytes = header.ephemeral_public.as_ref().ok_or_else(|| {
-                    HbError::InvalidFormat("Missing ephemeral public key".into())
-                })?;
+                let eph_bytes = header
+                    .ephemeral_public
+                    .as_ref()
+                    .ok_or_else(|| HbError::InvalidFormat("Missing ephemeral public key".into()))?;
                 let eph = x::import_public_key_raw(eph_bytes)?;
                 let sym = x::decrypt_key_agreement(&sk, &eph)?;
                 sym.to_vec()
@@ -975,7 +966,7 @@ impl PyKeyStore {
         &self,
         py: Python<'py>,
         fingerprint: &str,
-    passphrase: &[u8],
+        passphrase: &[u8],
     ) -> PyResult<Bound<'py, PyBytes>> {
         let data = self
             .inner
@@ -999,7 +990,7 @@ impl PyKeyStore {
         self.inner
             .list_keys()
             .into_iter()
-            .map(|m| PyKeyMetadata::from_meta(m))
+            .map(PyKeyMetadata::from_meta)
             .collect()
     }
 
@@ -1048,9 +1039,7 @@ impl PyKeyStore {
 
     /// Get a contact by name.
     fn get_contact(&self, name: &str) -> Option<PyContact> {
-        self.inner
-            .get_contact(name)
-            .map(PyContact::from_contact)
+        self.inner.get_contact(name).map(PyContact::from_contact)
     }
 
     /// List all contacts.
@@ -1080,11 +1069,7 @@ impl PyKeyStore {
         notes: Option<&str>,
     ) -> PyResult<()> {
         self.inner
-            .update_contact(
-                name,
-                email.map(|e| Some(e)),
-                notes.map(|n| Some(n)),
-            )
+            .update_contact(name, email.map(Some), notes.map(Some))
             .map_err(to_py)
     }
 
@@ -1095,7 +1080,12 @@ impl PyKeyStore {
 
     /// Create an encrypted backup of the keystore.
     #[pyo3(signature = (output_path, passphrase, label = None))]
-    fn create_backup(&self, output_path: &str, passphrase: &[u8], label: Option<String>) -> PyResult<()> {
+    fn create_backup(
+        &self,
+        output_path: &str,
+        passphrase: &[u8],
+        label: Option<String>,
+    ) -> PyResult<()> {
         self.inner
             .create_backup(&PathBuf::from(output_path), passphrase, label)
             .map_err(to_py)
@@ -1215,7 +1205,9 @@ impl PyAuditLogger {
 
     /// Export audit log to destination path.
     fn export(&self, destination: &str) -> PyResult<()> {
-        self.inner.export(&PathBuf::from(destination)).map_err(to_py)
+        self.inner
+            .export(&PathBuf::from(destination))
+            .map_err(to_py)
     }
 
     /// Return total number of audit entries.
@@ -1306,7 +1298,11 @@ impl PyContact {
 #[pymethods]
 impl PyContact {
     fn __repr__(&self) -> String {
-        format!("Contact(name='{}', keys={})", self.name, self.key_fingerprints.len())
+        format!(
+            "Contact(name='{}', keys={})",
+            self.name,
+            self.key_fingerprints.len()
+        )
     }
 }
 
@@ -1555,7 +1551,10 @@ fn shamir_split(py: Python<'_>, secret: &[u8], n: u8, k: u8) -> PyResult<Vec<Str
     let shares = py
         .detach(move || shamir::split(&secret_owned, n, k))
         .map_err(to_py)?;
-    Ok(shares.iter().map(|s| hex::encode(shamir::encode_share(s))).collect())
+    Ok(shares
+        .iter()
+        .map(|s| hex::encode(shamir::encode_share(s)))
+        .collect())
 }
 
 /// Combine hex-encoded shares to reconstruct the secret.
@@ -1619,7 +1618,8 @@ fn stego_capacity(pixel_len: usize) -> usize {
 #[pyo3(signature = (path, passes=3))]
 fn shred_file(py: Python<'_>, path: &str, passes: u32) -> PyResult<()> {
     let p = std::path::PathBuf::from(path);
-    py.detach(move || shred::shred_file(&p, passes)).map_err(to_py)
+    py.detach(move || shred::shred_file(&p, passes))
+        .map_err(to_py)
 }
 
 /// Securely shred all files in a directory recursively. Returns count of files shredded.
@@ -1627,7 +1627,8 @@ fn shred_file(py: Python<'_>, path: &str, passes: u32) -> PyResult<()> {
 #[pyo3(signature = (path, passes=3))]
 fn shred_directory(py: Python<'_>, path: &str, passes: u32) -> PyResult<usize> {
     let p = std::path::PathBuf::from(path);
-    py.detach(move || shred::shred_directory(&p, passes)).map_err(to_py)
+    py.detach(move || shred::shred_directory(&p, passes))
+        .map_err(to_py)
 }
 
 // ---------------------------------------------------------------------------

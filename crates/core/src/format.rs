@@ -14,14 +14,14 @@
 //! [variable] Stream of encrypted chunks, each: [4B chunk_len_le][chunk_data]
 //! ```
 
-use std::io::{self, Read, Write};
 use rand::RngCore;
 use rand_core::OsRng;
 use serde::{Deserialize, Serialize};
+use std::io::{self, Read, Write};
 
 use crate::config::{DEFAULT_CHUNK_SIZE, MAX_CHUNK_SIZE};
 use crate::error::{HbError, HbResult};
-use crate::kdf::{self, KdfAlgorithm, KdfParams, Argon2Params, ScryptParams};
+use crate::kdf::{self, Argon2Params, KdfAlgorithm, KdfParams, ScryptParams};
 use crate::{aes_gcm as aes, chacha20 as chacha, compression};
 
 /// Magic bytes identifying an HBZF file.
@@ -34,16 +34,11 @@ const COMPRESS_FLAG: u8 = 0x80;
 pub const CHUNK_SIZE: usize = DEFAULT_CHUNK_SIZE;
 
 /// Symmetric cipher selection.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum SymmetricAlgorithm {
+    #[default]
     Aes256Gcm,
     ChaCha20Poly1305,
-}
-
-impl Default for SymmetricAlgorithm {
-    fn default() -> Self {
-        SymmetricAlgorithm::Aes256Gcm
-    }
 }
 
 impl SymmetricAlgorithm {
@@ -137,10 +132,19 @@ pub struct FileHeader {
 }
 
 /// Write the HBZF header to a writer.
-fn write_header<W: Write>(writer: &mut W, params: &EncryptParams, base_nonce: &[u8; 12], plaintext_len: u64) -> HbResult<()> {
+fn write_header<W: Write>(
+    writer: &mut W,
+    params: &EncryptParams,
+    base_nonce: &[u8; 12],
+    plaintext_len: u64,
+) -> HbResult<()> {
     // Magic + version (high bit = compression flag)
     writer.write_all(MAGIC)?;
-    let version_byte = if params.compress { VERSION | COMPRESS_FLAG } else { VERSION };
+    let version_byte = if params.compress {
+        VERSION | COMPRESS_FLAG
+    } else {
+        VERSION
+    };
     writer.write_all(&[version_byte])?;
 
     // Algorithm + KDF + wrapping
@@ -182,17 +186,23 @@ fn write_header<W: Write>(writer: &mut W, params: &EncryptParams, base_nonce: &[
             // No additional data
         }
         KeyWrapping::RsaOaep => {
-            let wk = params.wrapped_key.as_ref()
+            let wk = params
+                .wrapped_key
+                .as_ref()
                 .ok_or_else(|| HbError::InvalidFormat("Missing wrapped key for RSA-OAEP".into()))?;
             // Write length (2 bytes) + data
             writer.write_all(&(wk.len() as u16).to_le_bytes())?;
             writer.write_all(wk)?;
         }
         KeyWrapping::X25519Ecdh => {
-            let eph = params.ephemeral_public.as_ref()
+            let eph = params
+                .ephemeral_public
+                .as_ref()
                 .ok_or_else(|| HbError::InvalidFormat("Missing ephemeral public key".into()))?;
             if eph.len() != 32 {
-                return Err(HbError::InvalidFormat("Ephemeral public key must be 32 bytes".into()));
+                return Err(HbError::InvalidFormat(
+                    "Ephemeral public key must be 32 bytes".into(),
+                ));
             }
             writer.write_all(eph)?;
         }
@@ -213,7 +223,9 @@ pub fn read_header<R: Read>(reader: &mut R) -> HbResult<FileHeader> {
     let mut magic = [0u8; 4];
     reader.read_exact(&mut magic)?;
     if &magic != MAGIC {
-        return Err(HbError::InvalidFormat("Not an HBZF file (wrong magic)".into()));
+        return Err(HbError::InvalidFormat(
+            "Not an HBZF file (wrong magic)".into(),
+        ));
     }
 
     // Version (low 7 bits = version, high bit = compression flag)
@@ -414,12 +426,20 @@ pub fn decrypt_stream<R: Read, W: Write>(
         reader.read_exact(&mut encrypted)?;
 
         let decrypted = match header.algorithm {
-            SymmetricAlgorithm::Aes256Gcm => {
-                aes::decrypt_chunk(symmetric_key, &header.base_nonce, chunk_index, &encrypted, &aad)?
-            }
-            SymmetricAlgorithm::ChaCha20Poly1305 => {
-                chacha::decrypt_chunk(symmetric_key, &header.base_nonce, chunk_index, &encrypted, &aad)?
-            }
+            SymmetricAlgorithm::Aes256Gcm => aes::decrypt_chunk(
+                symmetric_key,
+                &header.base_nonce,
+                chunk_index,
+                &encrypted,
+                &aad,
+            )?,
+            SymmetricAlgorithm::ChaCha20Poly1305 => chacha::decrypt_chunk(
+                symmetric_key,
+                &header.base_nonce,
+                chunk_index,
+                &encrypted,
+                &aad,
+            )?,
         };
 
         // Decompress if the file was encrypted with compression enabled
@@ -486,7 +506,9 @@ pub fn decrypt_bytes(
 ) -> HbResult<Vec<u8>> {
     match algorithm {
         SymmetricAlgorithm::Aes256Gcm => aes::decrypt(symmetric_key, nonce, ciphertext, b""),
-        SymmetricAlgorithm::ChaCha20Poly1305 => chacha::decrypt(symmetric_key, nonce, ciphertext, b""),
+        SymmetricAlgorithm::ChaCha20Poly1305 => {
+            chacha::decrypt(symmetric_key, nonce, ciphertext, b"")
+        }
     }
 }
 
@@ -522,7 +544,9 @@ pub fn multi_recipient_encrypt<R: Read>(
     compress: bool,
 ) -> HbResult<Vec<(String, Vec<u8>)>> {
     if recipients.is_empty() {
-        return Err(HbError::InvalidFormat("At least one recipient required".into()));
+        return Err(HbError::InvalidFormat(
+            "At least one recipient required".into(),
+        ));
     }
 
     // First, encrypt the data once for the first recipient to get the ciphertext.
@@ -532,7 +556,9 @@ pub fn multi_recipient_encrypt<R: Read>(
 
     // Read all input
     let mut plaintext = Vec::new();
-    reader.read_to_end(&mut plaintext).map_err(|e| HbError::Io(e.to_string()))?;
+    reader
+        .read_to_end(&mut plaintext)
+        .map_err(|e| HbError::Io(e.to_string()))?;
 
     // Encrypt once to get the canonical encrypted output
     let first = &recipients[0];
@@ -551,7 +577,13 @@ pub fn multi_recipient_encrypt<R: Read>(
     let mut first_output = Vec::new();
     {
         let mut cursor = io::Cursor::new(&plaintext);
-        encrypt_stream(&mut cursor, &mut first_output, &first_params, plaintext_len, None)?;
+        encrypt_stream(
+            &mut cursor,
+            &mut first_output,
+            &first_params,
+            plaintext_len,
+            None,
+        )?;
     }
 
     let mut results = Vec::with_capacity(recipients.len());
@@ -656,7 +688,8 @@ mod tests {
             &params,
             plaintext.len() as u64,
             None,
-        ).unwrap();
+        )
+        .unwrap();
 
         // Decrypt
         let mut cursor = Cursor::new(&encrypted);

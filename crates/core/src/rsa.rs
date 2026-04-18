@@ -1,13 +1,13 @@
 use rand_core::OsRng;
 use rsa::{
-    Oaep, RsaPrivateKey, RsaPublicKey,
-    pss::{BlindedSigningKey, VerifyingKey as PssVerifyingKey},
     pkcs1::{DecodeRsaPrivateKey, DecodeRsaPublicKey, EncodeRsaPrivateKey, EncodeRsaPublicKey},
     pkcs8::{DecodePrivateKey, DecodePublicKey, EncodePrivateKey, EncodePublicKey, LineEnding},
+    pss::{BlindedSigningKey, VerifyingKey as PssVerifyingKey},
     traits::PublicKeyParts,
+    Oaep, RsaPrivateKey, RsaPublicKey,
 };
-use sha2::Sha256;
 use serde::{Deserialize, Serialize};
+use sha2::Sha256;
 use signature::{RandomizedSigner, SignatureEncoding, Verifier};
 
 use crate::error::{HbError, HbResult};
@@ -75,8 +75,7 @@ pub fn decrypt(private_key: &RsaPrivateKey, ciphertext: &[u8]) -> HbResult<Vec<u
 /// Sign a message with RSA-PSS using SHA-256 (blinded).
 pub fn sign(private_key: &RsaPrivateKey, message: &[u8]) -> HbResult<Vec<u8>> {
     let signing_key = BlindedSigningKey::<Sha256>::new(private_key.clone());
-    let sig = signing_key
-        .sign_with_rng(&mut OsRng, message);
+    let sig = signing_key.sign_with_rng(&mut OsRng, message);
     Ok(sig.to_vec())
 }
 

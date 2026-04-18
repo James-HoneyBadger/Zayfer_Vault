@@ -25,8 +25,8 @@ pub fn encrypt(key: &[u8], plaintext: &[u8], aad: &[u8]) -> HbResult<(Vec<u8>, V
         )));
     }
 
-    let cipher = Aes256Gcm::new_from_slice(key)
-        .map_err(|e| HbError::AesGcm(format!("Invalid key: {e}")))?;
+    let cipher =
+        Aes256Gcm::new_from_slice(key).map_err(|e| HbError::AesGcm(format!("Invalid key: {e}")))?;
 
     let mut nonce_bytes = [0u8; AES_GCM_NONCE_SIZE];
     OsRng.fill_bytes(&mut nonce_bytes);
@@ -65,8 +65,8 @@ pub fn decrypt(key: &[u8], nonce: &[u8], ciphertext: &[u8], aad: &[u8]) -> HbRes
         )));
     }
 
-    let cipher = Aes256Gcm::new_from_slice(key)
-        .map_err(|e| HbError::AesGcm(format!("Invalid key: {e}")))?;
+    let cipher =
+        Aes256Gcm::new_from_slice(key).map_err(|e| HbError::AesGcm(format!("Invalid key: {e}")))?;
 
     let nonce = Nonce::from_slice(nonce);
     let payload = aes_gcm::aead::Payload {
@@ -98,8 +98,8 @@ pub fn encrypt_chunk(
         ));
     }
 
-    let cipher = Aes256Gcm::new_from_slice(key)
-        .map_err(|e| HbError::AesGcm(format!("Invalid key: {e}")))?;
+    let cipher =
+        Aes256Gcm::new_from_slice(key).map_err(|e| HbError::AesGcm(format!("Invalid key: {e}")))?;
 
     // Derive per-chunk nonce: first 4 bytes from base_nonce, last 8 bytes
     // are the chunk index XORed with the corresponding base_nonce bytes.
@@ -139,8 +139,8 @@ pub fn decrypt_chunk(
         ));
     }
 
-    let cipher = Aes256Gcm::new_from_slice(key)
-        .map_err(|e| HbError::AesGcm(format!("Invalid key: {e}")))?;
+    let cipher =
+        Aes256Gcm::new_from_slice(key).map_err(|e| HbError::AesGcm(format!("Invalid key: {e}")))?;
 
     let mut nonce_bytes = *base_nonce;
     let idx_bytes = chunk_index.to_le_bytes();

@@ -83,8 +83,7 @@ pub fn chacha20_encrypt(key: &[u8], plaintext: &[u8]) -> Result<Vec<u8>, JsError
     if key.len() != 32 {
         return Err(JsError::new("key must be 32 bytes"));
     }
-    let cipher =
-        ChaCha20Poly1305::new_from_slice(key).map_err(|e| JsError::new(&e.to_string()))?;
+    let cipher = ChaCha20Poly1305::new_from_slice(key).map_err(|e| JsError::new(&e.to_string()))?;
     let mut nonce_bytes = [0u8; 12];
     rand_core::OsRng.fill_bytes(&mut nonce_bytes);
     let nonce = Nonce::from_slice(&nonce_bytes);
@@ -108,8 +107,7 @@ pub fn chacha20_decrypt(key: &[u8], data: &[u8]) -> Result<Vec<u8>, JsError> {
         return Err(JsError::new("data too short"));
     }
     let (nonce_bytes, ct) = data.split_at(12);
-    let cipher =
-        ChaCha20Poly1305::new_from_slice(key).map_err(|e| JsError::new(&e.to_string()))?;
+    let cipher = ChaCha20Poly1305::new_from_slice(key).map_err(|e| JsError::new(&e.to_string()))?;
     let nonce = Nonce::from_slice(nonce_bytes);
     cipher
         .decrypt(nonce, ct)
@@ -130,7 +128,7 @@ pub fn ed25519_keygen() -> Result<String, JsError> {
     let pk = sk.verifying_key();
     let obj = serde_json::json!({
         "public": hex::encode(pk.as_bytes()),
-        "secret": hex::encode(&sk.to_bytes()),
+        "secret": hex::encode(sk.to_bytes()),
     });
     Ok(obj.to_string())
 }
@@ -149,7 +147,11 @@ pub fn ed25519_sign(secret_key: &[u8], message: &[u8]) -> Result<Vec<u8>, JsErro
 
 /// Verify an Ed25519 signature.
 #[wasm_bindgen]
-pub fn ed25519_verify(public_key: &[u8], message: &[u8], signature: &[u8]) -> Result<bool, JsError> {
+pub fn ed25519_verify(
+    public_key: &[u8],
+    message: &[u8],
+    signature: &[u8],
+) -> Result<bool, JsError> {
     use ed25519_dalek::{Signature, Verifier, VerifyingKey};
     let pk_bytes: [u8; 32] = public_key
         .try_into()
@@ -157,8 +159,7 @@ pub fn ed25519_verify(public_key: &[u8], message: &[u8], signature: &[u8]) -> Re
     let sig_bytes: [u8; 64] = signature
         .try_into()
         .map_err(|_| JsError::new("signature must be 64 bytes"))?;
-    let vk = VerifyingKey::from_bytes(&pk_bytes)
-        .map_err(|e| JsError::new(&e.to_string()))?;
+    let vk = VerifyingKey::from_bytes(&pk_bytes).map_err(|e| JsError::new(&e.to_string()))?;
     let sig = Signature::from_bytes(&sig_bytes);
     Ok(vk.verify(message, &sig).is_ok())
 }
@@ -170,12 +171,12 @@ pub fn ed25519_verify(public_key: &[u8], message: &[u8], signature: &[u8]) -> Re
 /// Generate an X25519 keypair. Returns JSON `{"public": hex, "secret": hex}`.
 #[wasm_bindgen]
 pub fn x25519_keygen() -> Result<String, JsError> {
-    use x25519_dalek::{StaticSecret, PublicKey};
+    use x25519_dalek::{PublicKey, StaticSecret};
     let sk = StaticSecret::random_from_rng(OsRng);
     let pk = PublicKey::from(&sk);
     let obj = serde_json::json!({
         "public": hex::encode(pk.as_bytes()),
-        "secret": hex::encode(&sk.to_bytes()),
+        "secret": hex::encode(sk.to_bytes()),
     });
     Ok(obj.to_string())
 }
@@ -183,7 +184,7 @@ pub fn x25519_keygen() -> Result<String, JsError> {
 /// Perform X25519 Diffie-Hellman. Returns 32-byte shared secret.
 #[wasm_bindgen]
 pub fn x25519_dh(my_secret: &[u8], their_public: &[u8]) -> Result<Vec<u8>, JsError> {
-    use x25519_dalek::{StaticSecret, PublicKey};
+    use x25519_dalek::{PublicKey, StaticSecret};
     let sk_bytes: [u8; 32] = my_secret
         .try_into()
         .map_err(|_| JsError::new("secret must be 32 bytes"))?;

@@ -72,18 +72,17 @@ REST endpoints, configuration keys, and file formats.
 
 ```
 Offset  Field            Size
-──────  ───────────────  ──────────────────────
+──────  ───────────────  ─────────────────────────────────────────
 0x00    Magic            4 B   "HBZF"
 0x04    Version          1 B   u8 (0x01)
 0x05    Algorithm        1 B   0x01=AES, 0x02=ChaCha
-0x06    Key wrapping     1 B   0x01=Password, 0x02=RSA, 0x03=X25519
-0x08    KDF params       var   (salt + cost params if password-wrapped)
-var     Wrapped key      var   (encrypted DEK or ephemeral public)
-var     Nonce            12 B
-var     Ciphertext+Tag   var   (may be compressed; see compression flag)
+0x06    KDF              1 B   0x00=None, 0x01=Argon2id, 0x02=scrypt
+0x07    Key wrapping     1 B   0x00=Password, 0x01=RSA, 0x02=X25519
+0x08+   Variable data    var   KDF params, wrapped key/ephemeral public, nonce, chunks
 ```
 
 The compressed payload uses a 1-byte prefix: `0x00` = stored, `0x01` = deflate.
+See the full specification in `docs/HBZF_FORMAT.md` for the exact binary layout.
 
 ---
 
@@ -94,11 +93,11 @@ The compressed payload uses a 1-byte prefix: `0x00` = stored, `0x01` = deflate.
 | Command | Description |
 |---------|-------------|
 | `hb-zayfer keygen <algo>` | Generate key pair (rsa-2048/rsa-4096/ed25519/x25519/pgp) |
-| `hb-zayfer encrypt -i FILE -o OUT` | Encrypt a file |
-| `hb-zayfer decrypt -i FILE -o OUT` | Decrypt a file |
-| `hb-zayfer sign -i FILE -k FP` | Sign a file |
-| `hb-zayfer verify -i FILE -s SIG -k FP` | Verify a signature |
-| `hb-zayfer keys` | List stored keys |
+| `hb-zayfer encrypt INPUT_FILE -o OUT` | Encrypt a file |
+| `hb-zayfer decrypt INPUT_FILE -o OUT` | Decrypt a file |
+| `hb-zayfer sign INPUT_FILE -k FP` | Sign a file |
+| `hb-zayfer verify INPUT_FILE SIGNATURE_FILE -k FP` | Verify a signature |
+| `hb-zayfer keys list` | List stored keys |
 | `hb-zayfer contacts` | Manage contacts (add/list/remove/link) |
 
 ### Extended Commands
@@ -121,7 +120,7 @@ The compressed payload uses a 1-byte prefix: `0x00` = stored, `0x01` = deflate.
 | `hb-zayfer backup create -o FILE` | Create encrypted backup |
 | `hb-zayfer backup restore -i FILE` | Restore from backup |
 | `hb-zayfer backup verify -i FILE` | Verify backup integrity |
-| `hb-zayfer audit` | Show recent audit entries |
+| `hb-zayfer audit show -n 20` | Show recent audit entries |
 | `hb-zayfer audit verify` | Verify audit chain integrity |
 | `hb-zayfer audit export -o FILE` | Export audit log |
 | `hb-zayfer config list` | Show all settings |

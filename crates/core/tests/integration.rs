@@ -109,7 +109,8 @@ fn aes_with_aad() {
 
 #[test]
 fn chacha_encrypt_decrypt_roundtrip() {
-    let key = kdf::derive_key(b"test", &kdf::generate_salt(32), &kdf::KdfParams::default()).unwrap();
+    let key =
+        kdf::derive_key(b"test", &kdf::generate_salt(32), &kdf::KdfParams::default()).unwrap();
     let plaintext = b"Hello, ChaCha20-Poly1305!";
 
     let (nonce, ct) = chacha20::encrypt(&key, plaintext, b"").expect("chacha encrypt");
@@ -285,8 +286,14 @@ fn keystore_store_and_load_keypair() {
 
     ks.store_public_key(&fp, &vk_bytes, KeyAlgorithm::Ed25519, "test-key")
         .expect("store pub");
-    ks.store_private_key(&fp, &sk_bytes, b"pass123", KeyAlgorithm::Ed25519, "test-key")
-        .expect("store priv");
+    ks.store_private_key(
+        &fp,
+        &sk_bytes,
+        b"pass123",
+        KeyAlgorithm::Ed25519,
+        "test-key",
+    )
+    .expect("store priv");
 
     let loaded_pub = ks.load_public_key(&fp).expect("load pub");
     assert_eq!(loaded_pub, vk_bytes);
@@ -306,7 +313,8 @@ fn keystore_list_and_delete() {
     let vk_bytes = ed25519::export_verifying_key_raw(&kp.verifying_key);
     let fp = ed25519::fingerprint(&kp.verifying_key);
 
-    ks.store_public_key(&fp, &vk_bytes, KeyAlgorithm::Ed25519, "my-key").unwrap();
+    ks.store_public_key(&fp, &vk_bytes, KeyAlgorithm::Ed25519, "my-key")
+        .unwrap();
 
     let keys = ks.list_keys();
     assert!(keys.iter().any(|k| k.fingerprint == fp));
@@ -341,7 +349,8 @@ fn keystore_associate_key() {
     let vk_bytes = ed25519::export_verifying_key_raw(&kp.verifying_key);
     let fp = ed25519::fingerprint(&kp.verifying_key);
 
-    ks.store_public_key(&fp, &vk_bytes, KeyAlgorithm::Ed25519, "assoc-key").unwrap();
+    ks.store_public_key(&fp, &vk_bytes, KeyAlgorithm::Ed25519, "assoc-key")
+        .unwrap();
     ks.add_contact("Bob", None, None).unwrap();
     ks.associate_key_with_contact("Bob", &fp).unwrap();
 
@@ -427,7 +436,10 @@ fn audit_integrity_chain() {
             )
             .unwrap();
     }
-    assert!(logger.verify_integrity().unwrap(), "Audit chain should be valid");
+    assert!(
+        logger.verify_integrity().unwrap(),
+        "Audit chain should be valid"
+    );
 }
 
 #[test]
@@ -472,8 +484,10 @@ fn config_save_load_roundtrip() {
     use hb_zayfer_core::config::Config;
     let dir = TempDir::new().unwrap();
     let path = dir.path().join("config.toml");
-    let mut cfg = Config::default();
-    cfg.chunk_size = 1024 * 256;
+    let cfg = Config {
+        chunk_size: 1024 * 256,
+        ..Config::default()
+    };
     cfg.save(&path).unwrap();
     let loaded = Config::load(&path).unwrap();
     assert_eq!(loaded.chunk_size, 1024 * 256);
@@ -506,10 +520,21 @@ fn backup_create_verify_restore() {
     let priv_pem = ed25519::export_signing_key_pem(&kp.signing_key).unwrap();
     let pub_pem = ed25519::export_verifying_key_pem(&kp.verifying_key).unwrap();
     let fp = keystore::compute_fingerprint(pub_pem.as_bytes());
-    ks.store_private_key(&fp, priv_pem.as_bytes(), b"backuptest", KeyAlgorithm::Ed25519, "Backup Test Key")
-        .unwrap();
-    ks.store_public_key(&fp, pub_pem.as_bytes(), KeyAlgorithm::Ed25519, "Backup Test Key")
-        .unwrap();
+    ks.store_private_key(
+        &fp,
+        priv_pem.as_bytes(),
+        b"backuptest",
+        KeyAlgorithm::Ed25519,
+        "Backup Test Key",
+    )
+    .unwrap();
+    ks.store_public_key(
+        &fp,
+        pub_pem.as_bytes(),
+        KeyAlgorithm::Ed25519,
+        "Backup Test Key",
+    )
+    .unwrap();
 
     // Create backup
     let backup_dir = TempDir::new().unwrap();
@@ -537,9 +562,11 @@ fn backup_create_verify_restore() {
 fn format_encrypt_decrypt_bytes_aes() {
     let key = kdf::generate_salt(32);
     let plaintext = b"Hello stream world \xe2\x80\x94 AES";
-    let (nonce, ct) = format::encrypt_bytes(plaintext, &key, format::SymmetricAlgorithm::Aes256Gcm).unwrap();
+    let (nonce, ct) =
+        format::encrypt_bytes(plaintext, &key, format::SymmetricAlgorithm::Aes256Gcm).unwrap();
     assert!(!ct.is_empty());
-    let pt = format::decrypt_bytes(&nonce, &ct, &key, format::SymmetricAlgorithm::Aes256Gcm).unwrap();
+    let pt =
+        format::decrypt_bytes(&nonce, &ct, &key, format::SymmetricAlgorithm::Aes256Gcm).unwrap();
     assert_eq!(&pt, plaintext);
 }
 
@@ -547,8 +574,19 @@ fn format_encrypt_decrypt_bytes_aes() {
 fn format_encrypt_decrypt_bytes_chacha() {
     let key = kdf::generate_salt(32);
     let plaintext = b"Hello stream world \xe2\x80\x94 ChaCha";
-    let (nonce, ct) = format::encrypt_bytes(plaintext, &key, format::SymmetricAlgorithm::ChaCha20Poly1305).unwrap();
-    let pt = format::decrypt_bytes(&nonce, &ct, &key, format::SymmetricAlgorithm::ChaCha20Poly1305).unwrap();
+    let (nonce, ct) = format::encrypt_bytes(
+        plaintext,
+        &key,
+        format::SymmetricAlgorithm::ChaCha20Poly1305,
+    )
+    .unwrap();
+    let pt = format::decrypt_bytes(
+        &nonce,
+        &ct,
+        &key,
+        format::SymmetricAlgorithm::ChaCha20Poly1305,
+    )
+    .unwrap();
     assert_eq!(&pt, plaintext);
 }
 
@@ -557,8 +595,14 @@ fn format_wrong_key_fails() {
     let key = kdf::generate_salt(32);
     let wrong_key = kdf::generate_salt(32);
     let plaintext = b"Secret stuff";
-    let (nonce, ct) = format::encrypt_bytes(plaintext, &key, format::SymmetricAlgorithm::Aes256Gcm).unwrap();
-    let result = format::decrypt_bytes(&nonce, &ct, &wrong_key, format::SymmetricAlgorithm::Aes256Gcm);
+    let (nonce, ct) =
+        format::encrypt_bytes(plaintext, &key, format::SymmetricAlgorithm::Aes256Gcm).unwrap();
+    let result = format::decrypt_bytes(
+        &nonce,
+        &ct,
+        &wrong_key,
+        format::SymmetricAlgorithm::Aes256Gcm,
+    );
     assert!(result.is_err(), "Decryption with wrong key should fail");
 }
 
@@ -573,7 +617,10 @@ mod error_tests {
     fn help_text_invalid_passphrase() {
         let e = HbError::InvalidPassphrase;
         let help = e.help_text();
-        assert!(help.contains("Wrong passphrase"), "Should mention wrong passphrase");
+        assert!(
+            help.contains("Wrong passphrase"),
+            "Should mention wrong passphrase"
+        );
         assert!(help.contains("Try:"), "Should include troubleshooting tip");
     }
 
@@ -587,8 +634,14 @@ mod error_tests {
 
     #[test]
     fn user_message_variants() {
-        assert_eq!(HbError::InvalidPassphrase.user_message(), "Wrong passphrase");
-        assert_eq!(HbError::PassphraseRequired.user_message(), "Passphrase required");
+        assert_eq!(
+            HbError::InvalidPassphrase.user_message(),
+            "Wrong passphrase"
+        );
+        assert_eq!(
+            HbError::PassphraseRequired.user_message(),
+            "Passphrase required"
+        );
 
         let msg = HbError::KeyNotFound("fp1".into()).user_message();
         assert!(msg.contains("fp1"));
@@ -617,7 +670,11 @@ mod error_tests {
         ];
         for v in &variants {
             let text = v.help_text();
-            assert!(!text.is_empty(), "help_text for {:?} should not be empty", v);
+            assert!(
+                !text.is_empty(),
+                "help_text for {:?} should not be empty",
+                v
+            );
         }
     }
 }
@@ -627,8 +684,8 @@ mod error_tests {
 // ==========================================================================
 
 mod keystore_extended {
-    use hb_zayfer_core::keystore::{KeyStore, KeyAlgorithm, KeyUsage, KeyExpiryStatus};
     use hb_zayfer_core::ed25519;
+    use hb_zayfer_core::keystore::{KeyAlgorithm, KeyExpiryStatus, KeyStore, KeyUsage};
     use tempfile::TempDir;
 
     fn setup() -> (TempDir, KeyStore) {
@@ -642,8 +699,10 @@ mod keystore_extended {
         let sk_bytes = ed25519::export_signing_key_raw(&kp.signing_key);
         let vk_bytes = ed25519::export_verifying_key_raw(&kp.verifying_key);
         let fp = ed25519::fingerprint(&kp.verifying_key);
-        ks.store_public_key(&fp, &vk_bytes, KeyAlgorithm::Ed25519, label).unwrap();
-        ks.store_private_key(&fp, &sk_bytes, b"pass", KeyAlgorithm::Ed25519, label).unwrap();
+        ks.store_public_key(&fp, &vk_bytes, KeyAlgorithm::Ed25519, label)
+            .unwrap();
+        ks.store_private_key(&fp, &sk_bytes, b"pass", KeyAlgorithm::Ed25519, label)
+            .unwrap();
         fp
     }
 
@@ -673,7 +732,8 @@ mod keystore_extended {
     fn set_key_usage() {
         let (_tmp, mut ks) = setup();
         let fp = store_ed25519_key(&mut ks, "usage-test");
-        ks.set_key_usage(&fp, Some(vec![KeyUsage::Sign, KeyUsage::Verify])).unwrap();
+        ks.set_key_usage(&fp, Some(vec![KeyUsage::Sign, KeyUsage::Verify]))
+            .unwrap();
         let m = ks.get_key_metadata(&fp).unwrap();
         let usages = m.allowed_usages.as_ref().expect("should have usages set");
         assert!(usages.contains(&KeyUsage::Sign));
@@ -683,7 +743,7 @@ mod keystore_extended {
 
     #[test]
     fn set_key_expiry_and_check() {
-        use chrono::{Utc, Duration};
+        use chrono::{Duration, Utc};
         let (_tmp, mut ks) = setup();
         let fp = store_ed25519_key(&mut ks, "expiry-test");
 
@@ -691,14 +751,17 @@ mod keystore_extended {
         let future = Utc::now() + Duration::days(365);
         ks.set_key_expiry(&fp, Some(future)).unwrap();
         let expiring = ks.check_expiring_keys(30);
-        assert!(expiring.iter().all(|(m, _)| m.fingerprint != fp),
-                "Key with 365-day expiry should not appear in 30-day check");
+        assert!(
+            expiring.iter().all(|(m, _)| m.fingerprint != fp),
+            "Key with 365-day expiry should not appear in 30-day check"
+        );
 
         // Set expiry to 10 days from now: should appear as expiring soon
         let soon = Utc::now() + Duration::days(10);
         ks.set_key_expiry(&fp, Some(soon)).unwrap();
         let expiring = ks.check_expiring_keys(30);
-        let found: Vec<_> = expiring.iter()
+        let found: Vec<_> = expiring
+            .iter()
             .filter(|(m, _)| m.fingerprint == fp)
             .collect();
         assert_eq!(found.len(), 1);
@@ -708,9 +771,11 @@ mod keystore_extended {
     #[test]
     fn update_contact() {
         let (_tmp, mut ks) = setup();
-        ks.add_contact("Eve", Some("eve@old.com"), Some("original")).unwrap();
+        ks.add_contact("Eve", Some("eve@old.com"), Some("original"))
+            .unwrap();
 
-        ks.update_contact("Eve", Some(Some("eve@new.com")), Some(Some("updated"))).unwrap();
+        ks.update_contact("Eve", Some(Some("eve@new.com")), Some(Some("updated")))
+            .unwrap();
         let c = ks.get_contact("Eve").expect("contact should exist");
         assert_eq!(c.email.as_deref(), Some("eve@new.com"));
         assert_eq!(c.notes.as_deref(), Some("updated"));
@@ -719,7 +784,8 @@ mod keystore_extended {
     #[test]
     fn update_contact_clear_fields() {
         let (_tmp, mut ks) = setup();
-        ks.add_contact("Fay", Some("fay@test.com"), Some("note")).unwrap();
+        ks.add_contact("Fay", Some("fay@test.com"), Some("note"))
+            .unwrap();
 
         // Clear email, keep notes
         ks.update_contact("Fay", Some(None), None).unwrap();
@@ -740,7 +806,13 @@ mod keystore_extended {
         let fp = store_ed25519_key(&mut ks, "usage-enforce");
         ks.set_key_usage(&fp, Some(vec![KeyUsage::Sign])).unwrap();
         let m = ks.get_key_metadata(&fp).unwrap();
-        assert!(m.check_usage(KeyUsage::Sign).is_ok(), "Sign should be allowed");
-        assert!(m.check_usage(KeyUsage::Encrypt).is_err(), "Encrypt should be disallowed");
+        assert!(
+            m.check_usage(KeyUsage::Sign).is_ok(),
+            "Sign should be allowed"
+        );
+        assert!(
+            m.check_usage(KeyUsage::Encrypt).is_err(),
+            "Encrypt should be disallowed"
+        );
     }
 }

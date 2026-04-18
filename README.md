@@ -28,7 +28,7 @@ A full-featured cryptographic toolkit with a **Rust core**, **Python bindings**,
 | **Secure memory** | Zeroize-on-drop `SecureBytes` for sensitive data |
 | **WASM** | Browser-ready cryptographic module (AES, ChaCha20, Ed25519, X25519, Argon2) |
 | **Packaging** | Cross-platform packaging (deb, rpm, Arch, AppImage, macOS, wheel) |
-| **Interfaces** | Rust CLI, Python CLI (Click), PySide6 GUI (13 views), FastAPI web, WASM |
+| **Interfaces** | Rust CLI, Python CLI (Click), PySide6 GUI (14 views), FastAPI web, WASM |
 
 ---
 
@@ -65,8 +65,8 @@ A full-featured cryptographic toolkit with a **Rust core**, **Python bindings**,
 ### One-Command Launch
 
 ```bash
-git clone https://github.com/James-HoneyBadger/HB_Zayfer.git
-cd HB_Zayfer
+git clone https://github.com/James-HoneyBadger/Zayfer_Vault.git
+cd Zayfer_Vault
 ./run.sh              # Creates venv, installs deps, builds, launches GUI
 ./run.sh web          # Web server
 ./run.sh cli --help   # CLI commands
@@ -241,7 +241,7 @@ ks.add_contact("Alice", email="alice@example.com")
 ## Project Layout
 
 ```
-HB_Zayfer/
+Zayfer_Vault/
 ├── Cargo.toml                 # Workspace root (version defined here)
 ├── pyproject.toml              # Python/Maturin config
 ├── CHANGELOG.md                # Release history
@@ -283,9 +283,9 @@ HB_Zayfer/
 │       ├── _native.pyi         # Type stubs (PEP 561)
 │       ├── py.typed            # PEP 561 marker
 │       ├── cli.py              # Click CLI
-│       ├── gui/                # PySide6 desktop app (13 views + 11 support modules)
+│       ├── gui/                # PySide6 desktop app (14 views + 11 support modules)
 │       │   ├── app.py              # Application entry point
-│       │   ├── main_window.py      # Main window + sidebar (13 views)
+│       │   ├── main_window.py      # Main window + sidebar (14 views)
 │       │   ├── encrypt_view.py     # Encrypt view
 │       │   ├── decrypt_view.py     # Decrypt view
 │       │   ├── keygen_view.py      # Key generation view
@@ -374,7 +374,7 @@ cargo test --workspace && pytest tests/python/ -v
 | **[docs/USER_GUIDE.md](docs/USER_GUIDE.md)** | Comprehensive user manual | End users |
 | **[docs/SECURE_COMMUNICATIONS.md](docs/SECURE_COMMUNICATIONS.md)** | Encryption and decryption practices tutorial | Security-conscious users |
 | **[docs/CLI.md](docs/CLI.md)** | Complete CLI reference (20+ commands) | CLI users |
-| **[docs/WEB_GUI.md](docs/WEB_GUI.md)** | Desktop GUI (13 views) and web interface guide | GUI users |
+| **[docs/WEB_GUI.md](docs/WEB_GUI.md)** | Desktop GUI (14 views) and web interface guide | GUI users |
 | **[docs/PYTHON_API.md](docs/PYTHON_API.md)** | Python API reference (55+ functions, 6 classes) | Developers |
 | **[docs/RUST_API.md](docs/RUST_API.md)** | Rust API reference (20 modules) | Rust developers |
 | **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** | System architecture overview | Developers |

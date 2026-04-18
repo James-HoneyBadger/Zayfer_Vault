@@ -23,8 +23,8 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 source "$HOME/.cargo/env"
 
 # 2. Clone and launch
-git clone https://github.com/James-HoneyBadger/HB_Zayfer.git
-cd HB_Zayfer
+git clone https://github.com/James-HoneyBadger/Zayfer_Vault.git
+cd Zayfer_Vault
 ./run.sh      # Handles venv, deps, native build, and launches the GUI
 ```
 
@@ -36,8 +36,8 @@ The `run.sh` script auto-detects what's missing and installs/builds as needed.
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 source "$HOME/.cargo/env"
 
-git clone https://github.com/James-HoneyBadger/HB_Zayfer.git
-cd HB_Zayfer
+git clone https://github.com/James-HoneyBadger/Zayfer_Vault.git
+cd Zayfer_Vault
 
 python3 -m venv .venv
 source .venv/bin/activate  # Linux/macOS
@@ -110,10 +110,11 @@ hb-zayfer-gui
 
 ### GUI Quick Tour
 
-The GUI has **13 sidebar views** with keyboard shortcuts:
+The GUI has **14 sidebar views** with keyboard shortcuts:
 
 | View | Shortcut | What It Does |
 |------|----------|--------------|
+| 🏠 **Home** | — | Overview dashboard with quick actions and onboarding guidance |
 | 🔐 **Encrypt** | `Alt+1` | Encrypt files or text — drag-and-drop supported |
 | 🔓 **Decrypt** | `Alt+2` | Decrypt `.hbzf` files or base64 text |
 | 🔑 **Key Gen** | `Alt+3` | Generate key pairs with password strength feedback |
@@ -125,7 +126,7 @@ The GUI has **13 sidebar views** with keyboard shortcuts:
 | 💬 **Messaging** | `Alt+9` | Secure end-to-end encrypted messaging |
 | 📱 **QR Exchange** | — | Share public keys via QR code URIs |
 | ⚙️ **Settings** | — | Default algorithm, theme, preferences |
-| 📋 **Audit Log** | — | Browse and verify the audit trail |
+| 📋 **Audit Log** | `Alt+0` | Browse and verify the audit trail |
 | 💾 **Backup** | — | Create, verify, and restore keystore backups |
 
 **Tips:**

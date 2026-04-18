@@ -18,9 +18,9 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+use crate::aes_gcm;
 use crate::error::{HbError, HbResult};
 use crate::kdf::{self, KdfParams};
-use crate::aes_gcm;
 
 /// Algorithm type for a stored key.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -152,8 +152,8 @@ impl KeyStore {
         if let Ok(custom) = std::env::var("HB_ZAYFER_HOME") {
             return Self::open(PathBuf::from(custom));
         }
-        let home = dirs::home_dir()
-            .ok_or_else(|| HbError::Io("Home directory not found".into()))?;
+        let home =
+            dirs::home_dir().ok_or_else(|| HbError::Io("Home directory not found".into()))?;
         Self::open(home.join(".hb_zayfer"))
     }
 
@@ -277,7 +277,10 @@ impl KeyStore {
         envelope.extend_from_slice(&nonce);
         envelope.extend_from_slice(&ciphertext);
 
-        let key_path = self.base_path.join("keys/private").join(format!("{fingerprint}.key"));
+        let key_path = self
+            .base_path
+            .join("keys/private")
+            .join(format!("{fingerprint}.key"));
         fs::write(&key_path, &envelope)?;
 
         // Set file permissions (Unix only)
@@ -289,16 +292,20 @@ impl KeyStore {
         }
 
         // Update or create index entry
-        let entry = self.index.keys.entry(fingerprint.to_string()).or_insert_with(|| KeyMetadata {
-            fingerprint: fingerprint.to_string(),
-            algorithm: algorithm.clone(),
-            label: label.to_string(),
-            created_at: Utc::now(),
-            has_private: false,
-            has_public: false,
-            allowed_usages: None,
-            expires_at: None,
-        });
+        let entry = self
+            .index
+            .keys
+            .entry(fingerprint.to_string())
+            .or_insert_with(|| KeyMetadata {
+                fingerprint: fingerprint.to_string(),
+                algorithm: algorithm.clone(),
+                label: label.to_string(),
+                created_at: Utc::now(),
+                has_private: false,
+                has_public: false,
+                allowed_usages: None,
+                expires_at: None,
+            });
         entry.has_private = true;
         entry.algorithm = algorithm;
         if !label.is_empty() {
@@ -317,19 +324,26 @@ impl KeyStore {
         algorithm: KeyAlgorithm,
         label: &str,
     ) -> HbResult<()> {
-        let key_path = self.base_path.join("keys/public").join(format!("{fingerprint}.pub"));
+        let key_path = self
+            .base_path
+            .join("keys/public")
+            .join(format!("{fingerprint}.pub"));
         fs::write(&key_path, key_bytes)?;
 
-        let entry = self.index.keys.entry(fingerprint.to_string()).or_insert_with(|| KeyMetadata {
-            fingerprint: fingerprint.to_string(),
-            algorithm: algorithm.clone(),
-            label: label.to_string(),
-            created_at: Utc::now(),
-            has_private: false,
-            has_public: false,
-            allowed_usages: None,
-            expires_at: None,
-        });
+        let entry = self
+            .index
+            .keys
+            .entry(fingerprint.to_string())
+            .or_insert_with(|| KeyMetadata {
+                fingerprint: fingerprint.to_string(),
+                algorithm: algorithm.clone(),
+                label: label.to_string(),
+                created_at: Utc::now(),
+                has_private: false,
+                has_public: false,
+                allowed_usages: None,
+                expires_at: None,
+            });
         entry.has_public = true;
         entry.algorithm = algorithm;
         if !label.is_empty() {
@@ -344,7 +358,10 @@ impl KeyStore {
     ///
     /// Supports both v1 (legacy: no header) and v2 (versioned with embedded KDF params).
     pub fn load_private_key(&self, fingerprint: &str, passphrase: &[u8]) -> HbResult<Vec<u8>> {
-        let key_path = self.base_path.join("keys/private").join(format!("{fingerprint}.key"));
+        let key_path = self
+            .base_path
+            .join("keys/private")
+            .join(format!("{fingerprint}.key"));
         if !key_path.exists() {
             return Err(HbError::KeyNotFound(fingerprint.to_string()));
         }
@@ -352,41 +369,46 @@ impl KeyStore {
         let envelope = fs::read(&key_path)?;
 
         // Detect envelope version
-        let (kdf_params, salt, nonce, ciphertext) = if !envelope.is_empty() && envelope[0] == Self::KEY_ENVELOPE_VERSION {
-            // V2 envelope: version(1) + kdf_id(1) + kdf_params(12) + salt(16) + nonce(12) + ct
-            if envelope.len() < 1 + 1 + 12 + 16 + 12 {
-                return Err(HbError::InvalidFormat("V2 key envelope too short".into()));
-            }
-            let kdf_id = envelope[1];
-            let kdf_param_bytes = &envelope[2..14];
-            let kdf_p = match kdf::KdfAlgorithm::from_id(kdf_id)? {
-                kdf::KdfAlgorithm::Argon2id => {
-                    let m = u32::from_le_bytes(kdf_param_bytes[0..4].try_into().unwrap());
-                    let t = u32::from_le_bytes(kdf_param_bytes[4..8].try_into().unwrap());
-                    let p = u32::from_le_bytes(kdf_param_bytes[8..12].try_into().unwrap());
-                    KdfParams::Argon2id(kdf::Argon2Params { m_cost: m, t_cost: t, p_cost: p })
+        let (kdf_params, salt, nonce, ciphertext) =
+            if !envelope.is_empty() && envelope[0] == Self::KEY_ENVELOPE_VERSION {
+                // V2 envelope: version(1) + kdf_id(1) + kdf_params(12) + salt(16) + nonce(12) + ct
+                if envelope.len() < 1 + 1 + 12 + 16 + 12 {
+                    return Err(HbError::InvalidFormat("V2 key envelope too short".into()));
                 }
-                kdf::KdfAlgorithm::Scrypt => {
-                    let log_n = kdf_param_bytes[0];
-                    let r = u32::from_le_bytes(kdf_param_bytes[4..8].try_into().unwrap());
-                    let p = u32::from_le_bytes(kdf_param_bytes[8..12].try_into().unwrap());
-                    KdfParams::Scrypt(kdf::ScryptParams { log_n, r, p })
+                let kdf_id = envelope[1];
+                let kdf_param_bytes = &envelope[2..14];
+                let kdf_p = match kdf::KdfAlgorithm::from_id(kdf_id)? {
+                    kdf::KdfAlgorithm::Argon2id => {
+                        let m = u32::from_le_bytes(kdf_param_bytes[0..4].try_into().unwrap());
+                        let t = u32::from_le_bytes(kdf_param_bytes[4..8].try_into().unwrap());
+                        let p = u32::from_le_bytes(kdf_param_bytes[8..12].try_into().unwrap());
+                        KdfParams::Argon2id(kdf::Argon2Params {
+                            m_cost: m,
+                            t_cost: t,
+                            p_cost: p,
+                        })
+                    }
+                    kdf::KdfAlgorithm::Scrypt => {
+                        let log_n = kdf_param_bytes[0];
+                        let r = u32::from_le_bytes(kdf_param_bytes[4..8].try_into().unwrap());
+                        let p = u32::from_le_bytes(kdf_param_bytes[8..12].try_into().unwrap());
+                        KdfParams::Scrypt(kdf::ScryptParams { log_n, r, p })
+                    }
+                };
+                let salt = &envelope[14..30];
+                let nonce = &envelope[30..42];
+                let ciphertext = &envelope[42..];
+                (kdf_p, salt, nonce, ciphertext)
+            } else {
+                // V1 (legacy) envelope: salt(16) + nonce(12) + ciphertext
+                if envelope.len() < 28 {
+                    return Err(HbError::InvalidFormat("Key file too short".into()));
                 }
+                let salt = &envelope[..16];
+                let nonce = &envelope[16..28];
+                let ciphertext = &envelope[28..];
+                (KdfParams::default(), salt, nonce, ciphertext)
             };
-            let salt = &envelope[14..30];
-            let nonce = &envelope[30..42];
-            let ciphertext = &envelope[42..];
-            (kdf_p, salt, nonce, ciphertext)
-        } else {
-            // V1 (legacy) envelope: salt(16) + nonce(12) + ciphertext
-            if envelope.len() < 28 {
-                return Err(HbError::InvalidFormat("Key file too short".into()));
-            }
-            let salt = &envelope[..16];
-            let nonce = &envelope[16..28];
-            let ciphertext = &envelope[28..];
-            (KdfParams::default(), salt, nonce, ciphertext)
-        };
 
         let enc_key = kdf::derive_key(passphrase, salt, &kdf_params)?;
 
@@ -396,7 +418,10 @@ impl KeyStore {
 
     /// Load a public key.
     pub fn load_public_key(&self, fingerprint: &str) -> HbResult<Vec<u8>> {
-        let key_path = self.base_path.join("keys/public").join(format!("{fingerprint}.pub"));
+        let key_path = self
+            .base_path
+            .join("keys/public")
+            .join(format!("{fingerprint}.pub"));
         if !key_path.exists() {
             return Err(HbError::KeyNotFound(fingerprint.to_string()));
         }
@@ -428,8 +453,14 @@ impl KeyStore {
     /// Private key files are securely shredded (overwritten before deletion)
     /// to prevent recovery of key material from disk.
     pub fn delete_key(&mut self, fingerprint: &str) -> HbResult<()> {
-        let priv_path = self.base_path.join("keys/private").join(format!("{fingerprint}.key"));
-        let pub_path = self.base_path.join("keys/public").join(format!("{fingerprint}.pub"));
+        let priv_path = self
+            .base_path
+            .join("keys/private")
+            .join(format!("{fingerprint}.key"));
+        let pub_path = self
+            .base_path
+            .join("keys/public")
+            .join(format!("{fingerprint}.pub"));
 
         if priv_path.exists() {
             // Securely shred private key files to prevent recovery
@@ -522,7 +553,12 @@ impl KeyStore {
     // -- Contact management --
 
     /// Add a contact.
-    pub fn add_contact(&mut self, name: &str, email: Option<&str>, notes: Option<&str>) -> HbResult<()> {
+    pub fn add_contact(
+        &mut self,
+        name: &str,
+        email: Option<&str>,
+        notes: Option<&str>,
+    ) -> HbResult<()> {
         if self.contacts.contacts.contains_key(name) {
             return Err(HbError::ContactAlreadyExists(name.to_string()));
         }
@@ -701,13 +737,15 @@ mod tests {
     #[test]
     fn test_contacts() {
         let (_dir, mut ks) = temp_keystore();
-        ks.add_contact("Alice", Some("alice@example.com"), None).unwrap();
+        ks.add_contact("Alice", Some("alice@example.com"), None)
+            .unwrap();
         ks.add_contact("Bob", None, Some("Bob's note")).unwrap();
 
         assert_eq!(ks.list_contacts().len(), 2);
         assert!(ks.get_contact("Alice").is_some());
 
-        ks.associate_key_with_contact("Alice", "fingerprint123").unwrap();
+        ks.associate_key_with_contact("Alice", "fingerprint123")
+            .unwrap();
         let alice = ks.get_contact("Alice").unwrap();
         assert_eq!(alice.key_fingerprints, vec!["fingerprint123"]);
 

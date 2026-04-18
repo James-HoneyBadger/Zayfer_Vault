@@ -52,18 +52,16 @@ pub fn shred_file<P: AsRef<Path>>(path: P, passes: u32) -> HbResult<()> {
     }
 
     if !path.is_file() {
-        return Err(HbError::Io(format!("Not a regular file: {}", path.display())));
+        return Err(HbError::Io(format!(
+            "Not a regular file: {}",
+            path.display()
+        )));
     }
 
-    let file_len = fs::metadata(path)
-        .map_err(io_err)?
-        .len();
+    let file_len = fs::metadata(path).map_err(io_err)?.len();
 
     // Open in write mode without truncation so we overwrite existing content.
-    let mut file = OpenOptions::new()
-        .write(true)
-        .open(path)
-        .map_err(io_err)?;
+    let mut file = OpenOptions::new().write(true).open(path).map_err(io_err)?;
 
     let mut rng = OsRng;
     let mut buf = vec![0u8; BUF_SIZE];

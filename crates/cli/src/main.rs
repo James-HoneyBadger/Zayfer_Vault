@@ -2,17 +2,16 @@ use std::fs;
 use std::io::{self, Read, Write};
 use std::path::PathBuf;
 
-use anyhow::{Context, Result, bail};
-use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
+use anyhow::{bail, Context, Result};
+use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
-use clap_complete::{Shell, generate};
+use clap_complete::{generate, Shell};
 use dialoguer::{Confirm, Input, Password};
 use indicatif::{ProgressBar, ProgressStyle};
 
 use hb_zayfer_core::{
-    AuditLogger, AuditOperation, Config, KeyAlgorithm, KeyStore, KeyWrapping, SymmetricAlgorithm,
-    ed25519, format, kdf, openpgp, passgen, rsa, shamir, shred, x25519,
-    keystore,
+    ed25519, format, kdf, keystore, openpgp, passgen, rsa, shamir, shred, x25519, AuditLogger,
+    AuditOperation, Config, KeyAlgorithm, KeyStore, KeyWrapping, SymmetricAlgorithm,
 };
 use serde_json::json;
 
@@ -399,8 +398,7 @@ impl From<SymAlgoChoice> for SymmetricAlgorithm {
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
-    let mut keystore = KeyStore::open_default()
-        .context("Failed to open keystore")?;
+    let mut keystore = KeyStore::open_default().context("Failed to open keystore")?;
 
     match cli.command {
         Commands::Keygen {
@@ -417,7 +415,16 @@ fn main() -> Result<()> {
             password,
             passphrase_file,
             compress,
-        } => cmd_encrypt(&keystore, &input, &output, recipient, algorithm.into(), password, passphrase_file, compress)?,
+        } => cmd_encrypt(
+            &keystore,
+            &input,
+            &output,
+            recipient,
+            algorithm.into(),
+            password,
+            passphrase_file,
+            compress,
+        )?,
 
         Commands::Decrypt {
             input,
@@ -427,9 +434,7 @@ fn main() -> Result<()> {
             passphrase_file,
         } => cmd_decrypt(&keystore, &input, &output, key, passphrase, passphrase_file)?,
 
-        Commands::Sign { input, key, output } => {
-            cmd_sign(&keystore, &input, &key, &output)?
-        }
+        Commands::Sign { input, key, output } => cmd_sign(&keystore, &input, &key, &output)?,
 
         Commands::Verify {
             input,
@@ -444,12 +449,12 @@ fn main() -> Result<()> {
                 format,
                 output,
             } => cmd_keys_export(&keystore, &fingerprint, &format, output)?,
-            KeysAction::Import { file, label, algorithm } => {
-                cmd_keys_import(&mut keystore, &file, label, algorithm)?
-            }
-            KeysAction::Delete { fingerprint } => {
-                cmd_keys_delete(&mut keystore, &fingerprint)?
-            }
+            KeysAction::Import {
+                file,
+                label,
+                algorithm,
+            } => cmd_keys_import(&mut keystore, &file, label, algorithm)?,
+            KeysAction::Delete { fingerprint } => cmd_keys_delete(&mut keystore, &fingerprint)?,
         },
 
         Commands::Contacts { action } => match action {
@@ -457,9 +462,7 @@ fn main() -> Result<()> {
             ContactsAction::Add { name, key, email } => {
                 cmd_contacts_add(&mut keystore, &name, key, email)?
             }
-            ContactsAction::Remove { name } => {
-                cmd_contacts_remove(&mut keystore, &name)?
-            }
+            ContactsAction::Remove { name } => cmd_contacts_remove(&mut keystore, &name)?,
         },
 
         Commands::Backup { action } => match action {
@@ -471,9 +474,7 @@ fn main() -> Result<()> {
             BackupAction::Restore { input, passphrase } => {
                 cmd_backup_restore(&keystore, &input, passphrase)?
             }
-            BackupAction::Verify { input, passphrase } => {
-                cmd_backup_verify(&input, passphrase)?
-            }
+            BackupAction::Verify { input, passphrase } => cmd_backup_verify(&input, passphrase)?,
         },
 
         Commands::Audit { action } => match action {
@@ -521,10 +522,7 @@ fn main() -> Result<()> {
                     let count = shred::shred_directory(path, passes)
                         .with_context(|| format!("shredding directory {path_str}"))?;
                     if cli.json {
-                        println!(
-                            "{}",
-                            json!({ "path": path_str, "files_shredded": count })
-                        );
+                        println!("{}", json!({ "path": path_str, "files_shredded": count }));
                     } else {
                         println!("Shredded {} files in {}", count, path_str);
                     }
@@ -622,10 +620,7 @@ fn main() -> Result<()> {
                         })
                     );
                 } else {
-                    println!(
-                        "Split into {} shares (threshold {})",
-                        shares, threshold
-                    );
+                    println!("Split into {} shares (threshold {})", shares, threshold);
                     for s in &share_list {
                         println!("{}", hex::encode(shamir::encode_share(s)));
                     }
@@ -656,6 +651,7 @@ fn main() -> Result<()> {
 // -- Command implementations --
 
 /// Store a generated key-pair and print + audit the result.
+#[allow(clippy::too_many_arguments)]
 fn store_and_report(
     keystore: &mut KeyStore,
     fp: &str,
@@ -667,7 +663,13 @@ fn store_and_report(
     label: &str,
     pb: &ProgressBar,
 ) -> Result<()> {
-    keystore.store_private_key(fp, priv_bytes, passphrase.as_bytes(), algorithm.clone(), label)?;
+    keystore.store_private_key(
+        fp,
+        priv_bytes,
+        passphrase.as_bytes(),
+        algorithm.clone(),
+        label,
+    )?;
     keystore.store_public_key(fp, pub_bytes, algorithm.clone(), label)?;
     pb.finish_with_message(format!("{algo_display} key generated"));
     println!("Fingerprint: {fp}");
@@ -697,10 +699,7 @@ fn cmd_keygen(
     };
 
     let pb = ProgressBar::new_spinner();
-    pb.set_style(
-        ProgressStyle::default_spinner()
-            .template("{spinner:.green} {msg}")?,
-    );
+    pb.set_style(ProgressStyle::default_spinner().template("{spinner:.green} {msg}")?);
     pb.set_message("Generating key pair...");
     pb.enable_steady_tick(std::time::Duration::from_millis(100));
 
@@ -710,28 +709,68 @@ fn cmd_keygen(
             let fp = rsa::fingerprint(&kp.public_key)?;
             let priv_pem = rsa::export_private_key_pem(&kp.private_key)?;
             let pub_pem = rsa::export_public_key_pem(&kp.public_key)?;
-            store_and_report(keystore, &fp, priv_pem.as_bytes(), pub_pem.as_bytes(), &passphrase, KeyAlgorithm::Rsa2048, "RSA-2048", label, &pb)?;
+            store_and_report(
+                keystore,
+                &fp,
+                priv_pem.as_bytes(),
+                pub_pem.as_bytes(),
+                &passphrase,
+                KeyAlgorithm::Rsa2048,
+                "RSA-2048",
+                label,
+                &pb,
+            )?;
         }
         AlgorithmChoice::Rsa4096 => {
             let kp = rsa::generate_keypair(rsa::RsaKeySize::Rsa4096)?;
             let fp = rsa::fingerprint(&kp.public_key)?;
             let priv_pem = rsa::export_private_key_pem(&kp.private_key)?;
             let pub_pem = rsa::export_public_key_pem(&kp.public_key)?;
-            store_and_report(keystore, &fp, priv_pem.as_bytes(), pub_pem.as_bytes(), &passphrase, KeyAlgorithm::Rsa4096, "RSA-4096", label, &pb)?;
+            store_and_report(
+                keystore,
+                &fp,
+                priv_pem.as_bytes(),
+                pub_pem.as_bytes(),
+                &passphrase,
+                KeyAlgorithm::Rsa4096,
+                "RSA-4096",
+                label,
+                &pb,
+            )?;
         }
         AlgorithmChoice::Ed25519 => {
             let kp = ed25519::generate_keypair();
             let fp = ed25519::fingerprint(&kp.verifying_key);
             let priv_pem = ed25519::export_signing_key_pem(&kp.signing_key)?;
             let pub_pem = ed25519::export_verifying_key_pem(&kp.verifying_key)?;
-            store_and_report(keystore, &fp, priv_pem.as_bytes(), pub_pem.as_bytes(), &passphrase, KeyAlgorithm::Ed25519, "Ed25519", label, &pb)?;
+            store_and_report(
+                keystore,
+                &fp,
+                priv_pem.as_bytes(),
+                pub_pem.as_bytes(),
+                &passphrase,
+                KeyAlgorithm::Ed25519,
+                "Ed25519",
+                label,
+                &pb,
+            )?;
         }
         AlgorithmChoice::X25519 => {
             let kp = x25519::generate_keypair();
             let fp = x25519::fingerprint(&kp.public_key);
             let priv_raw = x25519::export_secret_key_raw(&kp.secret_key);
             let pub_raw = x25519::export_public_key_raw(&kp.public_key);
-            store_and_report(keystore, &fp, &priv_raw, &pub_raw, &passphrase, KeyAlgorithm::X25519, "X25519", label, &pb)?;
+            store_and_report(
+                keystore,
+                &fp,
+                &priv_raw,
+                &pub_raw,
+                &passphrase,
+                KeyAlgorithm::X25519,
+                "X25519",
+                label,
+                &pb,
+            )?;
         }
         AlgorithmChoice::Pgp => {
             let user_id: String = Input::new()
@@ -742,7 +781,17 @@ fn cmd_keygen(
             let fp = hb_zayfer_core::openpgp::cert_fingerprint(&cert);
             let pub_armor = hb_zayfer_core::openpgp::export_public_key(&cert)?;
             let sec_armor = hb_zayfer_core::openpgp::export_secret_key(&cert)?;
-            store_and_report(keystore, &fp, sec_armor.as_bytes(), pub_armor.as_bytes(), &passphrase, KeyAlgorithm::Pgp, "PGP", label, &pb)?;
+            store_and_report(
+                keystore,
+                &fp,
+                sec_armor.as_bytes(),
+                pub_armor.as_bytes(),
+                &passphrase,
+                KeyAlgorithm::Pgp,
+                "PGP",
+                label,
+                &pb,
+            )?;
             println!("User ID: {user_id}");
         }
     }
@@ -750,6 +799,7 @@ fn cmd_keygen(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn cmd_encrypt(
     keystore: &KeyStore,
     input: &str,
@@ -764,7 +814,8 @@ fn cmd_encrypt(
 
     if use_password {
         // Password-based encryption
-        let password = resolve_passphrase(None, passphrase_file, "Enter encryption password", true)?;
+        let password =
+            resolve_passphrase(None, passphrase_file, "Enter encryption password", true)?;
 
         let kdf_params = kdf::KdfParams::default();
         let salt = kdf::generate_salt(16);
@@ -819,8 +870,7 @@ fn cmd_encrypt(
             KeyAlgorithm::X25519 => {
                 let pub_bytes = keystore.load_public_key(fp)?;
                 let their_public = x25519::import_public_key_raw(&pub_bytes)?;
-                let (eph_public, symmetric_key) =
-                    x25519::encrypt_key_agreement(&their_public)?;
+                let (eph_public, symmetric_key) = x25519::encrypt_key_agreement(&their_public)?;
 
                 let params = format::EncryptParams {
                     algorithm,
@@ -896,7 +946,10 @@ fn cmd_encrypt(
                     Some("source=cli"),
                 );
             }
-            _ => bail!("Key algorithm {:?} not supported for encryption", metadata.algorithm),
+            _ => bail!(
+                "Key algorithm {:?} not supported for encryption",
+                metadata.algorithm
+            ),
         }
     } else {
         bail!("Specify --recipient for public-key encryption or --password for password-based encryption");
@@ -919,19 +972,36 @@ fn cmd_decrypt(
 
     let symmetric_key = match header.wrapping {
         KeyWrapping::Password => {
-            let password = resolve_passphrase(passphrase, passphrase_file, "Enter decryption password", false)?;
-            let salt = header.kdf_salt.as_ref()
+            let password = resolve_passphrase(
+                passphrase,
+                passphrase_file,
+                "Enter decryption password",
+                false,
+            )?;
+            let salt = header
+                .kdf_salt
+                .as_ref()
                 .ok_or_else(|| anyhow::anyhow!("Missing KDF salt in file"))?;
-            let kdf_params = header.kdf_params.as_ref()
+            let kdf_params = header
+                .kdf_params
+                .as_ref()
                 .ok_or_else(|| anyhow::anyhow!("Missing KDF params in file"))?;
             kdf::derive_key(password.as_bytes(), salt, kdf_params)?
         }
         KeyWrapping::X25519Ecdh => {
-            let fp = key_fp.ok_or_else(|| anyhow::anyhow!("Specify --key for X25519 decryption"))?;
-            let passphrase_str = resolve_passphrase(None, passphrase_file.clone(), "Enter passphrase for private key", false)?;
+            let fp =
+                key_fp.ok_or_else(|| anyhow::anyhow!("Specify --key for X25519 decryption"))?;
+            let passphrase_str = resolve_passphrase(
+                None,
+                passphrase_file.clone(),
+                "Enter passphrase for private key",
+                false,
+            )?;
             let priv_bytes = keystore.load_private_key(&fp, passphrase_str.as_bytes())?;
             let secret = x25519::import_secret_key_raw(&priv_bytes)?;
-            let eph_pub_bytes = header.ephemeral_public.as_ref()
+            let eph_pub_bytes = header
+                .ephemeral_public
+                .as_ref()
                 .ok_or_else(|| anyhow::anyhow!("Missing ephemeral public key"))?;
             let eph_pub = x25519::import_public_key_raw(eph_pub_bytes)?;
             let sym_key = x25519::decrypt_key_agreement(&secret, &eph_pub)?;
@@ -939,11 +1009,18 @@ fn cmd_decrypt(
         }
         KeyWrapping::RsaOaep => {
             let fp = key_fp.ok_or_else(|| anyhow::anyhow!("Specify --key for RSA decryption"))?;
-            let passphrase_str = resolve_passphrase(None, passphrase_file, "Enter passphrase for private key", false)?;
+            let passphrase_str = resolve_passphrase(
+                None,
+                passphrase_file,
+                "Enter passphrase for private key",
+                false,
+            )?;
             let priv_bytes = keystore.load_private_key(&fp, passphrase_str.as_bytes())?;
             let priv_pem = String::from_utf8(priv_bytes)?;
             let rsa_priv = rsa::import_private_key_pem(&priv_pem)?;
-            let wrapped = header.wrapped_key.as_ref()
+            let wrapped = header
+                .wrapped_key
+                .as_ref()
                 .ok_or_else(|| anyhow::anyhow!("Missing wrapped key"))?;
             rsa::decrypt(&rsa_priv, wrapped)?
         }
@@ -1001,7 +1078,10 @@ fn cmd_sign(keystore: &KeyStore, input: &str, key_fp: &str, output: &str) -> Res
             let cert = openpgp::import_cert(&armor)?;
             openpgp::sign_message(&message, &cert)?
         }
-        _ => bail!("Algorithm {:?} not supported for signing", metadata.algorithm),
+        _ => bail!(
+            "Algorithm {:?} not supported for signing",
+            metadata.algorithm
+        ),
     };
 
     write_output(output, &signature)?;
@@ -1043,7 +1123,10 @@ fn cmd_verify(keystore: &KeyStore, input: &str, sig_file: &str, key_fp: &str) ->
             let (_content, is_valid) = openpgp::verify_message(&signature, &[cert])?;
             is_valid
         }
-        _ => bail!("Algorithm {:?} not supported for verification", metadata.algorithm),
+        _ => bail!(
+            "Algorithm {:?} not supported for verification",
+            metadata.algorithm
+        ),
     };
 
     if valid {
@@ -1088,7 +1171,10 @@ fn cmd_keys_list(keystore: &KeyStore, as_json: bool) -> Result<()> {
         return Ok(());
     }
 
-    println!("{:<20} {:<10} {:<8} {:<8} {}", "FINGERPRINT", "ALGORITHM", "PRIVATE", "PUBLIC", "LABEL");
+    println!(
+        "{:<20} {:<10} {:<8} {:<8} LABEL",
+        "FINGERPRINT", "ALGORITHM", "PRIVATE", "PUBLIC"
+    );
     println!("{}", "-".repeat(70));
     for k in keys {
         let fp_short = if k.fingerprint.len() > 16 {
@@ -1126,9 +1212,7 @@ fn cmd_keys_export(
                 format!("{}\n", BASE64.encode(&pub_bytes)).into_bytes()
             }
         }
-        "base64" | "b64" => {
-            format!("{}\n", BASE64.encode(&pub_bytes)).into_bytes()
-        }
+        "base64" | "b64" => format!("{}\n", BASE64.encode(&pub_bytes)).into_bytes(),
         "hex" => {
             use std::fmt::Write;
             let mut s = String::with_capacity(pub_bytes.len() * 2 + 1);
@@ -1139,9 +1223,7 @@ fn cmd_keys_export(
             s.into_bytes()
         }
         "raw" | "bin" => pub_bytes.clone(),
-        _ => anyhow::bail!(
-            "Unknown format '{format}'. Supported: pem (default), base64, hex, raw"
-        ),
+        _ => anyhow::bail!("Unknown format '{format}'. Supported: pem (default), base64, hex, raw"),
     };
 
     match output {
@@ -1180,7 +1262,9 @@ fn cmd_keys_import(
             "ed25519" => KeyAlgorithm::Ed25519,
             "x25519" => KeyAlgorithm::X25519,
             "pgp" | "openpgp" => KeyAlgorithm::Pgp,
-            other => anyhow::bail!("Unknown algorithm '{other}'. Supported: rsa2048, rsa4096, ed25519, x25519, pgp"),
+            other => anyhow::bail!(
+                "Unknown algorithm '{other}'. Supported: rsa2048, rsa4096, ed25519, x25519, pgp"
+            ),
         }
     } else {
         // Auto-detect from file content
@@ -1192,8 +1276,6 @@ fn cmd_keys_import(
                     if text.starts_with("ssh-rsa") {
                         // Try to determine RSA key size from base64 payload length
                         KeyAlgorithm::Rsa4096 // default to 4096 for imported RSA
-                    } else if text.starts_with("ssh-ed25519") {
-                        KeyAlgorithm::Ed25519
                     } else {
                         KeyAlgorithm::Ed25519
                     }
@@ -1213,8 +1295,6 @@ fn cmd_keys_import(
                         } else {
                             KeyAlgorithm::Rsa4096 // fallback for unparseable RSA PEM
                         }
-                    } else if text.contains("ED25519") || text.contains("ed25519") {
-                        KeyAlgorithm::Ed25519
                     } else {
                         KeyAlgorithm::Ed25519
                     }
@@ -1259,7 +1339,7 @@ fn cmd_contacts_list(keystore: &KeyStore) -> Result<()> {
         return Ok(());
     }
 
-    println!("{:<20} {:<30} {}", "NAME", "EMAIL", "KEYS");
+    println!("{:<20} {:<30} KEYS", "NAME", "EMAIL");
     println!("{}", "-".repeat(60));
     for c in contacts {
         println!(
@@ -1313,11 +1393,7 @@ fn cmd_backup_create(
     Ok(())
 }
 
-fn cmd_backup_restore(
-    keystore: &KeyStore,
-    input: &str,
-    passphrase: Option<String>,
-) -> Result<()> {
+fn cmd_backup_restore(keystore: &KeyStore, input: &str, passphrase: Option<String>) -> Result<()> {
     let passphrase = match passphrase {
         Some(p) => p,
         None => Password::new()
@@ -1365,17 +1441,12 @@ fn cmd_audit_show(limit: usize) -> Result<()> {
         return Ok(());
     }
 
-    println!("{:<28} {:<80} {}", "TIMESTAMP", "OPERATION", "NOTE");
+    println!("{:<28} {:<80} NOTE", "TIMESTAMP", "OPERATION");
     println!("{}", "-".repeat(128));
     for entry in entries {
         let op = format!("{:?}", entry.operation);
         let note = entry.note.unwrap_or_else(|| "-".to_string());
-        println!(
-            "{:<28} {:<80} {}",
-            entry.timestamp.to_rfc3339(),
-            op,
-            note,
-        );
+        println!("{:<28} {:<80} {}", entry.timestamp.to_rfc3339(), op, note,);
     }
     Ok(())
 }
@@ -1434,7 +1505,7 @@ fn cmd_config_list() -> Result<()> {
         "progress",
         "verbosity",
     ];
-    println!("{:<25} {}", "KEY", "VALUE");
+    println!("{:<25} VALUE", "KEY");
     println!("{}", "-".repeat(50));
     for key in keys {
         let value = config.get(key).unwrap_or_else(|_| "<unset>".into());
@@ -1468,7 +1539,10 @@ fn cmd_inspect(file: &str) -> Result<()> {
     println!("{}", "-".repeat(50));
     println!("Format version:    {}", header.version);
     println!("Cipher:            {:?}", header.algorithm);
-    println!("Compression:       {}", if header.compressed { "enabled" } else { "none" });
+    println!(
+        "Compression:       {}",
+        if header.compressed { "enabled" } else { "none" }
+    );
     println!("Key wrapping:      {:?}", header.wrapping);
     if let Some(ref kdf_algo) = header.kdf_algorithm {
         println!("KDF:               {:?}", kdf_algo);
@@ -1483,8 +1557,8 @@ fn cmd_inspect(file: &str) -> Result<()> {
         let ratio = encrypted_size as f64 / header.plaintext_len as f64;
         println!("Overhead ratio:    {:.2}x", ratio);
     }
-    if header.wrapped_key.is_some() {
-        println!("Wrapped key:       present ({} bytes)", header.wrapped_key.as_ref().unwrap().len());
+    if let Some(wrapped_key) = &header.wrapped_key {
+        println!("Wrapped key:       present ({} bytes)", wrapped_key.len());
     }
     if header.ephemeral_public.is_some() {
         println!("Ephemeral pubkey:  present (32 bytes)");
@@ -1531,7 +1605,7 @@ fn resolve_passphrase(
     if confirm {
         Ok(Password::new()
             .with_prompt(prompt)
-            .with_confirmation(&format!("Confirm {}", prompt.to_lowercase()), "Don't match")
+            .with_confirmation(format!("Confirm {}", prompt.to_lowercase()), "Don't match")
             .interact()?)
     } else {
         Ok(Password::new().with_prompt(prompt).interact()?)
@@ -1591,7 +1665,12 @@ fn cmd_encrypt_dir(
         return Ok(());
     }
 
-    println!("Encrypting {} files from {} → {}", files.len(), input_dir, output_dir);
+    println!(
+        "Encrypting {} files from {} → {}",
+        files.len(),
+        input_dir,
+        output_dir
+    );
     let pb = ProgressBar::new(files.len() as u64);
     pb.set_style(
         ProgressStyle::default_bar()
@@ -1605,9 +1684,10 @@ fn cmd_encrypt_dir(
 
     for file in &files {
         let relative = file.strip_prefix(in_path).unwrap_or(file);
-        let dest = out_path.join(relative).with_extension(
-            format!("{}.hbzf", file.extension().unwrap_or_default().to_string_lossy()),
-        );
+        let dest = out_path.join(relative).with_extension(format!(
+            "{}.hbzf",
+            file.extension().unwrap_or_default().to_string_lossy()
+        ));
 
         if let Some(parent) = dest.parent() {
             fs::create_dir_all(parent)?;
@@ -1615,8 +1695,8 @@ fn cmd_encrypt_dir(
 
         let kdf_params = kdf::KdfParams::default();
         let salt = kdf::generate_salt(16);
-        let key = kdf::derive_key(passphrase.as_bytes(), &salt, &kdf_params)
-            .context("KDF failed")?;
+        let key =
+            kdf::derive_key(passphrase.as_bytes(), &salt, &kdf_params).context("KDF failed")?;
 
         let params = format::EncryptParams {
             algorithm,
@@ -1647,7 +1727,10 @@ fn cmd_encrypt_dir(
     }
     pb.finish_and_clear();
 
-    println!("Done: {success} encrypted, {failed} failed (of {} total)", files.len());
+    println!(
+        "Done: {success} encrypted, {failed} failed (of {} total)",
+        files.len()
+    );
     audit_log(
         AuditOperation::FileEncrypted {
             algorithm: format!("{algorithm:?}"),
@@ -1676,14 +1759,19 @@ fn cmd_decrypt_dir(
     // Collect .hbzf files only
     let mut files: Vec<PathBuf> = Vec::new();
     collect_files(in_path, &mut files)?;
-    files.retain(|f| f.extension().map_or(false, |e| e == "hbzf"));
+    files.retain(|f| f.extension().is_some_and(|e| e == "hbzf"));
 
     if files.is_empty() {
         println!("No .hbzf files found in {input_dir}");
         return Ok(());
     }
 
-    println!("Decrypting {} files from {} → {}", files.len(), input_dir, output_dir);
+    println!(
+        "Decrypting {} files from {} → {}",
+        files.len(),
+        input_dir,
+        output_dir
+    );
     let pb = ProgressBar::new(files.len() as u64);
     pb.set_style(
         ProgressStyle::default_bar()
@@ -1709,9 +1797,13 @@ fn cmd_decrypt_dir(
             let header = format::read_header(&mut reader)?;
             let sym_key = match header.wrapping {
                 KeyWrapping::Password => {
-                    let kp = header.kdf_params.as_ref()
+                    let kp = header
+                        .kdf_params
+                        .as_ref()
                         .ok_or_else(|| anyhow::anyhow!("Missing KDF params"))?;
-                    let salt = header.kdf_salt.as_ref()
+                    let salt = header
+                        .kdf_salt
+                        .as_ref()
                         .ok_or_else(|| anyhow::anyhow!("Missing salt"))?;
                     kdf::derive_key(passphrase.as_bytes(), salt, kp)?
                 }
@@ -1731,7 +1823,10 @@ fn cmd_decrypt_dir(
     }
     pb.finish_and_clear();
 
-    println!("Done: {success} decrypted, {failed} failed (of {} total)", files.len());
+    println!(
+        "Done: {success} decrypted, {failed} failed (of {} total)",
+        files.len()
+    );
     audit_log(
         AuditOperation::FileDecrypted {
             algorithm: "batch".to_string(),

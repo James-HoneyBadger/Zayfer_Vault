@@ -23,19 +23,54 @@ type HmacSha256 = Hmac<Sha256>;
 /// Types of operations that can be audited.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AuditOperation {
-    KeyGenerated { algorithm: String, fingerprint: String },
-    KeyImported { algorithm: String, fingerprint: String },
-    KeyExported { fingerprint: String },
-    KeyDeleted { fingerprint: String },
-    FileEncrypted { algorithm: String, filename: Option<String>, size_bytes: Option<u64> },
-    FileDecrypted { algorithm: String, filename: Option<String>, size_bytes: Option<u64> },
-    DataSigned { algorithm: String, fingerprint: String },
-    SignatureVerified { algorithm: String, fingerprint: String, valid: bool },
-    ContactAdded { name: String },
-    ContactDeleted { name: String },
-    BackupCreated { key_count: usize },
-    BackupRestored { key_count: usize },
-    ConfigModified { setting: String },
+    KeyGenerated {
+        algorithm: String,
+        fingerprint: String,
+    },
+    KeyImported {
+        algorithm: String,
+        fingerprint: String,
+    },
+    KeyExported {
+        fingerprint: String,
+    },
+    KeyDeleted {
+        fingerprint: String,
+    },
+    FileEncrypted {
+        algorithm: String,
+        filename: Option<String>,
+        size_bytes: Option<u64>,
+    },
+    FileDecrypted {
+        algorithm: String,
+        filename: Option<String>,
+        size_bytes: Option<u64>,
+    },
+    DataSigned {
+        algorithm: String,
+        fingerprint: String,
+    },
+    SignatureVerified {
+        algorithm: String,
+        fingerprint: String,
+        valid: bool,
+    },
+    ContactAdded {
+        name: String,
+    },
+    ContactDeleted {
+        name: String,
+    },
+    BackupCreated {
+        key_count: usize,
+    },
+    BackupRestored {
+        key_count: usize,
+    },
+    ConfigModified {
+        setting: String,
+    },
 }
 
 /// A single audit log entry.
@@ -88,7 +123,11 @@ impl AuditEntry {
     fn compute_hash(&self) -> String {
         let mut hasher = Sha256::new();
         hasher.update(self.timestamp.to_rfc3339().as_bytes());
-        hasher.update(serde_json::to_string(&self.operation).unwrap_or_default().as_bytes());
+        hasher.update(
+            serde_json::to_string(&self.operation)
+                .unwrap_or_default()
+                .as_bytes(),
+        );
         if let Some(prev) = &self.prev_hash {
             hasher.update(prev.as_bytes());
         }
@@ -107,10 +146,13 @@ impl AuditEntry {
 
     /// Compute the HMAC-SHA256 of this entry using an external key.
     fn compute_hmac(&self, key: &[u8]) -> String {
-        let mut mac = HmacSha256::new_from_slice(key)
-            .expect("HMAC accepts any key length");
+        let mut mac = HmacSha256::new_from_slice(key).expect("HMAC accepts any key length");
         mac.update(self.timestamp.to_rfc3339().as_bytes());
-        mac.update(serde_json::to_string(&self.operation).unwrap_or_default().as_bytes());
+        mac.update(
+            serde_json::to_string(&self.operation)
+                .unwrap_or_default()
+                .as_bytes(),
+        );
         if let Some(prev) = &self.prev_hash {
             mac.update(prev.as_bytes());
         }
@@ -127,10 +169,13 @@ impl AuditEntry {
         self.hmac.as_ref().map(|stored| {
             // Recompute the HMAC and use the hmac crate's constant-time
             // verify_slice to prevent timing side-channel attacks.
-            let mut mac = HmacSha256::new_from_slice(key)
-                .expect("HMAC accepts any key length");
+            let mut mac = HmacSha256::new_from_slice(key).expect("HMAC accepts any key length");
             mac.update(self.timestamp.to_rfc3339().as_bytes());
-            mac.update(serde_json::to_string(&self.operation).unwrap_or_default().as_bytes());
+            mac.update(
+                serde_json::to_string(&self.operation)
+                    .unwrap_or_default()
+                    .as_bytes(),
+            );
             if let Some(prev) = &self.prev_hash {
                 mac.update(prev.as_bytes());
             }
@@ -156,12 +201,18 @@ pub struct AuditLogger {
 impl AuditLogger {
     /// Create a new audit logger at the specified path.
     pub fn new(log_path: PathBuf) -> Self {
-        Self { log_path, hmac_key: None }
+        Self {
+            log_path,
+            hmac_key: None,
+        }
     }
 
     /// Create a new audit logger with an HMAC signing key.
     pub fn with_hmac_key(log_path: PathBuf, hmac_key: Vec<u8>) -> Self {
-        Self { log_path, hmac_key: Some(hmac_key) }
+        Self {
+            log_path,
+            hmac_key: Some(hmac_key),
+        }
     }
 
     /// Create an audit logger using the default location (~/.hb_zayfer/audit.log).
@@ -169,14 +220,13 @@ impl AuditLogger {
         let base_dir = dirs::home_dir()
             .ok_or_else(|| HbError::Config("Could not determine home directory".into()))?;
         let log_path = base_dir.join(".hb_zayfer").join("audit.log");
-        
+
         // Ensure the directory exists
         if let Some(parent) = log_path.parent() {
-            fs::create_dir_all(parent).map_err(|e| {
-                HbError::Io(format!("Failed to create audit log directory: {}", e))
-            })?;
+            fs::create_dir_all(parent)
+                .map_err(|e| HbError::Io(format!("Failed to create audit log directory: {}", e)))?;
         }
-        
+
         Ok(Self::new(log_path))
     }
 
@@ -186,22 +236,19 @@ impl AuditLogger {
             return Ok(None);
         }
 
-        let file = File::open(&self.log_path).map_err(|e| {
-            HbError::Io(format!("Failed to open audit log: {}", e))
-        })?;
+        let file = File::open(&self.log_path)
+            .map_err(|e| HbError::Io(format!("Failed to open audit log: {}", e)))?;
         let reader = BufReader::new(file);
-        
+
         let mut last_hash = None;
         for line in reader.lines() {
-            let line = line.map_err(|e| {
-                HbError::Io(format!("Failed to read audit log: {}", e))
-            })?;
-            
+            let line = line.map_err(|e| HbError::Io(format!("Failed to read audit log: {}", e)))?;
+
             if let Ok(entry) = serde_json::from_str::<AuditEntry>(&line) {
                 last_hash = Some(entry.entry_hash);
             }
         }
-        
+
         Ok(last_hash)
     }
 
@@ -213,31 +260,33 @@ impl AuditLogger {
         } else {
             AuditEntry::new(operation, prev_hash, note)
         };
-        
+
         let mut file = OpenOptions::new()
             .create(true)
             .append(true)
             .open(&self.log_path)
             .map_err(|e| HbError::Io(format!("Failed to open audit log: {}", e)))?;
-        
+
         // Set restrictive permissions on Unix
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let mut perms = file.metadata()
+            let mut perms = file
+                .metadata()
                 .map_err(|e| HbError::Io(format!("Failed to get audit log metadata: {}", e)))?
                 .permissions();
             perms.set_mode(0o600);
             std::fs::set_permissions(&self.log_path, perms)
                 .map_err(|e| HbError::Io(format!("Failed to set audit log permissions: {}", e)))?;
         }
-        
+
         // Write entry as JSON line
-        let json = serde_json::to_string(&entry)
-            .map_err(|e| HbError::Serialization(format!("Failed to serialize audit entry: {}", e)))?;
+        let json = serde_json::to_string(&entry).map_err(|e| {
+            HbError::Serialization(format!("Failed to serialize audit entry: {}", e))
+        })?;
         writeln!(file, "{}", json)
             .map_err(|e| HbError::Io(format!("Failed to write audit log: {}", e)))?;
-        
+
         Ok(())
     }
 
@@ -247,34 +296,32 @@ impl AuditLogger {
             return Ok(Vec::new());
         }
 
-        let file = File::open(&self.log_path).map_err(|e| {
-            HbError::Io(format!("Failed to open audit log: {}", e))
-        })?;
+        let file = File::open(&self.log_path)
+            .map_err(|e| HbError::Io(format!("Failed to open audit log: {}", e)))?;
         let reader = BufReader::new(file);
-        
+
         let mut entries = Vec::new();
         for line in reader.lines() {
-            let line = line.map_err(|e| {
-                HbError::Io(format!("Failed to read audit log: {}", e))
+            let line = line.map_err(|e| HbError::Io(format!("Failed to read audit log: {}", e)))?;
+
+            let entry: AuditEntry = serde_json::from_str(&line).map_err(|e| {
+                HbError::Serialization(format!("Failed to parse audit entry: {}", e))
             })?;
-            
-            let entry: AuditEntry = serde_json::from_str(&line)
-                .map_err(|e| HbError::Serialization(format!("Failed to parse audit entry: {}", e)))?;
-            
+
             entries.push(entry);
         }
-        
+
         Ok(entries)
     }
 
     /// Verify the integrity of the entire audit log chain.
     pub fn verify_integrity(&self) -> HbResult<bool> {
         let entries = self.read_entries()?;
-        
+
         if entries.is_empty() {
             return Ok(true);
         }
-        
+
         // Verify first entry
         if !entries[0].verify() {
             return Ok(false);
@@ -282,7 +329,7 @@ impl AuditLogger {
         if entries[0].prev_hash.is_some() {
             return Ok(false); // First entry should have no previous hash
         }
-        
+
         // Verify chain
         for i in 1..entries.len() {
             if !entries[i].verify() {
@@ -292,7 +339,7 @@ impl AuditLogger {
                 return Ok(false);
             }
         }
-        
+
         Ok(true)
     }
 
@@ -357,16 +404,26 @@ mod tests {
         let logger = AuditLogger::new(log_path);
 
         // Log some operations
-        logger.log(AuditOperation::KeyGenerated {
-            algorithm: "RSA-4096".into(),
-            fingerprint: "fp1".into(),
-        }, None).unwrap();
+        logger
+            .log(
+                AuditOperation::KeyGenerated {
+                    algorithm: "RSA-4096".into(),
+                    fingerprint: "fp1".into(),
+                },
+                None,
+            )
+            .unwrap();
 
-        logger.log(AuditOperation::FileEncrypted {
-            algorithm: "AES-256-GCM".into(),
-            filename: Some("test.txt".into()),
-            size_bytes: Some(1024),
-        }, Some("Test encryption".into())).unwrap();
+        logger
+            .log(
+                AuditOperation::FileEncrypted {
+                    algorithm: "AES-256-GCM".into(),
+                    filename: Some("test.txt".into()),
+                    size_bytes: Some(1024),
+                },
+                Some("Test encryption".into()),
+            )
+            .unwrap();
 
         // Verify entries
         let entries = logger.read_entries().unwrap();
@@ -382,11 +439,16 @@ mod tests {
 
         // Create a chain of entries
         for i in 0..5 {
-            logger.log(AuditOperation::FileEncrypted {
-                algorithm: "AES-256-GCM".into(),
-                filename: Some(format!("file{}.txt", i)),
-                size_bytes: Some(i * 100),
-            }, None).unwrap();
+            logger
+                .log(
+                    AuditOperation::FileEncrypted {
+                        algorithm: "AES-256-GCM".into(),
+                        filename: Some(format!("file{}.txt", i)),
+                        size_bytes: Some(i * 100),
+                    },
+                    None,
+                )
+                .unwrap();
         }
 
         // Verify chain
@@ -408,9 +470,14 @@ mod tests {
         let logger = AuditLogger::new(log_path);
 
         for i in 0..10 {
-            logger.log(AuditOperation::ConfigModified {
-                setting: format!("setting{}", i),
-            }, None).unwrap();
+            logger
+                .log(
+                    AuditOperation::ConfigModified {
+                        setting: format!("setting{}", i),
+                    },
+                    None,
+                )
+                .unwrap();
         }
 
         let recent = logger.recent_entries(3).unwrap();

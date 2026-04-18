@@ -35,11 +35,13 @@ pub mod stego;
 pub mod x25519;
 
 // Re-export commonly used types
-pub use audit::{AuditLogger, AuditOperation, AuditEntry};
+pub use audit::{AuditEntry, AuditLogger, AuditOperation};
 pub use backup::BackupManifest;
-pub use config::{Config, KdfPreset, GuiConfig, CliConfig, MIN_CHUNK_SIZE, MAX_CHUNK_SIZE, DEFAULT_CHUNK_SIZE};
+pub use config::{
+    CliConfig, Config, GuiConfig, KdfPreset, DEFAULT_CHUNK_SIZE, MAX_CHUNK_SIZE, MIN_CHUNK_SIZE,
+};
 pub use error::{HbError, HbResult};
-pub use format::{SymmetricAlgorithm, KeyWrapping};
-pub use keystore::{KeyStore, KeyAlgorithm, KeyMetadata, KeyUsage, KeyExpiryStatus, Contact};
-pub use kdf::{KdfParams, KdfAlgorithm};
+pub use format::{KeyWrapping, SymmetricAlgorithm};
+pub use kdf::{KdfAlgorithm, KdfParams};
+pub use keystore::{Contact, KeyAlgorithm, KeyExpiryStatus, KeyMetadata, KeyStore, KeyUsage};
 pub use secure_mem::SecureBytes;

@@ -1,7 +1,7 @@
-use argon2::{self, Argon2, Algorithm, Version, Params};
-use scrypt::scrypt;
-use rand_core::OsRng;
+use argon2::{self, Algorithm, Argon2, Params, Version};
 use rand::RngCore;
+use rand_core::OsRng;
+use scrypt::scrypt;
 use serde::{Deserialize, Serialize};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 

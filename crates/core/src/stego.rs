@@ -40,11 +40,7 @@ const HEADER_SIZE: usize = 8;
 pub fn capacity(pixel_len: usize) -> usize {
     // Each pixel byte stores 1 bit → pixel_len / 8 total bytes
     // Minus the 8-byte header
-    if pixel_len / 8 > HEADER_SIZE {
-        pixel_len / 8 - HEADER_SIZE
-    } else {
-        0
-    }
+    (pixel_len / 8).saturating_sub(HEADER_SIZE)
 }
 
 /// Embed `payload` into the LSBs of `pixels` (in-place).
@@ -89,13 +85,17 @@ pub fn embed_in_pixels(pixels: &mut [u8], payload: &[u8]) -> HbResult<()> {
 /// Returns `Err` if no valid steganographic header is found.
 pub fn extract_from_pixels(pixels: &[u8]) -> HbResult<Vec<u8>> {
     if pixels.len() < HEADER_SIZE * 8 {
-        return Err(HbError::InvalidFormat("Image too small for stego header".into()));
+        return Err(HbError::InvalidFormat(
+            "Image too small for stego header".into(),
+        ));
     }
 
     // Read the header
     let header = read_bits(pixels, 0, HEADER_SIZE);
     if &header[..4] != MAGIC {
-        return Err(HbError::InvalidFormat("No steganographic data found".into()));
+        return Err(HbError::InvalidFormat(
+            "No steganographic data found".into(),
+        ));
     }
 
     let len = u32::from_le_bytes([header[4], header[5], header[6], header[7]]) as usize;

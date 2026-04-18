@@ -4,7 +4,7 @@
 
 Zayfer Vault provides two graphical interfaces:
 
-- **Desktop GUI** — PySide6 (Qt 6) native application with 13 sidebar views
+- **Desktop GUI** — PySide6 (Qt 6) native application with 14 sidebar views
 - **Web GUI** — FastAPI server with 30 REST API endpoints and a
   browser-based dashboard (static HTML/JS/CSS)
 

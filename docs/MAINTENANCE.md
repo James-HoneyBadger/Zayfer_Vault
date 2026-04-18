@@ -39,6 +39,17 @@ What to look for:
 - the native extension is reported as **up to date** or rebuilds successfully,
 - CLI, GUI, and web startup remain functional.
 
+### Quick diagnostics
+
+If startup or dependency detection looks suspicious, run:
+
+```bash
+./run.sh doctor
+```
+
+This prints Python, Cargo, virtual environment, and native-extension status in
+one place and is the fastest first check before deeper troubleshooting.
+
 ---
 
 ## 3) Backups and Recovery
@@ -107,7 +118,7 @@ then the extension should be rebuilt with `maturin develop --release -m crates/p
 ### Inspect the audit trail
 
 ```bash
-hb-zayfer audit --limit 50
+hb-zayfer audit show -n 50
 hb-zayfer audit verify
 ```
 
@@ -149,6 +160,9 @@ Suggested process:
 | `HB_ZAYFER_RATE_WINDOW` | Set the rate-limit time window in seconds |
 | `HB_ZAYFER_PORT` | Default port for the web UI |
 | `HB_ZAYFER_SKIP_ONBOARDING` | Skip the first-run prompt for headless testing/CI |
+
+> **Compatibility note:** the environment-variable prefix remains `HB_ZAYFER_`
+after the Zayfer Vault rebrand so existing automation continues to work.
 
 ---
 

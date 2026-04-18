@@ -3,15 +3,15 @@
 //! Provides PGP key generation, encryption, decryption, signing, and verification
 //! for interoperability with GPG and other OpenPGP implementations.
 
-use std::io::{Read, Write};
-use sequoia_openpgp as openpgp;
 use openpgp::cert::prelude::*;
 use openpgp::crypto::{KeyPair, SessionKey};
-use openpgp::types::SymmetricAlgorithm;
-use openpgp::parse::{Parse, stream::*};
+use openpgp::parse::{stream::*, Parse};
 use openpgp::policy::StandardPolicy;
 use openpgp::serialize::stream::*;
 use openpgp::serialize::Marshal;
+use openpgp::types::SymmetricAlgorithm;
+use sequoia_openpgp as openpgp;
+use std::io::{Read, Write};
 
 use crate::error::{HbError, HbResult};
 
@@ -44,8 +44,7 @@ pub fn export_public_key(cert: &openpgp::Cert) -> HbResult<String> {
             .finalize()
             .map_err(|e| HbError::OpenPgp(format!("Finalize armor: {e}")))?;
     }
-    String::from_utf8(buf)
-        .map_err(|e| HbError::OpenPgp(format!("UTF-8 conversion: {e}")))
+    String::from_utf8(buf).map_err(|e| HbError::OpenPgp(format!("UTF-8 conversion: {e}")))
 }
 
 /// Export a certificate including secret key material as ASCII-armored text.
@@ -54,14 +53,14 @@ pub fn export_secret_key(cert: &openpgp::Cert) -> HbResult<String> {
     {
         let mut writer = openpgp::armor::Writer::new(&mut buf, openpgp::armor::Kind::SecretKey)
             .map_err(|e| HbError::OpenPgp(format!("Armor writer: {e}")))?;
-        cert.as_tsk().serialize(&mut writer)
+        cert.as_tsk()
+            .serialize(&mut writer)
             .map_err(|e| HbError::OpenPgp(format!("Serialize secret key: {e}")))?;
         writer
             .finalize()
             .map_err(|e| HbError::OpenPgp(format!("Finalize armor: {e}")))?;
     }
-    String::from_utf8(buf)
-        .map_err(|e| HbError::OpenPgp(format!("UTF-8 conversion: {e}")))
+    String::from_utf8(buf).map_err(|e| HbError::OpenPgp(format!("UTF-8 conversion: {e}")))
 }
 
 /// Import a certificate from ASCII-armored text.
@@ -83,10 +82,7 @@ pub fn cert_user_id(cert: &openpgp::Cert) -> Option<String> {
 }
 
 /// Encrypt a message to one or more recipient certificates.
-pub fn encrypt_message(
-    plaintext: &[u8],
-    recipients: &[&openpgp::Cert],
-) -> HbResult<Vec<u8>> {
+pub fn encrypt_message(plaintext: &[u8], recipients: &[&openpgp::Cert]) -> HbResult<Vec<u8>> {
     let mut output = Vec::new();
 
     let mut recipient_kas = Vec::new();
@@ -117,10 +113,8 @@ pub fn encrypt_message(
         ));
     }
 
-    let recipients_refs: Vec<openpgp::serialize::stream::Recipient> = recipient_kas
-        .into_iter()
-        .map(Into::into)
-        .collect();
+    let recipients_refs: Vec<openpgp::serialize::stream::Recipient> =
+        recipient_kas.into_iter().map(Into::into).collect();
 
     {
         let message = Message::new(&mut output);
@@ -199,8 +193,7 @@ impl DecryptionHelper for DecryptHelper {
         _skesks: &[openpgp::packet::SKESK],
         sym_algo: Option<SymmetricAlgorithm>,
         decrypt: &mut dyn FnMut(Option<SymmetricAlgorithm>, &SessionKey) -> bool,
-    ) -> openpgp::Result<Option<openpgp::Cert>>
-    {
+    ) -> openpgp::Result<Option<openpgp::Cert>> {
         for (pkesk, mut pair) in self.get_secret_keys_for(pkesks) {
             if pkesk
                 .decrypt(&mut pair, sym_algo)
@@ -215,10 +208,7 @@ impl DecryptionHelper for DecryptHelper {
 }
 
 /// Decrypt a PGP message.
-pub fn decrypt_message(
-    ciphertext: &[u8],
-    secret_certs: &[openpgp::Cert],
-) -> HbResult<Vec<u8>> {
+pub fn decrypt_message(ciphertext: &[u8], secret_certs: &[openpgp::Cert]) -> HbResult<Vec<u8>> {
     let helper = DecryptHelper {
         secret_keys: secret_certs.to_vec(),
     };
@@ -292,16 +282,13 @@ impl VerificationHelper for VerificationHelperImpl {
 
     fn check(&mut self, structure: MessageStructure) -> openpgp::Result<()> {
         for layer in structure {
-            match layer {
-                MessageLayer::SignatureGroup { results } => {
-                    for result in results {
-                        if result.is_ok() {
-                            self.verified = true;
-                            return Ok(());
-                        }
+            if let MessageLayer::SignatureGroup { results } = layer {
+                for result in results {
+                    if result.is_ok() {
+                        self.verified = true;
+                        return Ok(());
                     }
                 }
-                _ => {}
             }
         }
         Ok(())

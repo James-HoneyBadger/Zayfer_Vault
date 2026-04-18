@@ -12,10 +12,10 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::error::{HbError, HbResult};
-use crate::keystore::KeyStore;
-use crate::kdf::{self, KdfParams};
 use crate::aes_gcm;
+use crate::error::{HbError, HbResult};
+use crate::kdf::{self, KdfParams};
+use crate::keystore::KeyStore;
 
 /// Backup metadata and manifest.
 #[derive(Debug, Serialize, Deserialize)]
@@ -62,7 +62,12 @@ impl KeyStore {
     /// - Config file (config.toml)
     ///
     /// The entire bundle is encrypted with the provided passphrase using AES-256-GCM.
-    pub fn create_backup(&self, output_path: &Path, passphrase: &[u8], label: Option<String>) -> HbResult<()> {
+    pub fn create_backup(
+        &self,
+        output_path: &Path,
+        passphrase: &[u8],
+        label: Option<String>,
+    ) -> HbResult<()> {
         // Collect all files to backup
         let mut backup_data: Vec<(String, Vec<u8>)> = Vec::new();
 
@@ -148,7 +153,7 @@ impl KeyStore {
         output.extend_from_slice(BACKUP_MAGIC);
         output.push(BACKUP_VERSION);
         output.push(kdf_params.algorithm().id());
-        
+
         // Encode KDF params (same as keystore private key envelope)
         match &kdf_params {
             KdfParams::Argon2id(p) => {
@@ -163,7 +168,7 @@ impl KeyStore {
                 output.extend_from_slice(&p.p.to_le_bytes());
             }
         }
-        
+
         output.extend_from_slice(&salt);
         output.extend_from_slice(&nonce);
         output.extend_from_slice(&ciphertext);
@@ -189,11 +194,15 @@ impl KeyStore {
     ///
     /// This will decrypt the backup and restore all keys, contacts, and configuration
     /// to the keystore's base path. Existing files will be overwritten.
-    pub fn restore_backup(backup_path: &Path, passphrase: &[u8], target_keystore: &Path) -> HbResult<BackupManifest> {
+    pub fn restore_backup(
+        backup_path: &Path,
+        passphrase: &[u8],
+        target_keystore: &Path,
+    ) -> HbResult<BackupManifest> {
         // Read backup file
         let mut file = fs::File::open(backup_path)
             .map_err(|e| HbError::Io(format!("Failed to open backup file: {}", e)))?;
-        
+
         let mut contents = Vec::new();
         file.read_to_end(&mut contents)
             .map_err(|e| HbError::Io(format!("Failed to read backup file: {}", e)))?;
@@ -203,7 +212,9 @@ impl KeyStore {
             return Err(HbError::InvalidFormat("Backup file too small".into()));
         }
         if &contents[0..8] != BACKUP_MAGIC {
-            return Err(HbError::InvalidFormat("Not a valid HBZF backup file".into()));
+            return Err(HbError::InvalidFormat(
+                "Not a valid HBZF backup file".into(),
+            ));
         }
 
         let version = contents[8];
@@ -215,9 +226,12 @@ impl KeyStore {
         let kdf_algo = contents[9];
         let kdf_params = if kdf_algo == 1 {
             // Argon2id
-            let m_cost = u32::from_le_bytes([contents[10], contents[11], contents[12], contents[13]]);
-            let t_cost = u32::from_le_bytes([contents[14], contents[15], contents[16], contents[17]]);
-            let p_cost = u32::from_le_bytes([contents[18], contents[19], contents[20], contents[21]]);
+            let m_cost =
+                u32::from_le_bytes([contents[10], contents[11], contents[12], contents[13]]);
+            let t_cost =
+                u32::from_le_bytes([contents[14], contents[15], contents[16], contents[17]]);
+            let p_cost =
+                u32::from_le_bytes([contents[18], contents[19], contents[20], contents[21]]);
             KdfParams::argon2id(m_cost, t_cost, p_cost)
         } else if kdf_algo == 2 {
             // scrypt
@@ -226,7 +240,10 @@ impl KeyStore {
             let p = u32::from_le_bytes([contents[18], contents[19], contents[20], contents[21]]);
             KdfParams::scrypt(log_n, r, p)
         } else {
-            return Err(HbError::UnsupportedAlgorithm(format!("KDF algorithm {}", kdf_algo)));
+            return Err(HbError::UnsupportedAlgorithm(format!(
+                "KDF algorithm {}",
+                kdf_algo
+            )));
         };
 
         let salt = &contents[22..38];
@@ -243,13 +260,15 @@ impl KeyStore {
         if plaintext.len() < 4 {
             return Err(HbError::InvalidFormat("Backup data too small".into()));
         }
-        let manifest_len = u32::from_le_bytes([plaintext[0], plaintext[1], plaintext[2], plaintext[3]]) as usize;
+        let manifest_len =
+            u32::from_le_bytes([plaintext[0], plaintext[1], plaintext[2], plaintext[3]]) as usize;
         if plaintext.len() < 4 + manifest_len {
             return Err(HbError::InvalidFormat("Truncated backup manifest".into()));
         }
 
         let manifest: BackupManifest = serde_json::from_slice(&plaintext[4..4 + manifest_len])?;
-        let files_data: Vec<(String, Vec<u8>)> = serde_json::from_slice(&plaintext[4 + manifest_len..])?;
+        let files_data: Vec<(String, Vec<u8>)> =
+            serde_json::from_slice(&plaintext[4 + manifest_len..])?;
 
         // Verify integrity of payload
         let computed_hash = hex::encode(Sha256::digest(&plaintext[4 + manifest_len..]));
@@ -272,13 +291,10 @@ impl KeyStore {
         // Restore all files
         for (filename, data) in files_data {
             // Sanitize filename to prevent path traversal attacks
-            if filename.contains("..")
-                || filename.starts_with('/')
-                || filename.starts_with('\\')
-            {
-                return Err(HbError::InvalidFormat(
-                    format!("Malicious filename in backup: {filename}"),
-                ));
+            if filename.contains("..") || filename.starts_with('/') || filename.starts_with('\\') {
+                return Err(HbError::InvalidFormat(format!(
+                    "Malicious filename in backup: {filename}"
+                )));
             }
 
             let file_path = target_keystore.join(&filename);
@@ -287,9 +303,9 @@ impl KeyStore {
             let canonical_target = fs::canonicalize(target_keystore)?;
             if let Ok(canonical_file) = fs::canonicalize(file_path.parent().unwrap_or(&file_path)) {
                 if !canonical_file.starts_with(&canonical_target) {
-                    return Err(HbError::InvalidFormat(
-                        format!("Path traversal detected in backup: {filename}"),
-                    ));
+                    return Err(HbError::InvalidFormat(format!(
+                        "Path traversal detected in backup: {filename}"
+                    )));
                 }
             }
 
@@ -297,7 +313,7 @@ impl KeyStore {
             if let Some(parent) = file_path.parent() {
                 fs::create_dir_all(parent)?;
             }
-            
+
             fs::write(&file_path, &data)?;
 
             // Set permissions on private keys
@@ -319,10 +335,10 @@ impl KeyStore {
         use std::env;
         let temp_dir = env::temp_dir().join(format!("hbzf-verify-{}", uuid::Uuid::new_v4()));
         let result = Self::restore_backup(backup_path, passphrase, &temp_dir);
-        
+
         // Clean up temp directory
         let _ = fs::remove_dir_all(&temp_dir);
-        
+
         result
     }
 }
@@ -337,14 +353,33 @@ mod tests {
         // Create a keystore with some data
         let temp_dir = TempDir::new().unwrap();
         let mut ks = KeyStore::open(temp_dir.path().join("original")).unwrap();
-        
-        ks.store_private_key("fp1", b"key1", b"pass1", crate::keystore::KeyAlgorithm::Ed25519, "Key 1").unwrap();
-        ks.store_public_key("fp1", b"pubkey1", crate::keystore::KeyAlgorithm::Ed25519, "Key 1").unwrap();
-        ks.add_contact("Alice", Some("alice@example.com"), None).unwrap();
+
+        ks.store_private_key(
+            "fp1",
+            b"key1",
+            b"pass1",
+            crate::keystore::KeyAlgorithm::Ed25519,
+            "Key 1",
+        )
+        .unwrap();
+        ks.store_public_key(
+            "fp1",
+            b"pubkey1",
+            crate::keystore::KeyAlgorithm::Ed25519,
+            "Key 1",
+        )
+        .unwrap();
+        ks.add_contact("Alice", Some("alice@example.com"), None)
+            .unwrap();
 
         // Create backup
         let backup_path = temp_dir.path().join("backup.hbzfbkup");
-        ks.create_backup(&backup_path, b"backup-passphrase", Some("Test backup".into())).unwrap();
+        ks.create_backup(
+            &backup_path,
+            b"backup-passphrase",
+            Some("Test backup".into()),
+        )
+        .unwrap();
 
         // Verify backup exists and has correct magic
         let backup_data = fs::read(&backup_path).unwrap();
@@ -352,7 +387,8 @@ mod tests {
 
         // Restore to new location
         let restore_path = temp_dir.path().join("restored");
-        let manifest = KeyStore::restore_backup(&backup_path, b"backup-passphrase", &restore_path).unwrap();
+        let manifest =
+            KeyStore::restore_backup(&backup_path, b"backup-passphrase", &restore_path).unwrap();
 
         assert_eq!(manifest.private_key_count, 1);
         assert_eq!(manifest.public_key_count, 1);
@@ -369,13 +405,14 @@ mod tests {
     fn test_backup_wrong_passphrase() {
         let temp_dir = TempDir::new().unwrap();
         let ks = KeyStore::open(temp_dir.path().join("original")).unwrap();
-        
+
         let backup_path = temp_dir.path().join("backup.hbzfbkup");
-        ks.create_backup(&backup_path, b"correct-pass", None).unwrap();
+        ks.create_backup(&backup_path, b"correct-pass", None)
+            .unwrap();
 
         let restore_path = temp_dir.path().join("restored");
         let result = KeyStore::restore_backup(&backup_path, b"wrong-pass", &restore_path);
-        
+
         assert!(result.is_err());
     }
 
@@ -384,9 +421,10 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let mut ks = KeyStore::open(temp_dir.path().join("original")).unwrap();
         ks.add_contact("Bob", None, None).unwrap();
-        
+
         let backup_path = temp_dir.path().join("backup.hbzfbkup");
-        ks.create_backup(&backup_path, b"test-pass", Some("Verify test".into())).unwrap();
+        ks.create_backup(&backup_path, b"test-pass", Some("Verify test".into()))
+            .unwrap();
 
         let manifest = KeyStore::verify_backup(&backup_path, b"test-pass").unwrap();
         assert_eq!(manifest.contact_count, 1);

@@ -96,11 +96,8 @@ pub fn derive_symmetric_key(
 /// Returns (ephemeral_public_key, derived_symmetric_key).
 pub fn encrypt_key_agreement(their_public: &PublicKey) -> HbResult<(PublicKey, [u8; 32])> {
     let (eph_pub, shared_secret) = ephemeral_key_agreement(their_public)?;
-    let symmetric_key = derive_symmetric_key(
-        &shared_secret,
-        b"HB_Zayfer X25519 encryption key",
-        None,
-    )?;
+    let symmetric_key =
+        derive_symmetric_key(&shared_secret, b"HB_Zayfer X25519 encryption key", None)?;
     Ok((eph_pub, symmetric_key))
 }
 
@@ -111,11 +108,7 @@ pub fn decrypt_key_agreement(
     ephemeral_public: &PublicKey,
 ) -> HbResult<[u8; 32]> {
     let shared_secret = key_agreement(our_secret, ephemeral_public)?;
-    derive_symmetric_key(
-        &shared_secret,
-        b"HB_Zayfer X25519 encryption key",
-        None,
-    )
+    derive_symmetric_key(&shared_secret, b"HB_Zayfer X25519 encryption key", None)
 }
 
 // -- Key serialization --
@@ -179,12 +172,10 @@ mod tests {
         let recipient = generate_keypair();
 
         // Sender side: ephemeral agreement
-        let (eph_pub, sender_symmetric) =
-            encrypt_key_agreement(&recipient.public_key).unwrap();
+        let (eph_pub, sender_symmetric) = encrypt_key_agreement(&recipient.public_key).unwrap();
 
         // Recipient side: derive same key
-        let recipient_symmetric =
-            decrypt_key_agreement(&recipient.secret_key, &eph_pub).unwrap();
+        let recipient_symmetric = decrypt_key_agreement(&recipient.secret_key, &eph_pub).unwrap();
 
         assert_eq!(sender_symmetric, recipient_symmetric);
     }

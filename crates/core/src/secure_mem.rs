@@ -34,7 +34,10 @@ impl SecureBytes {
     /// Create a new `SecureBytes` by taking ownership of `data` and locking it.
     pub fn new(data: Vec<u8>) -> Self {
         let locked = mlock_buf(&data);
-        Self { inner: data, locked }
+        Self {
+            inner: data,
+            locked,
+        }
     }
 
     /// Create a zero-filled `SecureBytes` of the given length, already locked.

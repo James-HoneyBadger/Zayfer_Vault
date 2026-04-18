@@ -59,7 +59,7 @@ encryption/decryption suite built with a **Rust core**, **Python bindings**
 ## Workspace Crates
 
 The Cargo workspace (`Cargo.toml`) contains four crates with a shared
-version (`1.0.0`):
+version (`1.0.1`):
 
 | Crate | Path | Type | Purpose |
 |-------|------|------|---------|
@@ -271,6 +271,10 @@ I/O, serialization, contacts, and format errors.
 Re-exports all `_native` symbols into the top-level `hb_zayfer` namespace.
 `__version__` is dynamically set from the Rust library via `version()`.
 
+> **Compatibility note:** the public product name is **Zayfer Vault**, while the
+> import path and environment-variable prefix remain `hb_zayfer` / `HB_ZAYFER_`
+> for backwards compatibility.
+
 **Function categories**: Symmetric encryption (AES, ChaCha20), KDF (Argon2id, scrypt),
 RSA, Ed25519, X25519, OpenPGP, HBZF format, utilities, audit logging,
 password generation, Shamir SSS, steganography, secure shredding, QR exchange.
@@ -285,10 +289,11 @@ colored output and status spinners.
 
 ### PySide6 GUI (`python/hb_zayfer/gui/`)
 
-**Views (13):**
+**Views (14):**
 
 | Module | Purpose |
 |--------|---------|
+| `home_view.py` | Overview dashboard with counts, quick actions, and onboarding help |
 | `encrypt_view.py` | File/text encryption with algorithm and recipient selection |
 | `decrypt_view.py` | File/text decryption with auto-detected wrapping mode |
 | `keygen_view.py` | Key pair generation for all supported algorithms |
@@ -303,7 +308,7 @@ colored output and status spinners.
 | `audit_view.py` | Browse audit log, verify integrity, export entries |
 | `backup_view.py` | Create, verify, and restore encrypted keystore backups |
 
-**Support Modules (11):**
+**Support Modules (12):**
 
 | Module | Purpose |
 |--------|---------|
@@ -318,6 +323,7 @@ colored output and status spinners.
 | `password_strength.py` | Real-time password strength meter with visual bar |
 | `dragdrop.py` | Drag-and-drop file handling for encrypt/decrypt views |
 | `clipboard.py` | Clipboard operations with auto-clear for sensitive data |
+| `messaging_utils.py` | Shared message-package creation/decryption helpers |
 
 **Key GUI features:**
 

@@ -56,7 +56,7 @@ ensuring memory safety and high performance.
 
 | Interface | Best For | Launch Command |
 |-----------|----------|----------------|
-| **Desktop GUI** | Visual users, 13 sidebar views | `./run.sh` or `./run.sh gui` |
+| **Desktop GUI** | Visual users, 14 sidebar views | `./run.sh` or `./run.sh gui` |
 | **CLI** | Terminal users, scripting, automation | `./run.sh cli <command>` |
 | **Web UI** | Browser access, REST API integration | `./run.sh web` |
 | **Python API** | Programmatic use, embedding | `import hb_zayfer` |
@@ -503,23 +503,24 @@ hb-zayfer config path                    # Show config file location
 
 ## Desktop GUI Reference
 
-### 13 Sidebar Views
+### 14 Sidebar Views
 
 | # | View | Shortcut | Purpose |
 |---|------|----------|---------|
-| 1 | 🔐 Encrypt | Alt+1 | Encrypt files or text |
-| 2 | 🔓 Decrypt | Alt+2 | Decrypt `.hbzf` files or text |
-| 3 | 🔑 Key Gen | Alt+3 | Generate key pairs |
-| 4 | 📦 Keyring | Alt+4 | Browse, search, export, delete keys |
-| 5 | 👥 Contacts | Alt+5 | Manage contacts and link keys |
-| 6 | ✍️ Sign | Alt+6 | Sign files with Ed25519/RSA/PGP |
-| 7 | ✔️ Verify | Alt+7 | Verify signatures |
-| 8 | 🔐 PassGen | Alt+8 | Password & passphrase generator |
-| 9 | 💬 Messaging | Alt+9 | End-to-end encrypted messaging |
-| 10 | 📱 QR Exchange | — | Share keys via QR codes |
-| 11 | ⚙️ Settings | — | Preferences and theme |
-| 12 | 📋 Audit Log | Alt+0 | Browse and verify audit trail |
-| 13 | 💾 Backup | — | Create, verify, restore backups |
+| 1 | 🏠 Home | — | Overview dashboard, counts, and quick actions |
+| 2 | 🔐 Encrypt | Alt+1 | Encrypt files or text |
+| 3 | 🔓 Decrypt | Alt+2 | Decrypt `.hbzf` files or text |
+| 4 | 🔑 Key Gen | Alt+3 | Generate key pairs |
+| 5 | 📦 Keyring | Alt+4 | Browse, search, export, delete keys |
+| 6 | 👥 Contacts | Alt+5 | Manage contacts and link keys |
+| 7 | ✍️ Sign | Alt+6 | Sign files with Ed25519/RSA/PGP |
+| 8 | ✔️ Verify | Alt+7 | Verify signatures |
+| 9 | 🔐 PassGen | Alt+8 | Password & passphrase generator |
+| 10 | 💬 Messaging | Alt+9 | End-to-end encrypted messaging |
+| 11 | 📱 QR Exchange | — | Share keys via QR codes |
+| 12 | ⚙️ Settings | — | Preferences and theme |
+| 13 | 📋 Audit Log | Alt+0 | Browse and verify audit trail |
+| 14 | 💾 Backup | — | Create, verify, restore backups |
 
 ### Keyboard Shortcuts
 

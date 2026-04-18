@@ -1,6 +1,6 @@
 use ed25519_dalek::{
-    Signature, Signer, SigningKey, Verifier, VerifyingKey,
     pkcs8::{DecodePrivateKey, DecodePublicKey, EncodePrivateKey, EncodePublicKey},
+    Signature, Signer, SigningKey, Verifier, VerifyingKey,
 };
 use rand_core::OsRng;
 use sha2::{Digest, Sha256};
@@ -44,7 +44,11 @@ pub fn sign(signing_key: &SigningKey, message: &[u8]) -> Vec<u8> {
 }
 
 /// Verify an Ed25519 signature.
-pub fn verify(verifying_key: &VerifyingKey, message: &[u8], signature_bytes: &[u8]) -> HbResult<bool> {
+pub fn verify(
+    verifying_key: &VerifyingKey,
+    message: &[u8],
+    signature_bytes: &[u8],
+) -> HbResult<bool> {
     if signature_bytes.len() != 64 {
         return Err(HbError::Ed25519(format!(
             "Signature must be 64 bytes, got {}",
@@ -120,7 +124,8 @@ pub fn import_verifying_key_raw(bytes: &[u8]) -> HbResult<VerifyingKey> {
         )));
     }
     let array: [u8; 32] = bytes.try_into().unwrap();
-    VerifyingKey::from_bytes(&array).map_err(|e| HbError::Ed25519(format!("Invalid public key: {e}")))
+    VerifyingKey::from_bytes(&array)
+        .map_err(|e| HbError::Ed25519(format!("Invalid public key: {e}")))
 }
 
 /// Compute a fingerprint (SHA-256 of raw public key bytes).

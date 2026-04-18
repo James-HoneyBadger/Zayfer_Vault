@@ -16,7 +16,7 @@
 
 use crate::error::HbError;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-use percent_encoding::{utf8_percent_encode, percent_decode_str, NON_ALPHANUMERIC};
+use percent_encoding::{percent_decode_str, utf8_percent_encode, NON_ALPHANUMERIC};
 
 /// URI scheme used for key exchange.
 const SCHEME: &str = "hbzf-key://";
@@ -81,9 +81,7 @@ pub fn decode_key_uri(uri: &str) -> Result<(String, Vec<u8>, Option<String>), Hb
 
 /// Percent-decode for label values using RFC 3986 compliant decoding.
 fn percent_decode(s: &str) -> String {
-    percent_decode_str(s)
-        .decode_utf8_lossy()
-        .into_owned()
+    percent_decode_str(s).decode_utf8_lossy().into_owned()
 }
 
 #[cfg(test)]
