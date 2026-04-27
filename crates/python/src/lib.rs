@@ -11,11 +11,23 @@
 use std::io::Cursor;
 use std::path::PathBuf;
 
+use pyo3::create_exception;
 use pyo3::exceptions::{
     PyFileNotFoundError, PyOSError, PyPermissionError, PyRuntimeError, PyValueError,
 };
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
+
+// Typed exception classes. These subclass familiar built-ins so that existing
+// `except PermissionError:` / `except FileNotFoundError:` blocks continue to
+// work unchanged, while new code can be more specific.
+create_exception!(_native, ZayferError, PyRuntimeError);
+create_exception!(_native, AuthenticationError, PyPermissionError);
+create_exception!(_native, KeyNotFoundError, PyFileNotFoundError);
+create_exception!(_native, ContactNotFoundError, PyFileNotFoundError);
+create_exception!(_native, IntegrityError, PyValueError);
+create_exception!(_native, KeyAlreadyExistsError, PyValueError);
+create_exception!(_native, ContactAlreadyExistsError, PyValueError);
 
 use hb_zayfer_core::{
     aes_gcm, audit, chacha20, ed25519 as ed, error::HbError, format, kdf, keystore, openpgp,
@@ -29,28 +41,29 @@ use hb_zayfer_core::{
 /// Map core `HbError` variants to semantically appropriate Python exceptions.
 fn to_py(e: HbError) -> PyErr {
     match &e {
-        // Wrong passphrase / auth failure → PermissionError
+        // Wrong passphrase / auth failure → AuthenticationError (subclass of PermissionError)
         HbError::InvalidPassphrase | HbError::AuthenticationFailed => {
-            PyPermissionError::new_err(e.to_string())
+            AuthenticationError::new_err(e.to_string())
         }
-        // Key / contact not found → FileNotFoundError (lookup miss)
-        HbError::KeyNotFound(_) | HbError::ContactNotFound(_) => {
-            PyFileNotFoundError::new_err(e.to_string())
-        }
+        // Key / contact not found → typed not-found errors (subclass of FileNotFoundError)
+        HbError::KeyNotFound(_) => KeyNotFoundError::new_err(e.to_string()),
+        HbError::ContactNotFound(_) => ContactNotFoundError::new_err(e.to_string()),
         // I/O errors → OSError
         HbError::Io(_) => PyOSError::new_err(e.to_string()),
-        // Invalid input data → ValueError
+        // Duplicate insertions → typed already-exists errors
+        HbError::KeyAlreadyExists(_) => KeyAlreadyExistsError::new_err(e.to_string()),
+        HbError::ContactAlreadyExists(_) => ContactAlreadyExistsError::new_err(e.to_string()),
+        // Format / integrity issues → IntegrityError (subclass of ValueError)
         HbError::InvalidKeyFormat(_)
         | HbError::InvalidFormat(_)
         | HbError::UnsupportedVersion(_)
-        | HbError::UnsupportedAlgorithm(_)
-        | HbError::PassphraseRequired
-        | HbError::KeyAlreadyExists(_)
-        | HbError::ContactAlreadyExists(_)
-        | HbError::Config(_)
-        | HbError::Serialization(_) => PyValueError::new_err(e.to_string()),
-        // Crypto-internal failures → RuntimeError
-        _ => PyRuntimeError::new_err(e.to_string()),
+        | HbError::UnsupportedAlgorithm(_) => IntegrityError::new_err(e.to_string()),
+        // Other invalid input → plain ValueError
+        HbError::PassphraseRequired | HbError::Config(_) | HbError::Serialization(_) => {
+            PyValueError::new_err(e.to_string())
+        }
+        // Crypto-internal failures → ZayferError (subclass of RuntimeError)
+        _ => ZayferError::new_err(e.to_string()),
     }
 }
 
@@ -1753,6 +1766,25 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyBackupManifest>()?;
     m.add_class::<PyAuditEntry>()?;
     m.add_class::<PyAuditLogger>()?;
+
+    // Typed exception classes
+    let py = m.py();
+    m.add("ZayferError", py.get_type::<ZayferError>())?;
+    m.add("AuthenticationError", py.get_type::<AuthenticationError>())?;
+    m.add("KeyNotFoundError", py.get_type::<KeyNotFoundError>())?;
+    m.add(
+        "ContactNotFoundError",
+        py.get_type::<ContactNotFoundError>(),
+    )?;
+    m.add("IntegrityError", py.get_type::<IntegrityError>())?;
+    m.add(
+        "KeyAlreadyExistsError",
+        py.get_type::<KeyAlreadyExistsError>(),
+    )?;
+    m.add(
+        "ContactAlreadyExistsError",
+        py.get_type::<ContactAlreadyExistsError>(),
+    )?;
 
     Ok(())
 }

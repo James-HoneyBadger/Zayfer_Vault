@@ -102,6 +102,14 @@ from hb_zayfer._native import (
     BackupManifest,
     AuditEntry,
     AuditLogger,
+    # Typed exceptions
+    ZayferError,
+    AuthenticationError,
+    KeyNotFoundError,
+    ContactNotFoundError,
+    IntegrityError,
+    KeyAlreadyExistsError,
+    ContactAlreadyExistsError,
 )
 from hb_zayfer.services import (
     AppInfo,
@@ -192,6 +200,14 @@ __all__ = [
     "BackupManifest",
     "AuditEntry",
     "AuditLogger",
+    # Typed exceptions
+    "ZayferError",
+    "AuthenticationError",
+    "KeyNotFoundError",
+    "ContactNotFoundError",
+    "IntegrityError",
+    "KeyAlreadyExistsError",
+    "ContactAlreadyExistsError",
     # Version
     "__version__",
     # Shared services
