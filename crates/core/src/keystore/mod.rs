@@ -11,9 +11,10 @@
 //! ```
 //!
 //! Module layout (Phase B2 split):
-//! - [`types`] — data types (`KeyAlgorithm`, `KeyMetadata`, `KeyUsage`,
+//! - `types` — data types (`KeyAlgorithm`, `KeyMetadata`, `KeyUsage`,
 //!   `KeyExpiryStatus`, `Contact`, and the on-disk index containers).
-//! - [`format`] — public-key fingerprinting + format detection.
+//! - `format` — public-key fingerprinting + format detection
+//!   ([`compute_fingerprint`], [`detect_key_format`], [`KeyFormat`]).
 //! - this file — the [`KeyStore`] struct and its I/O / lifecycle methods.
 
 mod format;
