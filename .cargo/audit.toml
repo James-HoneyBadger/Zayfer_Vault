@@ -1,0 +1,19 @@
+# cargo-audit configuration.
+#
+# Each ignore here MUST also be documented in
+# docs/reference/SECURITY.md "Acknowledged Supply-Chain Advisories".
+#
+# Re-evaluate every advisory at each release: if an upstream fix has
+# landed, drop the ignore and bump the dependency.
+
+[advisories]
+ignore = [
+    # RSA Marvin timing attack — no fixed upstream version.
+    "RUSTSEC-2023-0071",
+    # number_prefix unmaintained (transitive, display-only).
+    "RUSTSEC-2025-0119",
+    # rustls-pemfile unmaintained (transitive, local PEM parse only).
+    "RUSTSEC-2025-0134",
+    # rand unsound with custom logger — we never install one.
+    "RUSTSEC-2026-0097",
+]
