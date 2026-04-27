@@ -25,7 +25,6 @@ sequoia-openpgp.workspace = true
 # Key formats
 pkcs8.workspace = true
 pkcs1.workspace = true
-pem.workspace = true
 
 # Security
 zeroize.workspace = true
