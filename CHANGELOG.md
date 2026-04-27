@@ -9,8 +9,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Help → Keyboard Shortcuts dialog (F1).** New
+  `ShortcutsDialog` lists every keyboard shortcut the main window
+  exposes (Quit, navigation Alt+1–9/0, Ctrl+F search, Ctrl+R
+  refresh, F1 help) in a sortable two-column table. Wired into
+  the Help menu and bound to F1.
+- **Accessibility metadata** added to the main navigation
+  sidebar and status bar so screen readers announce items by
+  purpose: sidebar items expose emoji-stripped accessible text
+  (`Encrypt`) plus their tooltip as accessible description
+  (`Encrypt files or text`); the sidebar widget itself describes
+  arrow-key and Alt+N navigation; status-bar message / operation
+  / count labels each gain accessibleName.
+
 ### Tooling
 
+- **mypy now type-checks `hb_zayfer.web`.** Removed `web` from the
+  `tool.mypy.exclude` list — the FastAPI app + routes type-check
+  cleanly with `ignore_missing_imports`. Coverage is now 7 source
+  files (was 4). GUI remains excluded by design (PySide6 dynamic
+  typing).
 - **Python CI now lint+type-check gated.** `ruff check`,
   `ruff format --check`, and `mypy python/hb_zayfer` are now
   release-blocking in the same job that runs `pytest`. The pip
