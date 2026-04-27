@@ -174,18 +174,18 @@ class KeyService:
             ks.store_private_key(fingerprint, secret_key.encode(), passphrase, algorithm, label)
             ks.store_public_key(fingerprint, verify_key.encode(), algorithm, label)
         elif algorithm == "x25519":
-            secret_key, public_key = hbz.x25519_generate()
-            fingerprint = hbz.x25519_fingerprint(public_key)
-            ks.store_private_key(fingerprint, secret_key, passphrase, algorithm, label)
-            ks.store_public_key(fingerprint, public_key, algorithm, label)
+            x25519_secret, x25519_public = hbz.x25519_generate()
+            fingerprint = hbz.x25519_fingerprint(x25519_public)
+            ks.store_private_key(fingerprint, x25519_secret, passphrase, algorithm, label)
+            ks.store_public_key(fingerprint, x25519_public, algorithm, label)
         else:
             resolved_user_id = (user_id or label).strip()
             if not resolved_user_id or len(resolved_user_id) > 256:
                 raise ValueError("PGP user_id must be 1–256 characters")
-            public_key, secret_key = hbz.pgp_generate(resolved_user_id)
-            fingerprint = hbz.pgp_fingerprint(public_key)
-            ks.store_private_key(fingerprint, secret_key.encode(), passphrase, algorithm, label)
-            ks.store_public_key(fingerprint, public_key.encode(), algorithm, label)
+            pgp_public, pgp_secret = hbz.pgp_generate(resolved_user_id)
+            fingerprint = hbz.pgp_fingerprint(pgp_public)
+            ks.store_private_key(fingerprint, pgp_secret.encode(), passphrase, algorithm, label)
+            ks.store_public_key(fingerprint, pgp_public.encode(), algorithm, label)
 
         _audit_safe(hbz.audit_log_key_generated, algorithm.upper(), fingerprint, "source=service")
         return KeyGenerationResult(
