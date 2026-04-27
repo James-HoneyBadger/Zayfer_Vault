@@ -471,18 +471,11 @@ fn percent_decode(input: &str) -> Option<String> {
     String::from_utf8(out).ok()
 }
 
-/// Convenience entry point: serve with a freshly generated token.
-#[allow(dead_code)]
-pub(crate) fn serve(host: &str, port: u16) -> Result<()> {
-    serve_with_auth(host, port, Some(generate_token()), None)
-}
-
 /// Serve with an explicit auth token (or ``None`` to disable auth entirely).
 /// When ``token`` is ``Some``, the value is required on every ``/api/*`` call.
 /// When ``None``, the server runs unauthenticated and prints a prominent
-/// warning. The default ``serve()`` entry point always supplies a freshly
-/// generated token; the unauthenticated mode must be opted into explicitly
-/// by the CLI (typically via ``--no-auth``).
+/// warning. The CLI is the only caller; unauthenticated mode must be opted
+/// into explicitly (typically via ``--no-auth``).
 ///
 /// When ``tls`` is ``Some((cert_path, key_path))``, both files must be
 /// PEM-encoded; the server then accepts only HTTPS connections.
