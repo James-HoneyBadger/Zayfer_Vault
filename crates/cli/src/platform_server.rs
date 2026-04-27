@@ -597,7 +597,38 @@ pub fn build_platform_router() -> Result<Router> {
             .fallback_service(ServeFile::new(static_dir.join("index.html")));
     }
 
-    Ok(router)
+    Ok(router.layer(middleware::from_fn(security_headers_middleware)))
+}
+
+/// Apply a small set of conservative security headers to every response.
+///
+/// - `X-Content-Type-Options: nosniff` — block MIME sniffing.
+/// - `X-Frame-Options: DENY` — refuse framing.
+/// - `Referrer-Policy: no-referrer` — never leak the URL on outbound clicks.
+/// - `Cross-Origin-Opener-Policy: same-origin` — isolate the SPA.
+/// - `Permissions-Policy` — deny powerful APIs we don't need.
+async fn security_headers_middleware(request: HttpRequest<Body>, next: Next) -> Response {
+    let mut response = next.run(request).await;
+    let headers = response.headers_mut();
+    use axum::http::HeaderValue;
+    headers
+        .entry(header::X_CONTENT_TYPE_OPTIONS)
+        .or_insert(HeaderValue::from_static("nosniff"));
+    headers
+        .entry(header::X_FRAME_OPTIONS)
+        .or_insert(HeaderValue::from_static("DENY"));
+    headers
+        .entry(header::REFERRER_POLICY)
+        .or_insert(HeaderValue::from_static("no-referrer"));
+    headers
+        .entry("cross-origin-opener-policy")
+        .or_insert(HeaderValue::from_static("same-origin"));
+    headers
+        .entry("permissions-policy")
+        .or_insert(HeaderValue::from_static(
+            "camera=(), microphone=(), geolocation=(), interest-cohort=()",
+        ));
+    response
 }
 
 async fn health_handler(State(state): State<ServerState>) -> Json<serde_json::Value> {
@@ -1222,6 +1253,32 @@ mod tests {
         let data = json_response(router, request).await;
         assert_eq!(data["brand_name"], "Zayfer Vault");
         assert!(data["version"].as_str().unwrap().starts_with("1."));
+    }
+
+    #[tokio::test]
+    async fn version_endpoint_includes_security_headers() {
+        let router = build_platform_router().unwrap();
+        let request = Request::builder()
+            .uri("/api/version")
+            .method(Method::GET)
+            .body(Body::empty())
+            .unwrap();
+        let response = router.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let h = response.headers();
+        assert_eq!(
+            h.get("x-content-type-options")
+                .and_then(|v| v.to_str().ok()),
+            Some("nosniff")
+        );
+        assert_eq!(
+            h.get("x-frame-options").and_then(|v| v.to_str().ok()),
+            Some("DENY")
+        );
+        assert_eq!(
+            h.get("referrer-policy").and_then(|v| v.to_str().ok()),
+            Some("no-referrer")
+        );
     }
 
     #[tokio::test]

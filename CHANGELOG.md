@@ -86,6 +86,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- **Defence-in-depth response headers** on every web platform reply:
+  `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`,
+  `Referrer-Policy: no-referrer`, `Cross-Origin-Opener-Policy: same-origin`,
+  and a restrictive `Permissions-Policy` denying camera, microphone,
+  geolocation, and FLoC.
 - The web platform can now serve traffic over TLS, eliminating cleartext
   exposure of the bearer token and request bodies on hostile networks.
 - Web platform endpoints under `/api/*` now refuse unauthenticated requests by
