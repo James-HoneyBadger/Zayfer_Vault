@@ -198,6 +198,9 @@ class SignView(QWidget):
         try:
             ks = hbz.KeyStore()
             meta = ks.get_key_metadata(fp)
+            if meta is None:
+                QMessageBox.warning(self, "Sign", "Selected key not found in keystore.")
+                return None
             return (fp, meta.algorithm.lower())
         except Exception as e:
             QMessageBox.warning(self, "Sign", f"Key error: {e}")

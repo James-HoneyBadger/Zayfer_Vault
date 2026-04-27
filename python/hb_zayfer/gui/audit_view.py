@@ -61,7 +61,7 @@ class AuditView(QWidget):
 
     def __init__(self) -> None:
         super().__init__()
-        self._all_entries: list[object] = []
+        self._all_entries: list["hbz.AuditEntry"] = []
         self._setup_ui()
 
     # ------------------------------------------------------------------

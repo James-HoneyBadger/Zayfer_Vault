@@ -150,9 +150,15 @@ class QRExchangeView(QWidget):
         fp = self.key_combo.currentData()
         try:
             ks = hbz.KeyStore()
-            meta = ks.get_key(fp)
-            pub_bytes = meta.public_key_bytes
-            if pub_bytes is None:
+            meta = ks.get_key_metadata(fp)
+            if meta is None:
+                QMessageBox.warning(self, "Error", "Selected key not found in keystore.")
+                return
+            try:
+                pub_bytes: bytes | None = ks.load_public_key(fp)
+            except Exception:
+                pub_bytes = None
+            if not pub_bytes:
                 QMessageBox.warning(self, "Error", "Selected key has no public component.")
                 return
 

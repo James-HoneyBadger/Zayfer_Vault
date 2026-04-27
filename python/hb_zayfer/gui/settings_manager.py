@@ -86,7 +86,7 @@ class SettingsManager:
             The setting value or default
         """
         keys = key.split('.')
-        value = self.settings
+        value: Any = self.settings
         for k in keys:
             if isinstance(value, dict):
                 value = value.get(k)
@@ -104,7 +104,7 @@ class SettingsManager:
             value: Value to set
         """
         keys = key.split('.')
-        target = self.settings
+        target: Any = self.settings
         for k in keys[:-1]:
             if k not in target:
                 target[k] = {}
