@@ -279,6 +279,29 @@ pub fn generate_token() -> String {
     hex::encode(bytes)
 }
 
+/// Wait for the conventional shutdown signals: Ctrl+C on every platform, and
+/// SIGTERM additionally on Unix. Returns once either fires so callers can
+/// initiate a graceful drain.
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        let _ = tokio::signal::ctrl_c().await;
+    };
+    #[cfg(unix)]
+    let terminate = async {
+        if let Ok(mut sig) =
+            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+        {
+            sig.recv().await;
+        }
+    };
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+    tokio::select! {
+        _ = ctrl_c => {},
+        _ = terminate => {},
+    }
+}
+
 /// Initialise tracing for the web platform.
 ///
 /// Reads the `RUST_LOG` env var (default: `hb_zayfer=info,tower_http=info`),
@@ -495,7 +518,15 @@ pub fn serve_with_auth(
                         .with_context(|| {
                             format!("Failed to load TLS cert={cert_path} key={key_path}")
                         })?;
+                let handle = axum_server::Handle::new();
+                let shutdown_handle = handle.clone();
+                tokio::spawn(async move {
+                    shutdown_signal().await;
+                    eprintln!("[hb-zayfer] shutdown signal received, draining connections...");
+                    shutdown_handle.graceful_shutdown(Some(std::time::Duration::from_secs(10)));
+                });
                 axum_server::bind_rustls(addr, config)
+                    .handle(handle)
                     .serve(router.into_make_service())
                     .await
                     .context("Rust web server (TLS) failed")?;
@@ -505,6 +536,7 @@ pub fn serve_with_auth(
                     .await
                     .with_context(|| format!("Failed to bind {}", addr))?;
                 axum::serve(listener, router)
+                    .with_graceful_shutdown(shutdown_signal())
                     .await
                     .context("Rust web server failed")?;
             }

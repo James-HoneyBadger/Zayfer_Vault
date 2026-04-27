@@ -24,7 +24,7 @@ hex.workspace = true
 rand.workspace = true
 rand_core.workspace = true
 axum = { version = "0.7", features = ["multipart"] }
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "signal"] }
 futures-util = "0.3"
 async-stream = "0.3"
 tower-http = { version = "0.5", features = ["fs", "trace"] }

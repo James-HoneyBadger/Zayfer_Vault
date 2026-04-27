@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Graceful shutdown** for `hb-zayfer serve`. Ctrl+C (and `SIGTERM` on
+  Unix) now triggers a graceful drain: in-flight requests are allowed to
+  complete for up to 10 seconds before the listener closes, instead of
+  being torn down mid-response.
 - **Structured request logging.** The web platform now installs a
   `tracing-subscriber` and a `tower-http::TraceLayer`, emitting per-request
   spans with method, path, status, and latency to stderr. The default filter
