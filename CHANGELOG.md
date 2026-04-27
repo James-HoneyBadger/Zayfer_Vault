@@ -11,6 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Liveness and readiness probes.** New unauthenticated endpoints
+  `/healthz` (returns plain `ok`, no I/O) and `/readyz` (returns `ready`
+  only after the on-disk keystore opens cleanly, otherwise
+  `503 Service Unavailable`). Designed for systemd `ExecStartPost`
+  curls, Kubernetes `livenessProbe`/`readinessProbe`, and Docker
+  `HEALTHCHECK` directives. The legacy JSON `/health` endpoint is
+  unchanged.
 - **Graceful shutdown** for `hb-zayfer serve`. Ctrl+C (and `SIGTERM` on
   Unix) now triggers a graceful drain: in-flight requests are allowed to
   complete for up to 10 seconds before the listener closes, instead of

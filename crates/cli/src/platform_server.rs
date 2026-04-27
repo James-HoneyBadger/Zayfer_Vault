@@ -603,6 +603,8 @@ pub fn build_platform_router() -> Result<Router> {
 
     let mut router = Router::new()
         .route("/health", get(health_handler))
+        .route("/healthz", get(healthz_handler))
+        .route("/readyz", get(readyz_handler))
         .route("/api/version", get(api_version_handler))
         .route("/api/status", get(api_status_handler))
         .route("/api/keys", get(api_keys_handler))
@@ -717,6 +719,24 @@ async fn health_handler(State(state): State<ServerState>) -> Json<serde_json::Va
         "brand_name": state.info.brand_name,
         "version": state.info.version,
     }))
+}
+
+/// Lightweight liveness probe. Returns `200 OK` with the literal body
+/// `ok` so orchestrators (systemd, Kubernetes, Docker healthchecks) can
+/// check the process without parsing JSON. Intentionally does no I/O.
+async fn healthz_handler() -> &'static str {
+    "ok"
+}
+
+/// Readiness probe. Verifies the on-disk keystore is reachable so the
+/// server only reports "ready" once it can actually serve key-backed
+/// API calls. Returns `200 OK` with body `ready` on success, or
+/// `503 Service Unavailable` with the underlying error message.
+async fn readyz_handler() -> Result<&'static str, (StatusCode, String)> {
+    match KeyStore::open_default() {
+        Ok(_) => Ok("ready"),
+        Err(e) => Err((StatusCode::SERVICE_UNAVAILABLE, e.to_string())),
+    }
 }
 
 async fn api_version_handler(State(state): State<ServerState>) -> Json<serde_json::Value> {
@@ -1597,6 +1617,32 @@ mod tests {
             .unwrap();
         let response = router.oneshot(request).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn authed_router_allows_healthz_unauthenticated() {
+        let router = build_authed_router("anything".into()).unwrap();
+        let request = Request::builder()
+            .uri("/healthz")
+            .body(Body::empty())
+            .unwrap();
+        let response = router.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn healthz_returns_plain_ok_body() {
+        let router = build_platform_router().unwrap();
+        let request = Request::builder()
+            .uri("/healthz")
+            .body(Body::empty())
+            .unwrap();
+        let response = router.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let bytes = axum::body::to_bytes(response.into_body(), 64)
+            .await
+            .unwrap();
+        assert_eq!(&bytes[..], b"ok");
     }
 
     #[test]
