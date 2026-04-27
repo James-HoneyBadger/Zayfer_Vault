@@ -5,6 +5,7 @@ Entry point: ``hb-zayfer`` (installed via pip).
 
 from __future__ import annotations
 
+import contextlib
 import getpass
 import sys
 from pathlib import Path
@@ -21,10 +22,8 @@ err_console = Console(stderr=True, style="bold red")
 
 def _audit_safe(fn, *args, **kwargs) -> None:
     """Best-effort audit logging that never breaks user operations."""
-    try:
+    with contextlib.suppress(Exception):
         fn(*args, **kwargs)
-    except Exception:
-        pass
 
 
 def _passphrase_strength(pw: str) -> tuple[int, str]:
@@ -278,10 +277,7 @@ def encrypt(
 def decrypt(input_file: str, output: str | None, key: str | None) -> None:
     """Decrypt an HBZF file."""
     if output is None:
-        if input_file.endswith(".hbzf"):
-            output = input_file[:-5]
-        else:
-            output = f"{input_file}.dec"
+        output = input_file[:-5] if input_file.endswith(".hbzf") else f"{input_file}.dec"
 
     # Read first bytes to check wrapping mode
     with open(input_file, "rb") as f:

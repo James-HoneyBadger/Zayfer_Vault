@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 from pathlib import Path
 
 from PySide6.QtCore import Qt
@@ -292,9 +293,7 @@ class SettingsView(QWidget):
         self.clip_spin.setValue(30)
         set_auto_clear_timeout(30)
 
-        try:
+        with contextlib.suppress(Exception):
             _save_config(self._current_config())
-        except Exception:
-            pass
 
         QMessageBox.information(self, "Settings", "Settings reset to defaults.")

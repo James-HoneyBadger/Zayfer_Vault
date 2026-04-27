@@ -8,6 +8,7 @@ native Rust-backed API exposed by :mod:`hb_zayfer`.
 from __future__ import annotations
 
 import base64
+import contextlib
 import json
 import os
 from dataclasses import dataclass
@@ -19,10 +20,8 @@ import hb_zayfer as hbz
 
 def _audit_safe(fn, *args, **kwargs) -> None:
     """Best-effort audit logging without surfacing secondary failures."""
-    try:
+    with contextlib.suppress(Exception):
         fn(*args, **kwargs)
-    except Exception:
-        pass
 
 
 @dataclass(frozen=True)
@@ -107,17 +106,13 @@ class WorkspaceSummary:
         contact_count = 0
         audit_count = 0
 
-        try:
+        with contextlib.suppress(Exception):
             ks = hbz.KeyStore()
             key_count = len(ks.list_keys())
             contact_count = len(ks.list_contacts())
-        except Exception:
-            pass
 
-        try:
+        with contextlib.suppress(Exception):
             audit_count = hbz.AuditLogger().entry_count()
-        except Exception:
-            pass
 
         return cls(
             key_count=key_count,

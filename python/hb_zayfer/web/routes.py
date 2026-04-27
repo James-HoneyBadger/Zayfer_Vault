@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import contextlib
 import re
 import tempfile
 from pathlib import Path
@@ -41,10 +42,8 @@ def _sanitize_filename(name: str | None, fallback: str = "file") -> str:
 
 
 def _audit_safe(fn, *args, **kwargs) -> None:
-    try:
+    with contextlib.suppress(Exception):
         fn(*args, **kwargs)
-    except Exception:
-        pass
 
 
 def _require_home_path(raw_path: str, field_name: str) -> Path:

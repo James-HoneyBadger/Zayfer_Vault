@@ -66,7 +66,11 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["B011"]
+# tests legitimately catch bare Exception (B017) when verifying that
+# tampered ciphertext / signatures fail in *some* way without
+# pinning the implementation to a specific exception type, and use
+# unittest-style asserts (B011).
+"tests/**" = ["B011", "B017"]
 "python/hb_zayfer/gui/**" = ["B007"]  # unused loop variables in Qt patterns
 
 [tool.ruff.format]

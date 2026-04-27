@@ -52,11 +52,10 @@ def _on_clear() -> None:
         _copied_text = None
         return
     clipboard = app.clipboard()
-    if clipboard is not None and _copied_text is not None:
+    if clipboard is not None and _copied_text is not None and clipboard.text() == _copied_text:
         # Only clear if the clipboard still holds our text (user may have
         # copied something else in the meantime).
-        if clipboard.text() == _copied_text:
-            clipboard.clear()
+        clipboard.clear()
     _copied_text = None
 
 

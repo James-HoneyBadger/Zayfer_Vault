@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
+import contextlib
+
 import hb_zayfer as hbz
 
 
 def audit_safe(fn, *args, **kwargs) -> None:
     """Call an audit function without raising to UI callers."""
-    try:
+    with contextlib.suppress(Exception):
         fn(*args, **kwargs)
-    except Exception:
-        pass
 
 
 def log_key_generated(algorithm: str, fingerprint: str, view: str = "keygen") -> None:
