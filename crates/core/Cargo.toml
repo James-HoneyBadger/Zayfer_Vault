@@ -54,6 +54,7 @@ flate2 = "1"
 [dev-dependencies]
 tempfile = "3"
 criterion = "0.5"
+proptest = "1"
 
 [[bench]]
 name = "crypto_benches"
