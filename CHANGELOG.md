@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **TLS for the web platform.** New `--tls-cert <PATH>` and `--tls-key <PATH>`
+  flags on `hb-zayfer serve` enable HTTPS via `axum-server` + rustls (ring
+  provider, no C toolchain required). Mismatched flag pairs are rejected and
+  the startup banner advertises `https://` URLs when TLS is active.
 - **Web platform authentication.** The Rust-native web server now requires a
   bearer token by default. A fresh hex token is generated on each launch and
   printed in the startup banner (Jupyter-style); clients pass it via
@@ -68,6 +72,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- The web platform can now serve traffic over TLS, eliminating cleartext
+  exposure of the bearer token and request bodies on hostile networks.
 - Web platform endpoints under `/api/*` now refuse unauthenticated requests by
   default. `/health` remains exempt for liveness probes; static assets are
   unauthenticated so the SPA can load before sign-in. Token comparison uses

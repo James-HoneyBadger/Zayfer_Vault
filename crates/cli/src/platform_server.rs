@@ -350,7 +350,7 @@ fn percent_decode(input: &str) -> Option<String> {
 /// Convenience entry point: serve with a freshly generated token.
 #[allow(dead_code)]
 pub fn serve(host: &str, port: u16) -> Result<()> {
-    serve_with_auth(host, port, Some(generate_token()))
+    serve_with_auth(host, port, Some(generate_token()), None)
 }
 
 /// Serve with an explicit auth token (or ``None`` to disable auth entirely).
@@ -359,7 +359,15 @@ pub fn serve(host: &str, port: u16) -> Result<()> {
 /// warning. The default ``serve()`` entry point always supplies a freshly
 /// generated token; the unauthenticated mode must be opted into explicitly
 /// by the CLI (typically via ``--no-auth``).
-pub fn serve_with_auth(host: &str, port: u16, token: Option<String>) -> Result<()> {
+///
+/// When ``tls`` is ``Some((cert_path, key_path))``, both files must be
+/// PEM-encoded; the server then accepts only HTTPS connections.
+pub fn serve_with_auth(
+    host: &str,
+    port: u16,
+    token: Option<String>,
+    tls: Option<(String, String)>,
+) -> Result<()> {
     let addr: SocketAddr = format!("{}:{}", host, port)
         .parse()
         .context("Invalid host/port combination")?;
@@ -374,24 +382,45 @@ pub fn serve_with_auth(host: &str, port: u16, token: Option<String>) -> Result<(
             Some(t) => build_authed_router(t.clone())?,
             None => build_platform_router()?,
         };
-        let listener = tokio::net::TcpListener::bind(addr)
-            .await
-            .with_context(|| format!("Failed to bind {}", addr))?;
-        print_startup_banner(addr, token.as_deref());
-        axum::serve(listener, router)
-            .await
-            .context("Rust web server failed")?;
+        let scheme = if tls.is_some() { "https" } else { "http" };
+        print_startup_banner(addr, token.as_deref(), scheme);
+        match tls {
+            Some((cert_path, key_path)) => {
+                // Install the ring-based crypto provider once. Idempotent:
+                // a second call returns Err(()), which we ignore — that just
+                // means another part of the process already installed one.
+                let _ = rustls::crypto::ring::default_provider().install_default();
+                let config =
+                    axum_server::tls_rustls::RustlsConfig::from_pem_file(&cert_path, &key_path)
+                        .await
+                        .with_context(|| {
+                            format!("Failed to load TLS cert={cert_path} key={key_path}")
+                        })?;
+                axum_server::bind_rustls(addr, config)
+                    .serve(router.into_make_service())
+                    .await
+                    .context("Rust web server (TLS) failed")?;
+            }
+            None => {
+                let listener = tokio::net::TcpListener::bind(addr)
+                    .await
+                    .with_context(|| format!("Failed to bind {}", addr))?;
+                axum::serve(listener, router)
+                    .await
+                    .context("Rust web server failed")?;
+            }
+        }
         Ok(())
     })
 }
 
-fn print_startup_banner(addr: SocketAddr, token: Option<&str>) {
-    println!("Starting Rust web platform on http://{}", addr);
+fn print_startup_banner(addr: SocketAddr, token: Option<&str>, scheme: &str) {
+    println!("Starting Rust web platform on {}://{}", scheme, addr);
     match token {
         Some(t) => {
             println!();
             println!("    To access, use this URL (the token grants full API access):");
-            println!("        http://{}/?token={}", addr, t);
+            println!("        {}://{}/?token={}", scheme, addr, t);
             println!();
             println!("    Or send the token via header:");
             println!("        Authorization: Bearer {}", t);

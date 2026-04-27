@@ -164,6 +164,12 @@ enum Commands {
         /// Use a specific authentication token instead of generating one
         #[arg(long)]
         token: Option<String>,
+        /// Path to a PEM-encoded TLS certificate (chain). Requires --tls-key.
+        #[arg(long, value_name = "PATH")]
+        tls_cert: Option<String>,
+        /// Path to a PEM-encoded TLS private key. Requires --tls-cert.
+        #[arg(long, value_name = "PATH")]
+        tls_key: Option<String>,
     },
 
     /// Inspect an HBZF encrypted file (show header metadata without decrypting)
@@ -519,13 +525,20 @@ fn main() -> Result<()> {
             port,
             no_auth,
             token,
+            tls_cert,
+            tls_key,
         } => {
             let auth_token = if no_auth {
                 None
             } else {
                 Some(token.unwrap_or_else(platform_server::generate_token))
             };
-            platform_server::serve_with_auth(&host, port, auth_token)?
+            let tls = match (tls_cert, tls_key) {
+                (Some(c), Some(k)) => Some((c, k)),
+                (None, None) => None,
+                _ => anyhow::bail!("--tls-cert and --tls-key must be provided together"),
+            };
+            platform_server::serve_with_auth(&host, port, auth_token, tls)?
         }
 
         Commands::Inspect { file } => cmd_inspect(&file)?,
