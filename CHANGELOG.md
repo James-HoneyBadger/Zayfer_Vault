@@ -7,7 +7,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [1.1.1] — 2026-04-18
+## [Unreleased]
+
+### Added
+
+- **Web platform authentication.** The Rust-native web server now requires a
+  bearer token by default. A fresh hex token is generated on each launch and
+  printed in the startup banner (Jupyter-style); clients pass it via
+  `Authorization: Bearer <token>` or the `?token=` query parameter. New CLI
+  flags `--no-auth` (explicit opt-out for trusted loopback use) and
+  `--token <value>` (use a fixed token) on `hb-zayfer serve`.
+- New `hb_zayfer_core::aead` module providing a generic AEAD helper shared by
+  `aes_gcm` and `chacha20`, eliminating ~340 LOC of duplicated streaming and
+  nonce-derivation logic.
+- `CryptoConfig` in `hb_zayfer.gui.settings_manager` — single source of truth
+  for the on-disk crypto configuration (cipher, KDF parameters, clipboard
+  timeout) with atomic writes.
+- `ViewBase` mixin in `hb_zayfer.gui.base_view` providing shared notification,
+  file-dialog, and worker helpers for incremental adoption by GUI views.
+- Pre-commit configuration (`.pre-commit-config.yaml`) covering rustfmt,
+  clippy, ruff, and end-of-file fixers.
+- Python lint job in CI (`ruff check`, `ruff format --check`, `mypy`); Python
+  3.10 added to the test matrix.
+- README badges, "Why Zayfer Vault?" value-proposition section, and table of
+  contents.
+
+### Changed
+
+- `aes_gcm` and `chacha20` are now thin facades over the generic AEAD helper;
+  public function signatures and constants are unchanged.
+- The duplicated `_load_kdf_settings` / `_load_default_cipher` /
+  `_load_config` / `_save_config` helpers in `encrypt_view.py` and
+  `settings_view.py` now delegate to the centralised `CryptoConfig`.
+- Documentation: archived the March-2026 refactoring planning folder under
+  `docs/archive/refactoring/` (status was 0% past its declared deadline);
+  added an explicit branding note to the Rust API and Technical references
+  clarifying that the `hb_zayfer` identifier is retained for compatibility.
+
+### Security
+
+- Web platform endpoints under `/api/*` now refuse unauthenticated requests by
+  default. `/health` remains exempt for liveness probes; static assets are
+  unauthenticated so the SPA can load before sign-in. Token comparison uses
+  constant-time equality.
+
+---
+
+
 
 ### Changed
 

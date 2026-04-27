@@ -4,7 +4,8 @@ use anyhow::{Context, Result};
 use axum::{
     body::Body,
     extract::{Multipart, Path, Query, State},
-    http::{header, StatusCode},
+    http::{header, Request as HttpRequest, StatusCode},
+    middleware::{self, Next},
     response::Response,
     routing::{delete, get, post, put},
     Json, Router,
@@ -12,6 +13,8 @@ use axum::{
 use hb_zayfer_core::{
     passgen, AppInfo, AuditLogger, Contact, KeyMetadata, KeyStore, WorkspaceSummary,
 };
+use rand::RngCore;
+use rand_core::OsRng;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tower_http::services::{ServeDir, ServeFile};
@@ -165,7 +168,116 @@ struct ConfigUpdateRequest {
 
 const MAX_UPLOAD_BYTES: usize = 256 * 1024 * 1024;
 
+// ---------------------------------------------------------------------------
+// Authentication
+// ---------------------------------------------------------------------------
+//
+// The platform server defaults to *token-based* authentication, modelled on
+// Jupyter Notebook: a random token is generated at launch and printed once
+// in the startup banner. Clients must include it in either:
+//
+//   * the `Authorization: Bearer <token>` header, or
+//   * the `?token=<value>` query parameter (intended only for the initial
+//     browser hand-off; the URL is otherwise replaced by header-based auth).
+//
+// `/health` and `/static/*` are intentionally exempt — `/health` so that
+// reverse proxies and container orchestrators can probe liveness without
+// credentials, and the static asset bundle so the SPA can boot before the
+// user authenticates.
+
+/// Generate a fresh 32-byte URL-safe random token.
+pub fn generate_token() -> String {
+    let mut bytes = [0u8; 32];
+    OsRng.fill_bytes(&mut bytes);
+    hex::encode(bytes)
+}
+
+#[derive(Clone)]
+struct AuthState {
+    token: String,
+}
+
+async fn token_auth_middleware(
+    State(auth): State<AuthState>,
+    request: HttpRequest<Body>,
+    next: Next,
+) -> Result<Response, StatusCode> {
+    // Header check
+    if let Some(value) = request.headers().get(header::AUTHORIZATION) {
+        if let Ok(text) = value.to_str() {
+            if let Some(stripped) = text.strip_prefix("Bearer ") {
+                if subtle_eq(stripped.trim(), &auth.token) {
+                    return Ok(next.run(request).await);
+                }
+            }
+            // Also accept the bare token for compatibility with curl one-liners.
+            if subtle_eq(text.trim(), &auth.token) {
+                return Ok(next.run(request).await);
+            }
+        }
+    }
+    // Query-parameter fallback (?token=...)
+    if let Some(query) = request.uri().query() {
+        for pair in query.split('&') {
+            if let Some(value) = pair.strip_prefix("token=") {
+                let decoded = percent_decode(value).unwrap_or_else(|| value.to_string());
+                if subtle_eq(&decoded, &auth.token) {
+                    return Ok(next.run(request).await);
+                }
+            }
+        }
+    }
+    Err(StatusCode::UNAUTHORIZED)
+}
+
+/// Constant-time string comparison to avoid timing attacks on the token.
+fn subtle_eq(a: &str, b: &str) -> bool {
+    let a = a.as_bytes();
+    let b = b.as_bytes();
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut diff: u8 = 0;
+    for (x, y) in a.iter().zip(b.iter()) {
+        diff |= x ^ y;
+    }
+    diff == 0
+}
+
+/// Minimal percent-decoding sufficient for typical token query parameters.
+fn percent_decode(input: &str) -> Option<String> {
+    let bytes = input.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'+' => out.push(b' '),
+            b'%' if i + 2 < bytes.len() => {
+                let hi = (bytes[i + 1] as char).to_digit(16)?;
+                let lo = (bytes[i + 2] as char).to_digit(16)?;
+                out.push(((hi << 4) | lo) as u8);
+                i += 2;
+            }
+            other => out.push(other),
+        }
+        i += 1;
+    }
+    String::from_utf8(out).ok()
+}
+
+/// Convenience entry point: serve with a freshly generated token.
+#[allow(dead_code)]
 pub fn serve(host: &str, port: u16) -> Result<()> {
+    serve_with_auth(host, port, Some(generate_token()))
+}
+
+/// Serve with an explicit auth token (or ``None`` to disable auth entirely).
+/// When ``token`` is ``Some``, the value is required on every ``/api/*`` call.
+/// When ``None``, the server runs unauthenticated and prints a prominent
+/// warning. The default ``serve()`` entry point always supplies a freshly
+/// generated token; the unauthenticated mode must be opted into explicitly
+/// by the CLI (typically via ``--no-auth``).
+pub fn serve_with_auth(host: &str, port: u16, token: Option<String>) -> Result<()> {
     let addr: SocketAddr = format!("{}:{}", host, port)
         .parse()
         .context("Invalid host/port combination")?;
@@ -176,16 +288,70 @@ pub fn serve(host: &str, port: u16) -> Result<()> {
         .context("Failed to build async runtime")?;
 
     runtime.block_on(async move {
-        let router = build_platform_router()?;
+        let router = match token.as_ref() {
+            Some(t) => build_authed_router(t.clone())?,
+            None => build_platform_router()?,
+        };
         let listener = tokio::net::TcpListener::bind(addr)
             .await
             .with_context(|| format!("Failed to bind {}", addr))?;
-        println!("Starting Rust web platform on http://{}", addr);
+        print_startup_banner(addr, token.as_deref());
         axum::serve(listener, router)
             .await
             .context("Rust web server failed")?;
         Ok(())
     })
+}
+
+fn print_startup_banner(addr: SocketAddr, token: Option<&str>) {
+    println!("Starting Rust web platform on http://{}", addr);
+    match token {
+        Some(t) => {
+            println!();
+            println!("    To access, use this URL (the token grants full API access):");
+            println!("        http://{}/?token={}", addr, t);
+            println!();
+            println!("    Or send the token via header:");
+            println!("        Authorization: Bearer {}", t);
+            println!();
+        }
+        None => {
+            eprintln!();
+            eprintln!("WARNING: authentication is DISABLED for this session.");
+            eprintln!(
+                "         Anyone able to reach {} can perform privileged",
+                addr
+            );
+            eprintln!("         cryptographic operations. Use --no-auth only on a");
+            eprintln!("         trusted host bound to a loopback interface.");
+            eprintln!();
+        }
+    }
+}
+
+/// Build the platform router with token authentication enforced on every
+/// `/api/*` route. `/health`, the SPA fallback, and `/static/*` remain
+/// unauthenticated so that liveness probes and the initial asset bundle
+/// can load before the user signs in.
+pub fn build_authed_router(token: String) -> Result<Router> {
+    let base = build_platform_router()?;
+    // We can't easily split a built router; instead, we attach the auth layer
+    // to a copy of every /api route. The cleanest approach is to apply
+    // middleware at the top level and short-circuit non-/api requests.
+    let auth_state = AuthState { token };
+    Ok(base.layer(middleware::from_fn_with_state(auth_state, api_only_auth)))
+}
+
+async fn api_only_auth(
+    State(auth): State<AuthState>,
+    request: HttpRequest<Body>,
+    next: Next,
+) -> Result<Response, StatusCode> {
+    let path = request.uri().path();
+    if path.starts_with("/api/") {
+        return token_auth_middleware(State(auth), request, next).await;
+    }
+    Ok(next.run(request).await)
 }
 
 pub fn build_platform_router() -> Result<Router> {
@@ -813,5 +979,83 @@ mod tests {
 
         let verified = json_response(router, verify_request).await;
         assert_eq!(verified["integrity_hash"], created["integrity_hash"]);
+    }
+
+    // -------------------------------------------------------------------
+    // Authentication
+    // -------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn authed_router_rejects_missing_token() {
+        let router = build_authed_router("test-token-abc".into()).unwrap();
+        let request = Request::builder()
+            .uri("/api/version")
+            .body(Body::empty())
+            .unwrap();
+        let response = router.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn authed_router_rejects_wrong_token() {
+        let router = build_authed_router("expected".into()).unwrap();
+        let request = Request::builder()
+            .uri("/api/version")
+            .header("authorization", "Bearer wrong")
+            .body(Body::empty())
+            .unwrap();
+        let response = router.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn authed_router_accepts_bearer_header() {
+        let router = build_authed_router("good-token".into()).unwrap();
+        let request = Request::builder()
+            .uri("/api/version")
+            .header("authorization", "Bearer good-token")
+            .body(Body::empty())
+            .unwrap();
+        let response = router.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn authed_router_accepts_query_token() {
+        let router = build_authed_router("good-token".into()).unwrap();
+        let request = Request::builder()
+            .uri("/api/version?token=good-token")
+            .body(Body::empty())
+            .unwrap();
+        let response = router.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn authed_router_allows_health_unauthenticated() {
+        let router = build_authed_router("anything".into()).unwrap();
+        let request = Request::builder()
+            .uri("/health")
+            .body(Body::empty())
+            .unwrap();
+        let response = router.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[test]
+    fn generate_token_yields_unique_hex() {
+        let a = generate_token();
+        let b = generate_token();
+        assert_eq!(a.len(), 64);
+        assert!(a.chars().all(|c| c.is_ascii_hexdigit()));
+        assert_ne!(a, b);
+    }
+
+    #[test]
+    fn subtle_eq_constant_time_basic_equality() {
+        assert!(subtle_eq("abc", "abc"));
+        assert!(!subtle_eq("abc", "abd"));
+        assert!(!subtle_eq("abc", "ab"));
+        assert!(!subtle_eq("", "x"));
     }
 }

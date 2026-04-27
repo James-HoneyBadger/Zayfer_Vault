@@ -158,6 +158,12 @@ enum Commands {
         /// Port number
         #[arg(short = 'p', long, default_value_t = 8000)]
         port: u16,
+        /// Disable token authentication (DANGEROUS — only for trusted loopback use)
+        #[arg(long, default_value_t = false)]
+        no_auth: bool,
+        /// Use a specific authentication token instead of generating one
+        #[arg(long)]
+        token: Option<String>,
     },
 
     /// Inspect an HBZF encrypted file (show header metadata without decrypting)
@@ -508,7 +514,19 @@ fn main() -> Result<()> {
         },
 
         Commands::Status => cmd_status(cli.json)?,
-        Commands::Serve { host, port } => platform_server::serve(&host, port)?,
+        Commands::Serve {
+            host,
+            port,
+            no_auth,
+            token,
+        } => {
+            let auth_token = if no_auth {
+                None
+            } else {
+                Some(token.unwrap_or_else(platform_server::generate_token))
+            };
+            platform_server::serve_with_auth(&host, port, auth_token)?
+        }
 
         Commands::Inspect { file } => cmd_inspect(&file)?,
 
