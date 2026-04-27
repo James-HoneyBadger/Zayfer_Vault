@@ -23,6 +23,7 @@ use rand_core::OsRng;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tokio::sync::Semaphore;
+use tower_http::compression::CompressionLayer;
 use tower_http::services::{ServeDir, ServeFile};
 use tower_http::trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer};
 use tracing::Level;
@@ -659,6 +660,7 @@ pub fn build_platform_router() -> Result<Router> {
 
     Ok(router
         .layer(DefaultBodyLimit::max(MAX_UPLOAD_BYTES + 1024 * 1024))
+        .layer(CompressionLayer::new().gzip(true).br(true))
         .layer(middleware::from_fn(security_headers_middleware))
         .layer(middleware::from_fn(request_id_middleware))
         .layer(

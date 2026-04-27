@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Response compression.** The web platform now applies a
+  `tower-http` `CompressionLayer` (gzip + brotli) to every route. The
+  layer honours the client's `Accept-Encoding` header, so curl and
+  legacy clients still get raw responses. Materially shrinks the SPA
+  bundle and large JSON payloads (audit exports, key listings) over
+  the wire.
 - **Request correlation IDs.** Every response now carries an
   `X-Request-Id` header. If the client sends one (sanitised to
   alphanumeric/`-`/`_`, max 128 chars) it is echoed back; otherwise the
