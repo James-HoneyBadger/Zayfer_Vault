@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Structured request logging.** The web platform now installs a
+  `tracing-subscriber` and a `tower-http::TraceLayer`, emitting per-request
+  spans with method, path, status, and latency to stderr. The default filter
+  is `hb_zayfer=info,tower_http=info`; override via the standard `RUST_LOG`
+  environment variable.
 - **Expanded WASM crypto surface.** The browser bindings now expose
   `sha512`, `hmac_sha256`, `hmac_sha512`, `hkdf_sha256`, and
   `random_password` (with character-class guarantees and modulo-bias-free

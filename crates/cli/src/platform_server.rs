@@ -24,6 +24,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tokio::sync::Semaphore;
 use tower_http::services::{ServeDir, ServeFile};
+use tower_http::trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer};
+use tracing::Level;
 
 /// Maximum number of concurrent expensive keypair generations (RSA-4096 etc.).
 /// Bounding this prevents an authenticated client from exhausting CPU by
@@ -277,6 +279,26 @@ pub fn generate_token() -> String {
     hex::encode(bytes)
 }
 
+/// Initialise tracing for the web platform.
+///
+/// Reads the `RUST_LOG` env var (default: `hb_zayfer=info,tower_http=info`),
+/// emits structured logs to stderr, and is safe to call multiple times —
+/// subsequent calls are no-ops once a global subscriber is installed.
+fn init_tracing() {
+    use std::sync::Once;
+    use tracing_subscriber::{fmt, EnvFilter};
+    static ONCE: Once = Once::new();
+    ONCE.call_once(|| {
+        let filter = EnvFilter::try_from_default_env()
+            .unwrap_or_else(|_| EnvFilter::new("hb_zayfer=info,tower_http=info"));
+        let _ = fmt()
+            .with_env_filter(filter)
+            .with_target(false)
+            .with_writer(std::io::stderr)
+            .try_init();
+    });
+}
+
 /// Ensure a self-signed certificate exists under the Zayfer config
 /// directory and return `(cert_path, key_path)` suitable for passing to
 /// [`serve_with_auth`].
@@ -441,6 +463,7 @@ pub fn serve_with_auth(
     token: Option<String>,
     tls: Option<(String, String)>,
 ) -> Result<()> {
+    init_tracing();
     let addr: SocketAddr = format!("{}:{}", host, port)
         .parse()
         .context("Invalid host/port combination")?;
@@ -602,7 +625,12 @@ pub fn build_platform_router() -> Result<Router> {
 
     Ok(router
         .layer(DefaultBodyLimit::max(MAX_UPLOAD_BYTES + 1024 * 1024))
-        .layer(middleware::from_fn(security_headers_middleware)))
+        .layer(middleware::from_fn(security_headers_middleware))
+        .layer(
+            TraceLayer::new_for_http()
+                .make_span_with(DefaultMakeSpan::new().level(Level::INFO))
+                .on_response(DefaultOnResponse::new().level(Level::INFO)),
+        ))
 }
 
 /// Apply a small set of conservative security headers to every response.
