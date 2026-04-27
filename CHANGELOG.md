@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Request correlation IDs.** Every response now carries an
+  `X-Request-Id` header. If the client sends one (sanitised to
+  alphanumeric/`-`/`_`, max 128 chars) it is echoed back; otherwise the
+  server mints a fresh 16-byte hex id. Pairs with the C11 structured
+  logging so requests can be traced end-to-end through reverse proxies.
 - **Liveness and readiness probes.** New unauthenticated endpoints
   `/healthz` (returns plain `ok`, no I/O) and `/readyz` (returns `ready`
   only after the on-disk keystore opens cleanly, otherwise

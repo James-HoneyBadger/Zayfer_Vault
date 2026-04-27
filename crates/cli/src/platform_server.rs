@@ -660,6 +660,7 @@ pub fn build_platform_router() -> Result<Router> {
     Ok(router
         .layer(DefaultBodyLimit::max(MAX_UPLOAD_BYTES + 1024 * 1024))
         .layer(middleware::from_fn(security_headers_middleware))
+        .layer(middleware::from_fn(request_id_middleware))
         .layer(
             TraceLayer::new_for_http()
                 .make_span_with(DefaultMakeSpan::new().level(Level::INFO))
@@ -696,6 +697,43 @@ async fn security_headers_middleware(request: HttpRequest<Body>, next: Next) -> 
             "camera=(), microphone=(), geolocation=(), interest-cohort=()",
         ));
     response
+}
+
+/// Echo or mint a request correlation id.
+///
+/// If the incoming request carries `X-Request-Id`, that value is reused
+/// (after a length+charset sanity check); otherwise we mint a fresh
+/// 16-byte hex token. The id is always copied onto the response so
+/// clients and reverse proxies can correlate logs end-to-end.
+async fn request_id_middleware(mut request: HttpRequest<Body>, next: Next) -> Response {
+    use axum::http::HeaderValue;
+    const HEADER: &str = "x-request-id";
+
+    let id = request
+        .headers()
+        .get(HEADER)
+        .and_then(|v| v.to_str().ok())
+        .filter(|s| {
+            !s.is_empty()
+                && s.len() <= 128
+                && s.bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+        })
+        .map(|s| s.to_owned())
+        .unwrap_or_else(|| {
+            let mut bytes = [0u8; 16];
+            OsRng.fill_bytes(&mut bytes);
+            hex::encode(bytes)
+        });
+
+    if let Ok(hv) = HeaderValue::from_str(&id) {
+        request.headers_mut().insert(HEADER, hv.clone());
+        let mut response = next.run(request).await;
+        response.headers_mut().insert(HEADER, hv);
+        response
+    } else {
+        next.run(request).await
+    }
 }
 
 /// Strict-Transport-Security: only ever applied when the server is bound over
@@ -1643,6 +1681,51 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(&bytes[..], b"ok");
+    }
+
+    #[tokio::test]
+    async fn request_id_is_minted_when_absent() {
+        let router = build_platform_router().unwrap();
+        let request = Request::builder()
+            .uri("/healthz")
+            .body(Body::empty())
+            .unwrap();
+        let response = router.oneshot(request).await.unwrap();
+        let id = response
+            .headers()
+            .get("x-request-id")
+            .expect("response should carry x-request-id");
+        let s = id.to_str().unwrap();
+        assert_eq!(s.len(), 32, "minted id should be 16 bytes hex");
+        assert!(s.chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
+    #[tokio::test]
+    async fn request_id_is_echoed_when_provided() {
+        let router = build_platform_router().unwrap();
+        let request = Request::builder()
+            .uri("/healthz")
+            .header("x-request-id", "client-supplied-42")
+            .body(Body::empty())
+            .unwrap();
+        let response = router.oneshot(request).await.unwrap();
+        let id = response.headers().get("x-request-id").unwrap();
+        assert_eq!(id.to_str().unwrap(), "client-supplied-42");
+    }
+
+    #[tokio::test]
+    async fn request_id_with_invalid_chars_is_replaced() {
+        let router = build_platform_router().unwrap();
+        let request = Request::builder()
+            .uri("/healthz")
+            .header("x-request-id", "bad id with spaces")
+            .body(Body::empty())
+            .unwrap();
+        let response = router.oneshot(request).await.unwrap();
+        let id = response.headers().get("x-request-id").unwrap();
+        let s = id.to_str().unwrap();
+        assert_ne!(s, "bad id with spaces");
+        assert_eq!(s.len(), 32);
     }
 
     #[test]
