@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QThreadPool
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -23,7 +23,6 @@ from PySide6.QtWidgets import (
 )
 
 import hb_zayfer as hbz
-from hb_zayfer.gui.workers import CryptoWorker
 
 
 # Map operation debug strings to friendly labels

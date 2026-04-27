@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import os
 from PySide6.QtCore import Qt, QSize, QTimer
-from PySide6.QtGui import QIcon, QAction, QKeySequence
+from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QMainWindow,
     QWidget,

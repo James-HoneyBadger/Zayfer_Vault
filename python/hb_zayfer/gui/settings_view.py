@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
 )
 
 import hb_zayfer as hbz
-from hb_zayfer.gui.clipboard import set_auto_clear_timeout, get_auto_clear_timeout
+from hb_zayfer.gui.clipboard import set_auto_clear_timeout
 from hb_zayfer.gui.theme import Theme
 from hb_zayfer.gui.settings_manager import CryptoConfig
 
