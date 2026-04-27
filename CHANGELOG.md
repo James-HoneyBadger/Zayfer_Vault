@@ -9,6 +9,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **`cargo audit` baseline.** All currently acknowledged advisories
+  are documented in `docs/reference/SECURITY.md` ("Acknowledged
+  Supply-Chain Advisories") and listed in `.cargo/audit.toml` so
+  CI doesn't fail on them. New advisories not on this list are now
+  release-blocking by policy. Acknowledged: RUSTSEC-2023-0071 (RSA
+  Marvin), RUSTSEC-2025-0119 (number_prefix unmaintained),
+  RUSTSEC-2025-0134 (rustls-pemfile unmaintained), RUSTSEC-2026-0097
+  (rand unsoundness with custom logger).
+
+### Removed
+
+- **Unused dependencies** (cargo-machete sweep): `pem` from
+  `crates/core`; `base64`, `serde`, `js-sys` from `crates/wasm`;
+  `base64`, `serde_json` from `crates/python`. `getrandom` and
+  `rand_core` are kept in `crates/wasm` as feature shims for the
+  browser CSPRNG backend even though they look unused.
+- **Unused `platform_server::serve()` shim.** The `#[allow(dead_code)]`
+  convenience wrapper had zero call sites in the workspace; the CLI
+  has always used `serve_with_auth` directly.
+
 ### Added
 
 - **Per-IP failed-auth lockout.** The `/api/*` token middleware now
@@ -25,12 +47,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   detection; Ed25519 sign/verify and message-binding; compression
   round-trip. 32 cases each, no on-disk persistence (CI-safe). Adds
   `proptest = "1"` to `crates/core` dev-deps.
-
-### Removed
-
-- **Unused `platform_server::serve()` shim.** The `#[allow(dead_code)]`
-  convenience wrapper had zero call sites in the workspace; the CLI
-  has always used `serve_with_auth` directly.
 
 ### Fixed
 
