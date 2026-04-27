@@ -86,6 +86,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- **HSTS over TLS.** When the platform is bound over HTTPS, every response
+  now carries `Strict-Transport-Security: max-age=31536000; includeSubDomains`.
+  HSTS is intentionally **not** sent over plaintext (per RFC 6797).
 - **Defence-in-depth response headers** on every web platform reply:
   `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`,
   `Referrer-Policy: no-referrer`, `Cross-Origin-Opener-Policy: same-origin`,

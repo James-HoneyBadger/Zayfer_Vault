@@ -451,11 +451,14 @@ pub fn serve_with_auth(
         .context("Failed to build async runtime")?;
 
     runtime.block_on(async move {
-        let router = match token.as_ref() {
+        let mut router = match token.as_ref() {
             Some(t) => build_authed_router(t.clone())?,
             None => build_platform_router()?,
         };
         let scheme = if tls.is_some() { "https" } else { "http" };
+        if tls.is_some() {
+            router = router.layer(middleware::from_fn(hsts_middleware));
+        }
         print_startup_banner(addr, token.as_deref(), scheme);
         match tls {
             Some((cert_path, key_path)) => {
@@ -627,6 +630,21 @@ async fn security_headers_middleware(request: HttpRequest<Body>, next: Next) -> 
         .entry("permissions-policy")
         .or_insert(HeaderValue::from_static(
             "camera=(), microphone=(), geolocation=(), interest-cohort=()",
+        ));
+    response
+}
+
+/// Strict-Transport-Security: only ever applied when the server is bound over
+/// TLS. Browsers must never receive HSTS over plaintext, and we don't want to
+/// pin clients to HTTPS when the operator hasn't configured a certificate.
+async fn hsts_middleware(request: HttpRequest<Body>, next: Next) -> Response {
+    let mut response = next.run(request).await;
+    use axum::http::HeaderValue;
+    response
+        .headers_mut()
+        .entry(header::STRICT_TRANSPORT_SECURITY)
+        .or_insert(HeaderValue::from_static(
+            "max-age=31536000; includeSubDomains",
         ));
     response
 }

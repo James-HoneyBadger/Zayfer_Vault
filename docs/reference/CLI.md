@@ -113,7 +113,21 @@ Recipient mode and compression:
 ```bash
 ./run.sh cli status --json
 ./run.sh cli serve --host 127.0.0.1 --port 8000
+# Bind on HTTPS using a one-shot self-signed certificate
+./run.sh cli serve --auto-tls
+# Or supply your own PEM-encoded cert/key pair
+./run.sh cli serve --tls-cert ./tls/server.pem --tls-key ./tls/server.key
+# Disable token auth (DANGEROUS — only on trusted loopback)
+./run.sh cli serve --no-auth
 ```
+
+The web platform issues a fresh hex bearer token on every launch unless
+`--token` or `--no-auth` is passed. It exposes the same JSON API used by
+the desktop GUI plus a Server-Sent Events stream of audit entries at
+`GET /api/audit/stream`. Every response carries defence-in-depth headers
+(`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`,
+`Cross-Origin-Opener-Policy`, `Permissions-Policy`); HTTPS responses
+additionally carry `Strict-Transport-Security`.
 
 ### Utility commands
 
