@@ -9,6 +9,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Per-IP failed-auth lockout.** The `/api/*` token middleware now
+  tracks failures per source IP. After 10 failures inside a 60-second
+  window the offending IP receives `429 Too Many Requests` until the
+  window rolls over; a successful auth clears the counter for that
+  IP. Combined with the C17 250 ms stall this caps brute-force
+  throughput at ~10 attempts/minute per IP even before the 32-byte
+  hex token entropy is considered. Peer IP is read from `ConnectInfo`
+  (the listener now uses `into_make_service_with_connect_info`).
+- **Property-based crypto tests.** New `crates/core/tests/property.rs`
+  exercises seven proptest invariants over randomly generated inputs:
+  AES-256-GCM and ChaCha20-Poly1305 round-trip; AAD/ciphertext tamper
+  detection; Ed25519 sign/verify and message-binding; compression
+  round-trip. 32 cases each, no on-disk persistence (CI-safe). Adds
+  `proptest = "1"` to `crates/core` dev-deps.
+
+### Removed
+
+- **Unused `platform_server::serve()` shim.** The `#[allow(dead_code)]`
+  convenience wrapper had zero call sites in the workspace; the CLI
+  has always used `serve_with_auth` directly.
+
 ### Fixed
 
 - **GUI type correctness and API misuse.** Four narrowly scoped fixes:
