@@ -26,7 +26,7 @@ classifiers = [
 gui = ["PySide6>=6.5"]
 web = ["fastapi>=0.100", "uvicorn[standard]>=0.20", "python-multipart>=0.0.6"]
 cli = ["click>=8.0", "rich>=13.0"]
-dev = ["pytest>=7.0", "pytest-asyncio>=0.21", "httpx>=0.24"]
+dev = ["pytest>=7.0", "pytest-asyncio>=0.21", "pytest-qt>=4.2", "httpx>=0.24"]
 all = ["hb_zayfer[gui,web,cli,dev]"]
 
 [project.scripts]

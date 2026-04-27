@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **GUI smoke tests via `pytest-qt`.** Added `pytest-qt` to the `dev`
+  optional dependency group and a first GUI test module
+  (`tests/python/test_gui_password_strength.py`) that boots the
+  password-strength widget under `qtbot` and asserts it reacts to
+  input. Tests gate themselves on PySide6/pytest-qt being importable
+  so the suite still passes in headless environments without Qt.
 - **Response compression.** The web platform now applies a
   `tower-http` `CompressionLayer` (gzip + brotli) to every route. The
   layer honours the client's `Accept-Encoding` header, so curl and
