@@ -9,133 +9,28 @@
 //!   contacts.json
 //!   config.toml
 //! ```
+//!
+//! Module layout (Phase B2 split):
+//! - [`types`] — data types (`KeyAlgorithm`, `KeyMetadata`, `KeyUsage`,
+//!   `KeyExpiryStatus`, `Contact`, and the on-disk index containers).
+//! - [`format`] — public-key fingerprinting + format detection.
+//! - this file — the [`KeyStore`] struct and its I/O / lifecycle methods.
 
-use std::collections::HashMap;
+mod format;
+mod types;
+
+pub use format::{compute_fingerprint, detect_key_format, KeyFormat};
+pub use types::{Contact, KeyAlgorithm, KeyExpiryStatus, KeyMetadata, KeyUsage};
+use types::{ContactsStore, KeyringIndex};
+
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 
 use crate::aes_gcm;
 use crate::error::{HbError, HbResult};
 use crate::kdf::{self, KdfParams};
-
-/// Algorithm type for a stored key.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum KeyAlgorithm {
-    Rsa2048,
-    Rsa4096,
-    Ed25519,
-    X25519,
-    Pgp,
-}
-
-impl std::fmt::Display for KeyAlgorithm {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            KeyAlgorithm::Rsa2048 => write!(f, "RSA-2048"),
-            KeyAlgorithm::Rsa4096 => write!(f, "RSA-4096"),
-            KeyAlgorithm::Ed25519 => write!(f, "Ed25519"),
-            KeyAlgorithm::X25519 => write!(f, "X25519"),
-            KeyAlgorithm::Pgp => write!(f, "PGP"),
-        }
-    }
-}
-
-/// Metadata for a key stored in the keyring.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct KeyMetadata {
-    pub fingerprint: String,
-    pub algorithm: KeyAlgorithm,
-    pub label: String,
-    pub created_at: DateTime<Utc>,
-    pub has_private: bool,
-    pub has_public: bool,
-    /// Allowed usage constraints for this key.
-    /// If empty or `None`, the key can be used for any operation its algorithm
-    /// supports. When set, operations not in the list are rejected.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub allowed_usages: Option<Vec<KeyUsage>>,
-    /// Optional expiry date. The key should be rejected after this timestamp.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub expires_at: Option<DateTime<Utc>>,
-}
-
-/// Permitted key usage operations.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum KeyUsage {
-    /// Key may be used for encryption / key wrapping.
-    Encrypt,
-    /// Key may be used for decryption / key unwrapping.
-    Decrypt,
-    /// Key may be used for digital signatures.
-    Sign,
-    /// Key may be used for signature verification.
-    Verify,
-    /// Key may be used for Diffie-Hellman key agreement.
-    KeyAgreement,
-}
-
-/// Status returned by [`KeyStore::check_expiring_keys`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum KeyExpiryStatus {
-    /// The key has already passed its expiry date.
-    Expired,
-    /// The key will expire within the configured warning window.
-    ExpiringSoon { days_left: u32 },
-}
-
-impl KeyMetadata {
-    /// Returns `Ok(())` if the key is allowed for the given `usage`, or an
-    /// error describing why it is not.
-    pub fn check_usage(&self, usage: KeyUsage) -> HbResult<()> {
-        // Check expiry first
-        if let Some(exp) = self.expires_at {
-            if Utc::now() > exp {
-                return Err(HbError::Config(format!(
-                    "Key '{}' expired on {}",
-                    self.fingerprint,
-                    exp.to_rfc3339()
-                )));
-            }
-        }
-        // Check usage constraints
-        if let Some(ref usages) = self.allowed_usages {
-            if !usages.contains(&usage) {
-                return Err(HbError::Config(format!(
-                    "Key '{}' is not permitted for {:?} (allowed: {:?})",
-                    self.fingerprint, usage, usages
-                )));
-            }
-        }
-        Ok(())
-    }
-}
-
-/// A contact in the address book.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Contact {
-    pub name: String,
-    pub email: Option<String>,
-    pub key_fingerprints: Vec<String>,
-    pub notes: Option<String>,
-    pub created_at: DateTime<Utc>,
-}
-
-/// The keyring index file.
-#[derive(Debug, Default, Serialize, Deserialize)]
-pub struct KeyringIndex {
-    pub keys: HashMap<String, KeyMetadata>,
-}
-
-/// The contacts file.
-#[derive(Debug, Default, Serialize, Deserialize)]
-pub struct ContactsStore {
-    pub contacts: HashMap<String, Contact>,
-}
 
 /// The KeyStore manages all key operations on disk.
 pub struct KeyStore {
@@ -656,42 +551,6 @@ impl KeyStore {
             .collect();
         matches
     }
-}
-
-/// Compute a fingerprint from arbitrary public key bytes.
-pub fn compute_fingerprint(public_key_bytes: &[u8]) -> String {
-    let hash = Sha256::digest(public_key_bytes);
-    hex::encode(hash)
-}
-
-/// Auto-detect the format of a key file by inspecting its contents.
-pub fn detect_key_format(data: &[u8]) -> KeyFormat {
-    if let Ok(text) = std::str::from_utf8(data) {
-        if text.contains("-----BEGIN PGP") {
-            return KeyFormat::OpenPgpArmor;
-        }
-        if text.starts_with("ssh-") {
-            return KeyFormat::OpenSsh;
-        }
-        if text.contains("-----BEGIN") {
-            // Could be PKCS#1 or PKCS#8
-            if text.contains("RSA PRIVATE KEY") || text.contains("RSA PUBLIC KEY") {
-                return KeyFormat::Pkcs1Pem;
-            }
-            return KeyFormat::Pkcs8Pem;
-        }
-    }
-    KeyFormat::Der
-}
-
-/// Key file format.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum KeyFormat {
-    Pkcs8Pem,
-    Pkcs1Pem,
-    Der,
-    OpenPgpArmor,
-    OpenSsh,
 }
 
 #[cfg(test)]
