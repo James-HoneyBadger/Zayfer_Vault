@@ -1564,17 +1564,42 @@ fn read_input(path: &str) -> Result<Vec<u8>> {
 }
 
 /// Read a passphrase from a file (first line, trimmed).
+///
+/// As a convenience, the path `"-"` reads from standard input. This lets
+/// callers pipe a passphrase into the CLI without leaving it on disk:
+///
+/// ```sh
+/// echo -n 'hunter2' | hb-zayfer encrypt --passphrase-file - file.txt out.hbzf
+/// ```
 fn read_passphrase_file(path: &str) -> Result<String> {
-    let content = fs::read_to_string(path)
-        .with_context(|| format!("Failed to read passphrase file: {path}"))?;
+    let content = if path == "-" {
+        let mut buf = String::new();
+        io::stdin()
+            .read_to_string(&mut buf)
+            .context("Failed to read passphrase from stdin")?;
+        buf
+    } else {
+        fs::read_to_string(path)
+            .with_context(|| format!("Failed to read passphrase file: {path}"))?
+    };
     let first_line = content.lines().next().unwrap_or("").trim().to_string();
     if first_line.is_empty() {
-        bail!("Passphrase file is empty: {path}");
+        bail!("Passphrase is empty");
     }
     Ok(first_line)
 }
 
-/// Resolve a passphrase from explicit string, file, or prompt.
+/// Environment variable consulted by `resolve_passphrase` as a fallback
+/// before falling through to an interactive prompt.
+const PASSPHRASE_ENV_VAR: &str = "ZAYFER_PASSPHRASE";
+
+/// Resolve a passphrase from explicit string, file, environment, or prompt.
+///
+/// Resolution order:
+/// 1. `--passphrase <value>` (explicit, highest priority)
+/// 2. `--passphrase-file <path>` (path may be `"-"` for stdin)
+/// 3. `$ZAYFER_PASSPHRASE` environment variable
+/// 4. Interactive prompt
 fn resolve_passphrase(
     explicit: Option<String>,
     passphrase_file: Option<String>,
@@ -1586,6 +1611,11 @@ fn resolve_passphrase(
     }
     if let Some(f) = passphrase_file {
         return read_passphrase_file(&f);
+    }
+    if let Ok(env_pass) = std::env::var(PASSPHRASE_ENV_VAR) {
+        if !env_pass.is_empty() {
+            return Ok(env_pass);
+        }
     }
     if confirm {
         Ok(Password::new()

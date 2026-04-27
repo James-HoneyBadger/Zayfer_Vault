@@ -27,6 +27,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   file-dialog, and worker helpers for incremental adoption by GUI views.
 - Pre-commit configuration (`.pre-commit-config.yaml`) covering rustfmt,
   clippy, ruff, and end-of-file fixers.
+- **Keygen rate limiting.** The web platform caps concurrent expensive
+  keypair generations at 2 per process; excess requests receive
+  `429 Too Many Requests` instead of starving the host CPU.
+- **Path-traversal hardening.** Backup endpoints reject empty paths, NUL
+  bytes, `..` components, and writes under `/etc`, `/proc`, `/sys`, `/dev`,
+  `/boot`, `/root`, and `/var/log`. Covered by new unit and HTTP tests.
+- **Passphrase resolution from stdin & environment.** The CLI now accepts
+  `--passphrase-file -` (read passphrase from stdin) and falls back to the
+  `ZAYFER_PASSPHRASE` environment variable before prompting interactively.
+- 12 additional unit tests for the new `aead` module: nonce derivation
+  uniqueness, AAD index reorder detection, chunk-index overflow, tampered
+  ciphertext, mismatched AAD, and per-cipher error labelling.
 - Python lint job in CI (`ruff check`, `ruff format --check`, `mypy`); Python
   3.10 added to the test matrix.
 - README badges, "Why Zayfer Vault?" value-proposition section, and table of
@@ -50,6 +62,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   default. `/health` remains exempt for liveness probes; static assets are
   unauthenticated so the SPA can load before sign-in. Token comparison uses
   constant-time equality.
+- Backup-related endpoints reject path traversal (`..`), NUL-byte injection,
+  and writes under sensitive system roots as defence-in-depth on top of OS
+  permissions.
+- Concurrent keypair-generation requests are bounded to prevent CPU
+  exhaustion by an authenticated client.
+
+### Deprecated
+
+- The Python FastAPI backend (`hb_zayfer.web`) is deprecated in favour of the
+  Rust-native platform server (`hb-zayfer serve`). Importing the module now
+  emits a `DeprecationWarning`. The module remains available for backward
+  compatibility and will be removed in a future release.
 
 ---
 

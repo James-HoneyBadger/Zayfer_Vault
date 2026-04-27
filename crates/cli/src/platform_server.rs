@@ -1,4 +1,6 @@
 use std::net::SocketAddr;
+use std::path::{Component, Path as FsPath};
+use std::sync::OnceLock;
 
 use anyhow::{Context, Result};
 use axum::{
@@ -17,7 +19,69 @@ use rand::RngCore;
 use rand_core::OsRng;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use tokio::sync::Semaphore;
 use tower_http::services::{ServeDir, ServeFile};
+
+/// Maximum number of concurrent expensive keypair generations (RSA-4096 etc.).
+/// Bounding this prevents an authenticated client from exhausting CPU by
+/// flooding the keygen endpoint.
+const KEYGEN_CONCURRENCY: usize = 2;
+
+fn keygen_semaphore() -> &'static Semaphore {
+    static SEM: OnceLock<Semaphore> = OnceLock::new();
+    SEM.get_or_init(|| Semaphore::new(KEYGEN_CONCURRENCY))
+}
+
+/// Filesystem locations that should never be a target for read/write
+/// operations issued through the web API, even if the caller is authenticated.
+/// This is defence-in-depth on top of OS-level permissions.
+const FORBIDDEN_PATH_PREFIXES: &[&str] = &[
+    "/etc", "/proc", "/sys", "/dev", "/boot", "/root", "/var/log",
+];
+
+/// Validate a user-supplied filesystem path that will be written to (or read
+/// from) by a privileged service call. Rejects:
+/// - empty paths
+/// - paths containing NUL bytes (defense against C-string truncation)
+/// - paths whose components include `..` (no parent traversal in inputs)
+/// - paths under well-known sensitive system roots
+///
+/// Note: this does not canonicalise the path (which may not exist yet). It
+/// is a syntactic check intended to catch obvious abuse, not a substitute for
+/// the OS permission model.
+fn validate_user_path(raw: &str) -> Result<(), (StatusCode, String)> {
+    if raw.is_empty() {
+        return Err((StatusCode::BAD_REQUEST, "path must not be empty".into()));
+    }
+    if raw.as_bytes().contains(&0u8) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "path must not contain NUL bytes".into(),
+        ));
+    }
+    let p = FsPath::new(raw);
+    for comp in p.components() {
+        if matches!(comp, Component::ParentDir) {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                "path must not contain '..' components".into(),
+            ));
+        }
+    }
+    // Block well-known system locations. Compare on the lexical form so we
+    // don't follow symlinks during validation.
+    if let Some(s) = p.to_str() {
+        for prefix in FORBIDDEN_PATH_PREFIXES {
+            if s == *prefix || s.starts_with(&format!("{}/", prefix)) {
+                return Err((
+                    StatusCode::FORBIDDEN,
+                    format!("path under {} is not permitted", prefix),
+                ));
+            }
+        }
+    }
+    Ok(())
+}
 
 #[derive(Clone)]
 struct ServerState {
@@ -586,6 +650,13 @@ async fn api_decrypt_file_handler(
 async fn api_keygen_handler(
     Json(req): Json<KeygenRequest>,
 ) -> Result<Json<KeygenResponse>, (StatusCode, String)> {
+    // Cap concurrent expensive keygen operations to protect the host CPU.
+    let _permit = keygen_semaphore().try_acquire().map_err(|_| {
+        (
+            StatusCode::TOO_MANY_REQUESTS,
+            "keygen is busy; retry shortly".to_string(),
+        )
+    })?;
     let mut keystore = KeyStore::open_default().map_err(internal_err)?;
     let created = hb_zayfer_core::services::generate_and_store_key(
         &mut keystore,
@@ -690,6 +761,7 @@ async fn api_link_contact_handler(
 async fn api_backup_create_handler(
     Json(req): Json<BackupRequest>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    validate_user_path(&req.output_path)?;
     let manifest = hb_zayfer_core::services::create_backup_archive(
         &req.output_path,
         &req.passphrase,
@@ -702,6 +774,7 @@ async fn api_backup_create_handler(
 async fn api_backup_verify_handler(
     Json(req): Json<RestoreRequest>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    validate_user_path(&req.backup_path)?;
     let manifest =
         hb_zayfer_core::services::verify_backup_archive(&req.backup_path, &req.passphrase)
             .map_err(bad_request_err)?;
@@ -711,6 +784,7 @@ async fn api_backup_verify_handler(
 async fn api_backup_restore_handler(
     Json(req): Json<RestoreRequest>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    validate_user_path(&req.backup_path)?;
     let manifest =
         hb_zayfer_core::services::restore_backup_archive(&req.backup_path, &req.passphrase)
             .map_err(bad_request_err)?;
@@ -1057,5 +1131,82 @@ mod tests {
         assert!(!subtle_eq("abc", "abd"));
         assert!(!subtle_eq("abc", "ab"));
         assert!(!subtle_eq("", "x"));
+    }
+
+    // -------------------------------------------------------------------
+    // Path validation (defence-in-depth against traversal)
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn validate_user_path_accepts_normal_paths() {
+        assert!(validate_user_path("/tmp/zayfer/backup.hbzf").is_ok());
+        assert!(validate_user_path("relative/sub/file.hbzf").is_ok());
+        assert!(validate_user_path("/home/alice/backups/2026.hbzf").is_ok());
+    }
+
+    #[test]
+    fn validate_user_path_rejects_empty() {
+        let err = validate_user_path("").unwrap_err();
+        assert_eq!(err.0, StatusCode::BAD_REQUEST);
+    }
+
+    #[test]
+    fn validate_user_path_rejects_null_byte() {
+        let err = validate_user_path("/tmp/foo\0.hbzf").unwrap_err();
+        assert_eq!(err.0, StatusCode::BAD_REQUEST);
+    }
+
+    #[test]
+    fn validate_user_path_rejects_parent_traversal() {
+        let err = validate_user_path("/tmp/../etc/passwd").unwrap_err();
+        assert_eq!(err.0, StatusCode::BAD_REQUEST);
+        let err = validate_user_path("backups/../../secret").unwrap_err();
+        assert_eq!(err.0, StatusCode::BAD_REQUEST);
+    }
+
+    #[test]
+    fn validate_user_path_rejects_sensitive_roots() {
+        for bad in [
+            "/etc/passwd",
+            "/proc/self/mem",
+            "/sys/kernel",
+            "/dev/sda",
+            "/root/.ssh/id_rsa",
+            "/boot/grub.cfg",
+            "/var/log/syslog",
+        ] {
+            let err = validate_user_path(bad).unwrap_err();
+            assert_eq!(err.0, StatusCode::FORBIDDEN, "expected 403 for {}", bad);
+        }
+    }
+
+    #[tokio::test]
+    async fn backup_create_rejects_traversal_path() {
+        let router = build_platform_router().unwrap();
+        let request = Request::builder()
+            .uri("/api/backup/create")
+            .method(Method::POST)
+            .header("content-type", "application/json")
+            .body(Body::from(
+                r#"{"output_path":"/etc/zayfer.hbzf","passphrase":"x"}"#,
+            ))
+            .unwrap();
+        let response = router.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn backup_create_rejects_traversal_path_async() {
+        let router = build_platform_router().unwrap();
+        let request = Request::builder()
+            .uri("/api/backup/create")
+            .method(Method::POST)
+            .header("content-type", "application/json")
+            .body(Body::from(
+                r#"{"output_path":"/tmp/../etc/x.hbzf","passphrase":"x"}"#,
+            ))
+            .unwrap();
+        let response = router.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
 }

@@ -208,3 +208,153 @@ where
         )
         .map_err(|_| HbError::AuthenticationFailed)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ::aes_gcm::Aes256Gcm;
+    use ::chacha20poly1305::ChaCha20Poly1305;
+
+    fn key32() -> [u8; KEY_SIZE] {
+        let mut k = [0u8; KEY_SIZE];
+        for (i, b) in k.iter_mut().enumerate() {
+            *b = i as u8;
+        }
+        k
+    }
+
+    #[test]
+    fn derive_chunk_nonce_unique_per_index() {
+        let base = [7u8; NONCE_SIZE];
+        let n0 = derive_chunk_nonce(&base, 0);
+        let n1 = derive_chunk_nonce(&base, 1);
+        let n2 = derive_chunk_nonce(&base, MAX_CHUNK_INDEX - 1);
+        assert_ne!(n0, n1);
+        assert_ne!(n0, n2);
+        assert_ne!(n1, n2);
+        // Index 0 must leave the base nonce unchanged.
+        assert_eq!(n0, base);
+    }
+
+    #[test]
+    fn chunked_aad_appends_index_le() {
+        let out = chunked_aad(b"abc", 0x0102030405060708);
+        assert_eq!(&out[..3], b"abc");
+        assert_eq!(&out[3..], &0x0102030405060708u64.to_le_bytes());
+    }
+
+    #[test]
+    fn check_key_rejects_short_key() {
+        let err = check_key(CipherKind::AesGcm, &[0u8; 16]).unwrap_err();
+        assert!(err.to_string().contains("Key must be"));
+    }
+
+    #[test]
+    fn check_nonce_rejects_wrong_size() {
+        assert!(check_nonce(CipherKind::ChaCha20Poly1305, &[0u8; 11]).is_err());
+        assert!(check_nonce(CipherKind::ChaCha20Poly1305, &[0u8; 13]).is_err());
+        assert!(check_nonce(CipherKind::ChaCha20Poly1305, &[0u8; 12]).is_ok());
+    }
+
+    #[test]
+    fn check_chunk_index_rejects_overflow() {
+        assert!(check_chunk_index(CipherKind::AesGcm, 0).is_ok());
+        assert!(check_chunk_index(CipherKind::AesGcm, MAX_CHUNK_INDEX - 1).is_ok());
+        assert!(check_chunk_index(CipherKind::AesGcm, MAX_CHUNK_INDEX).is_err());
+    }
+
+    #[test]
+    fn aes_gcm_roundtrip_via_generic_path() {
+        let key = key32();
+        let (nonce, ct) =
+            encrypt::<Aes256Gcm>(CipherKind::AesGcm, &key, b"hello", b"meta").unwrap();
+        let pt = decrypt::<Aes256Gcm>(CipherKind::AesGcm, &key, &nonce, &ct, b"meta").unwrap();
+        assert_eq!(pt, b"hello");
+    }
+
+    #[test]
+    fn chacha_roundtrip_via_generic_path() {
+        let key = key32();
+        let (nonce, ct) =
+            encrypt::<ChaCha20Poly1305>(CipherKind::ChaCha20Poly1305, &key, b"world", b"hdr")
+                .unwrap();
+        let pt =
+            decrypt::<ChaCha20Poly1305>(CipherKind::ChaCha20Poly1305, &key, &nonce, &ct, b"hdr")
+                .unwrap();
+        assert_eq!(pt, b"world");
+    }
+
+    #[test]
+    fn decrypt_with_wrong_aad_fails_auth() {
+        let key = key32();
+        let (nonce, ct) =
+            encrypt::<Aes256Gcm>(CipherKind::AesGcm, &key, b"data", b"good-aad").unwrap();
+        let err =
+            decrypt::<Aes256Gcm>(CipherKind::AesGcm, &key, &nonce, &ct, b"bad-aad").unwrap_err();
+        assert!(matches!(err, HbError::AuthenticationFailed));
+    }
+
+    #[test]
+    fn decrypt_with_tampered_ciphertext_fails_auth() {
+        let key = key32();
+        let (nonce, mut ct) =
+            encrypt::<Aes256Gcm>(CipherKind::AesGcm, &key, b"data", b"aad").unwrap();
+        ct[0] ^= 0x01;
+        let err = decrypt::<Aes256Gcm>(CipherKind::AesGcm, &key, &nonce, &ct, b"aad").unwrap_err();
+        assert!(matches!(err, HbError::AuthenticationFailed));
+    }
+
+    #[test]
+    fn chunk_reorder_is_detected() {
+        let key = key32();
+        let base = [9u8; NONCE_SIZE];
+        let c0 =
+            encrypt_chunk::<Aes256Gcm>(CipherKind::AesGcm, &key, &base, 0, b"first", b"").unwrap();
+        let c1 =
+            encrypt_chunk::<Aes256Gcm>(CipherKind::AesGcm, &key, &base, 1, b"second", b"").unwrap();
+        // Decrypting chunk 1 ciphertext at index 0 must fail (nonce + AAD bound).
+        let err =
+            decrypt_chunk::<Aes256Gcm>(CipherKind::AesGcm, &key, &base, 0, &c1, b"").unwrap_err();
+        assert!(matches!(err, HbError::AuthenticationFailed));
+        // Same for chunk 0 ciphertext at index 1.
+        let err =
+            decrypt_chunk::<Aes256Gcm>(CipherKind::AesGcm, &key, &base, 1, &c0, b"").unwrap_err();
+        assert!(matches!(err, HbError::AuthenticationFailed));
+    }
+
+    #[test]
+    fn chunk_roundtrip_chacha_independent_of_aes() {
+        let key = key32();
+        let base = [3u8; NONCE_SIZE];
+        let ct = encrypt_chunk::<ChaCha20Poly1305>(
+            CipherKind::ChaCha20Poly1305,
+            &key,
+            &base,
+            42,
+            b"payload",
+            b"hdr",
+        )
+        .unwrap();
+        let pt = decrypt_chunk::<ChaCha20Poly1305>(
+            CipherKind::ChaCha20Poly1305,
+            &key,
+            &base,
+            42,
+            &ct,
+            b"hdr",
+        )
+        .unwrap();
+        assert_eq!(pt, b"payload");
+    }
+
+    #[test]
+    fn encrypt_with_wrong_key_size_errors_with_cipher_label() {
+        let bad_key = [0u8; 16];
+        let err = encrypt::<Aes256Gcm>(CipherKind::AesGcm, &bad_key, b"x", b"").unwrap_err();
+        // CipherKind labels error so the user can tell which crate misbehaved.
+        assert!(matches!(err, HbError::AesGcm(_)));
+        let err = encrypt::<ChaCha20Poly1305>(CipherKind::ChaCha20Poly1305, &bad_key, b"x", b"")
+            .unwrap_err();
+        assert!(matches!(err, HbError::ChaCha20(_)));
+    }
+}
