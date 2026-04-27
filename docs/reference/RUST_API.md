@@ -6,6 +6,11 @@ Complete reference for the Rust core library. **20 public modules**, organised
 into symmetric crypto, asymmetric crypto, format/container, key management,
 advanced features, and utilities.
 
+> **Naming note.** The product is branded **Zayfer Vault**. The crate, Python
+> package import path (`hb_zayfer`), and `HB_ZAYFER_*` environment variables
+> retain the legacy `hb_zayfer` identifier for backward compatibility with
+> existing scripts and integrations. They refer to the same project.
+
 ---
 
 ## Crate Layout

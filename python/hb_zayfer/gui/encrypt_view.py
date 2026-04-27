@@ -30,53 +30,17 @@ from hb_zayfer.gui.password_strength import PasswordStrengthMeter
 from hb_zayfer.gui.dragdrop import DragDropFileInput
 from hb_zayfer.gui.audit_utils import log_file_encrypted
 from hb_zayfer.gui.theme import Theme
+from hb_zayfer.gui.settings_manager import CryptoConfig
 
 
 def _load_kdf_settings() -> dict:
-    """Load KDF params from config.json for encrypt operations."""
-    import json
-    from pathlib import Path
-    try:
-        ks = hbz.KeyStore()
-        p = Path(ks.base_path) / "config.json"
-        if p.exists():
-            with open(p, encoding="utf-8") as f:
-                cfg = json.load(f)
-            kdf_name = cfg.get("kdf", "Argon2id")
-            if kdf_name.lower() == "scrypt":
-                return {
-                    "kdf": "scrypt",
-                    "kdf_log_n": cfg.get("scrypt_log_n", 15),
-                    "kdf_r": cfg.get("scrypt_r", 8),
-                    "kdf_p": cfg.get("scrypt_p", 1),
-                }
-            else:
-                mem = cfg.get("argon2_memory_mib", 64)
-                iters = cfg.get("argon2_iterations", 3)
-                return {
-                    "kdf": "argon2id",
-                    "kdf_memory_kib": mem * 1024,
-                    "kdf_iterations": iters,
-                }
-    except Exception:
-        pass
-    return {}
+    """KDF parameters for ``hbz`` encrypt calls (delegates to :class:`CryptoConfig`)."""
+    return CryptoConfig.instance().kdf_settings()
 
 
 def _load_default_cipher() -> str:
-    """Load default cipher from config.json. Returns combo-box text value."""
-    import json
-    from pathlib import Path
-    try:
-        ks = hbz.KeyStore()
-        p = Path(ks.base_path) / "config.json"
-        if p.exists():
-            with open(p, encoding="utf-8") as f:
-                cfg = json.load(f)
-            return cfg.get("cipher", "AES-256-GCM")
-    except Exception:
-        pass
-    return "AES-256-GCM"
+    """Default cipher (delegates to :class:`CryptoConfig`)."""
+    return CryptoConfig.instance().default_cipher()
 
 
 class EncryptView(QWidget):

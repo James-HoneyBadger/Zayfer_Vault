@@ -13,6 +13,7 @@
 //!
 //! File encryption uses the HBZF streaming format with 64 KiB chunks.
 
+pub mod aead;
 pub mod aes_gcm;
 pub mod audit;
 pub mod backup;

@@ -137,3 +137,93 @@ class SettingsManager:
         recent = self.get(f"recent_files.{file_type}", [])
         # Filter out files that no longer exist
         return [f for f in recent if Path(f).exists()]
+
+
+# ---------------------------------------------------------------------------
+# CryptoConfig — single source of truth for cipher/KDF/clipboard settings
+# ---------------------------------------------------------------------------
+
+_CRYPTO_DEFAULTS: dict[str, Any] = {
+    "cipher": "AES-256-GCM",
+    "kdf": "Argon2id",
+    "argon2_memory_mib": 64,
+    "argon2_iterations": 3,
+    "scrypt_log_n": 15,
+    "scrypt_r": 8,
+    "scrypt_p": 1,
+    "dark_mode": True,
+    "clipboard_auto_clear": 30,
+}
+
+
+class CryptoConfig:
+    """Centralized accessor for the on-disk ``config.json`` used by the
+    crypto operations (cipher selection, KDF parameters, clipboard timeout).
+
+    Replaces the duplicated ``_load_config`` / ``_load_kdf_settings`` /
+    ``_load_default_cipher`` helpers that previously lived in
+    :mod:`hb_zayfer.gui.encrypt_view` and :mod:`hb_zayfer.gui.settings_view`.
+
+    Reads are best-effort and never raise — callers always get sensible
+    defaults if the file is missing or corrupt. Writes are atomic.
+    """
+
+    _instance: "CryptoConfig | None" = None
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+
+    @classmethod
+    def instance(cls) -> "CryptoConfig":
+        if cls._instance is None:
+            cls._instance = cls()
+        return cls._instance
+
+    @staticmethod
+    def path() -> Path:
+        try:
+            import hb_zayfer as hbz  # local import: avoids GUI import-cycle at module load
+
+            return Path(hbz.KeyStore().base_path) / "config.json"
+        except Exception:
+            return Path.home() / ".hb_zayfer" / "config.json"
+
+    def load(self) -> dict[str, Any]:
+        cfg = dict(_CRYPTO_DEFAULTS)
+        p = self.path()
+        if p.exists():
+            try:
+                with open(p, encoding="utf-8") as f:
+                    cfg.update(json.load(f))
+            except Exception:
+                pass
+        return cfg
+
+    def save(self, cfg: dict[str, Any]) -> None:
+        with self._lock:
+            p = self.path()
+            p.parent.mkdir(parents=True, exist_ok=True)
+            tmp = p.with_suffix(".tmp")
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(cfg, f, indent=2)
+            tmp.replace(p)
+
+    def default_cipher(self) -> str:
+        return self.load().get("cipher", "AES-256-GCM")
+
+    def kdf_settings(self) -> dict[str, Any]:
+        """Return KDF parameters in the form expected by ``hbz`` encrypt calls."""
+        cfg = self.load()
+        kdf_name = str(cfg.get("kdf", "Argon2id")).lower()
+        if kdf_name == "scrypt":
+            return {
+                "kdf": "scrypt",
+                "kdf_log_n": int(cfg.get("scrypt_log_n", 15)),
+                "kdf_r": int(cfg.get("scrypt_r", 8)),
+                "kdf_p": int(cfg.get("scrypt_p", 1)),
+            }
+        return {
+            "kdf": "argon2id",
+            "kdf_memory_kib": int(cfg.get("argon2_memory_mib", 64)) * 1024,
+            "kdf_iterations": int(cfg.get("argon2_iterations", 3)),
+        }

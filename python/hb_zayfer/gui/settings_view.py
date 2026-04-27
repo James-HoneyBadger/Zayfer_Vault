@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 from PySide6.QtCore import Qt
@@ -24,46 +23,22 @@ from PySide6.QtWidgets import (
 import hb_zayfer as hbz
 from hb_zayfer.gui.clipboard import set_auto_clear_timeout, get_auto_clear_timeout
 from hb_zayfer.gui.theme import Theme
+from hb_zayfer.gui.settings_manager import CryptoConfig
 
 
 def _config_path() -> Path:
-    """Return path to config.json inside the keystore directory."""
-    try:
-        ks = hbz.KeyStore()
-        return Path(ks.base_path) / "config.json"
-    except Exception:
-        return Path.home() / ".hb_zayfer" / "config.json"
+    """Return path to config.json (delegates to :class:`CryptoConfig`)."""
+    return CryptoConfig.path()
 
 
 def _load_config() -> dict:
-    """Load persisted settings, returning defaults on any error."""
-    p = _config_path()
-    defaults = {
-        "cipher": "AES-256-GCM",
-        "kdf": "Argon2id",
-        "argon2_memory_mib": 64,
-        "argon2_iterations": 3,
-        "dark_mode": True,
-        "clipboard_auto_clear": 30,
-    }
-    if p.exists():
-        try:
-            with open(p, encoding="utf-8") as f:
-                saved = json.load(f)
-            defaults.update(saved)
-        except Exception:
-            pass
-    return defaults
+    """Load persisted settings (delegates to :class:`CryptoConfig`)."""
+    return CryptoConfig.instance().load()
 
 
 def _save_config(cfg: dict) -> None:
-    """Persist settings to config.json (atomic write)."""
-    p = _config_path()
-    p.parent.mkdir(parents=True, exist_ok=True)
-    tmp = p.with_suffix(".tmp")
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(cfg, f, indent=2)
-    tmp.rename(p)
+    """Persist settings to config.json (delegates to :class:`CryptoConfig`)."""
+    CryptoConfig.instance().save(cfg)
 
 
 class SettingsView(QWidget):

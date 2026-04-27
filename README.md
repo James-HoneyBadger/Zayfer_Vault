@@ -1,10 +1,42 @@
 # Zayfer Vault — Encryption / Decryption Suite
 
+[![CI](https://github.com/James-HoneyBadger/Zayfer_Vault/actions/workflows/ci.yml/badge.svg)](https://github.com/James-HoneyBadger/Zayfer_Vault/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/)
+[![Rust](https://img.shields.io/badge/rust-stable-orange.svg)](https://www.rust-lang.org/)
+[![Platforms](https://img.shields.io/badge/platforms-linux%20%7C%20macOS%20%7C%20windows-lightgrey.svg)](#)
+
 A full-featured cryptographic toolkit with a **Rust core**, **Rust-native platform runtime**,
 **Python bindings**, **WebAssembly module**, and multiple user interfaces: **Rust CLI**,
 **desktop GUI** (PySide6 compatibility shell), **browser-based web UI**, and a **WASM-powered web target**.
 
 **Version 1.1.1** — Zayfer Vault by James Temple / Honey Badger Universe
+
+---
+
+## Why Zayfer Vault?
+
+- **One toolbox, every surface.** Rust core powers a CLI, desktop GUI, web UI, and WASM target — same primitives, same on-disk format, no impedance mismatch.
+- **Modern, audited primitives.** AES-256-GCM, ChaCha20-Poly1305, Ed25519, X25519, RSA, Argon2id, scrypt — implemented with `RustCrypto` and `sequoia-openpgp`.
+- **Authenticated streaming format (HBZF).** Chunked, integrity-protected, optionally compressed; suitable for multi-gigabyte files.
+- **Batteries included.** Encrypted keystore, contacts, audit trail, encrypted backups, password generation, Shamir secret sharing, secure shred, QR helpers, steganography.
+- **OpenPGP interop** out of the box for talking to existing GPG users.
+- **Memory hygiene.** Secrets zeroized on drop; mlock on Unix.
+
+---
+
+## Table of Contents
+
+- [Features](#features)
+- [Architecture](#architecture)
+- [Quick Start](#quick-start)
+- [Usage](#usage)
+- [HBZF File Format](#hbzf-file-format)
+- [Test Suite](#test-suite)
+- [Documentation](#documentation)
+- [WASM Module](#wasm-module)
+- [Cross-Platform Packaging](#cross-platform-packaging)
+- [License](#license)
 
 ---
 

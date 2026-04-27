@@ -1,90 +1,34 @@
-use aes_gcm::{
-    aead::{Aead, KeyInit, OsRng},
-    Aes256Gcm, Nonce,
-};
-use rand::RngCore;
+//! AES-256-GCM authenticated encryption.
+//!
+//! All real work lives in [`crate::aead`]; this module is a thin
+//! cipher-specific facade preserving the historical public API
+//! (`encrypt`, `decrypt`, `encrypt_chunk`, `decrypt_chunk`).
 
-use crate::error::{HbError, HbResult};
+use aes_gcm::Aes256Gcm;
+
+use crate::aead as shared;
+use crate::error::HbResult;
 
 /// Nonce size for AES-256-GCM (96 bits / 12 bytes).
-pub const AES_GCM_NONCE_SIZE: usize = 12;
+pub const AES_GCM_NONCE_SIZE: usize = shared::NONCE_SIZE;
 /// Key size for AES-256 (256 bits / 32 bytes).
-pub const AES_256_KEY_SIZE: usize = 32;
+pub const AES_256_KEY_SIZE: usize = shared::KEY_SIZE;
 /// Authentication tag size (128 bits / 16 bytes).
-pub const AES_GCM_TAG_SIZE: usize = 16;
+pub const AES_GCM_TAG_SIZE: usize = shared::TAG_SIZE;
 
-/// Encrypt plaintext with AES-256-GCM.
-///
-/// Returns `(nonce, ciphertext_with_tag)`.
-/// The nonce is randomly generated using the OS CSPRNG.
+const KIND: shared::CipherKind = shared::CipherKind::AesGcm;
+
+/// Encrypt plaintext with AES-256-GCM. Returns `(nonce, ciphertext_with_tag)`.
 pub fn encrypt(key: &[u8], plaintext: &[u8], aad: &[u8]) -> HbResult<(Vec<u8>, Vec<u8>)> {
-    if key.len() != AES_256_KEY_SIZE {
-        return Err(HbError::AesGcm(format!(
-            "Key must be {AES_256_KEY_SIZE} bytes, got {}",
-            key.len()
-        )));
-    }
-
-    let cipher =
-        Aes256Gcm::new_from_slice(key).map_err(|e| HbError::AesGcm(format!("Invalid key: {e}")))?;
-
-    let mut nonce_bytes = [0u8; AES_GCM_NONCE_SIZE];
-    OsRng.fill_bytes(&mut nonce_bytes);
-    let nonce = Nonce::from_slice(&nonce_bytes);
-
-    let payload = aes_gcm::aead::Payload {
-        msg: plaintext,
-        aad,
-    };
-
-    let ciphertext = cipher
-        .encrypt(nonce, payload)
-        .map_err(|e| HbError::AesGcm(format!("Encryption failed: {e}")))?;
-
-    Ok((nonce_bytes.to_vec(), ciphertext))
+    shared::encrypt::<Aes256Gcm>(KIND, key, plaintext, aad)
 }
 
 /// Decrypt ciphertext with AES-256-GCM.
-///
-/// # Arguments
-/// * `key` — 32-byte key
-/// * `nonce` — 12-byte nonce
-/// * `ciphertext` — ciphertext with appended authentication tag
-/// * `aad` — additional authenticated data (must match what was used during encryption)
 pub fn decrypt(key: &[u8], nonce: &[u8], ciphertext: &[u8], aad: &[u8]) -> HbResult<Vec<u8>> {
-    if key.len() != AES_256_KEY_SIZE {
-        return Err(HbError::AesGcm(format!(
-            "Key must be {AES_256_KEY_SIZE} bytes, got {}",
-            key.len()
-        )));
-    }
-    if nonce.len() != AES_GCM_NONCE_SIZE {
-        return Err(HbError::AesGcm(format!(
-            "Nonce must be {AES_GCM_NONCE_SIZE} bytes, got {}",
-            nonce.len()
-        )));
-    }
-
-    let cipher =
-        Aes256Gcm::new_from_slice(key).map_err(|e| HbError::AesGcm(format!("Invalid key: {e}")))?;
-
-    let nonce = Nonce::from_slice(nonce);
-    let payload = aes_gcm::aead::Payload {
-        msg: ciphertext,
-        aad,
-    };
-
-    cipher
-        .decrypt(nonce, payload)
-        .map_err(|_| HbError::AuthenticationFailed)
+    shared::decrypt::<Aes256Gcm>(KIND, key, nonce, ciphertext, aad)
 }
 
-/// Maximum chunk index to prevent nonce space exhaustion.
-/// With a 4-byte prefix and 8-byte counter, 2^32 chunks is the safe limit.
-const MAX_CHUNK_INDEX: u64 = 1u64 << 32;
-
-/// Encrypt with a freshly generated nonce, using an incrementing counter.
-/// Useful for streaming encryption of chunks.
+/// Streaming chunk encrypt with derived per-chunk nonce.
 pub fn encrypt_chunk(
     key: &[u8],
     base_nonce: &[u8; AES_GCM_NONCE_SIZE],
@@ -92,40 +36,10 @@ pub fn encrypt_chunk(
     chunk: &[u8],
     aad: &[u8],
 ) -> HbResult<Vec<u8>> {
-    if chunk_index >= MAX_CHUNK_INDEX {
-        return Err(HbError::AesGcm(
-            "Chunk index exceeds maximum (nonce space exhaustion)".into(),
-        ));
-    }
-
-    let cipher =
-        Aes256Gcm::new_from_slice(key).map_err(|e| HbError::AesGcm(format!("Invalid key: {e}")))?;
-
-    // Derive per-chunk nonce: first 4 bytes from base_nonce, last 8 bytes
-    // are the chunk index XORed with the corresponding base_nonce bytes.
-    // This is safe because chunk_index < 2^32 guarantees unique nonces.
-    let mut nonce_bytes = *base_nonce;
-    let idx_bytes = chunk_index.to_le_bytes();
-    for i in 0..8 {
-        nonce_bytes[4 + i] ^= idx_bytes[i];
-    }
-    let nonce = Nonce::from_slice(&nonce_bytes);
-
-    // Include chunk index in AAD to prevent reordering
-    let mut full_aad = aad.to_vec();
-    full_aad.extend_from_slice(&chunk_index.to_le_bytes());
-
-    let payload = aes_gcm::aead::Payload {
-        msg: chunk,
-        aad: &full_aad,
-    };
-
-    cipher
-        .encrypt(nonce, payload)
-        .map_err(|e| HbError::AesGcm(format!("Chunk encryption failed: {e}")))
+    shared::encrypt_chunk::<Aes256Gcm>(KIND, key, base_nonce, chunk_index, chunk, aad)
 }
 
-/// Decrypt a single chunk from a stream.
+/// Streaming chunk decrypt with derived per-chunk nonce.
 pub fn decrypt_chunk(
     key: &[u8],
     base_nonce: &[u8; AES_GCM_NONCE_SIZE],
@@ -133,38 +47,14 @@ pub fn decrypt_chunk(
     ciphertext: &[u8],
     aad: &[u8],
 ) -> HbResult<Vec<u8>> {
-    if chunk_index >= MAX_CHUNK_INDEX {
-        return Err(HbError::AesGcm(
-            "Chunk index exceeds maximum (nonce space exhaustion)".into(),
-        ));
-    }
-
-    let cipher =
-        Aes256Gcm::new_from_slice(key).map_err(|e| HbError::AesGcm(format!("Invalid key: {e}")))?;
-
-    let mut nonce_bytes = *base_nonce;
-    let idx_bytes = chunk_index.to_le_bytes();
-    for i in 0..8 {
-        nonce_bytes[4 + i] ^= idx_bytes[i];
-    }
-    let nonce = Nonce::from_slice(&nonce_bytes);
-
-    let mut full_aad = aad.to_vec();
-    full_aad.extend_from_slice(&chunk_index.to_le_bytes());
-
-    let payload = aes_gcm::aead::Payload {
-        msg: ciphertext,
-        aad: &full_aad,
-    };
-
-    cipher
-        .decrypt(nonce, payload)
-        .map_err(|_| HbError::AuthenticationFailed)
+    shared::decrypt_chunk::<Aes256Gcm>(KIND, key, base_nonce, chunk_index, ciphertext, aad)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rand::RngCore;
+    use rand_core::OsRng;
 
     #[test]
     fn test_encrypt_decrypt_roundtrip() {
@@ -186,8 +76,7 @@ mod tests {
 
         let mut wrong_key = [0u8; 32];
         OsRng.fill_bytes(&mut wrong_key);
-        let result = decrypt(&wrong_key, &nonce, &ciphertext, b"");
-        assert!(result.is_err());
+        assert!(decrypt(&wrong_key, &nonce, &ciphertext, b"").is_err());
     }
 
     #[test]
@@ -195,9 +84,7 @@ mod tests {
         let mut key = [0u8; 32];
         OsRng.fill_bytes(&mut key);
         let (nonce, ciphertext) = encrypt(&key, b"secret", b"correct aad").unwrap();
-
-        let result = decrypt(&key, &nonce, &ciphertext, b"wrong aad");
-        assert!(result.is_err());
+        assert!(decrypt(&key, &nonce, &ciphertext, b"wrong aad").is_err());
     }
 
     #[test]
@@ -206,13 +93,25 @@ mod tests {
         OsRng.fill_bytes(&mut key);
         let mut base_nonce = [0u8; 12];
         OsRng.fill_bytes(&mut base_nonce);
-        let aad = b"stream";
 
         for i in 0..5u64 {
             let chunk = format!("chunk data {i}");
-            let ct = encrypt_chunk(&key, &base_nonce, i, chunk.as_bytes(), aad).unwrap();
-            let pt = decrypt_chunk(&key, &base_nonce, i, &ct, aad).unwrap();
+            let ct = encrypt_chunk(&key, &base_nonce, i, chunk.as_bytes(), b"stream").unwrap();
+            let pt = decrypt_chunk(&key, &base_nonce, i, &ct, b"stream").unwrap();
             assert_eq!(pt, chunk.as_bytes());
         }
+    }
+
+    #[test]
+    fn test_invalid_key_size() {
+        assert!(encrypt(&[0u8; 16], b"x", b"").is_err());
+        assert!(decrypt(&[0u8; 16], &[0u8; 12], &[0u8; 16], b"").is_err());
+    }
+
+    #[test]
+    fn test_invalid_nonce_size() {
+        let mut key = [0u8; 32];
+        OsRng.fill_bytes(&mut key);
+        assert!(decrypt(&key, &[0u8; 8], &[0u8; 16], b"").is_err());
     }
 }

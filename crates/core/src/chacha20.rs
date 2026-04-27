@@ -1,82 +1,33 @@
-use chacha20poly1305::{
-    aead::{Aead, KeyInit},
-    ChaCha20Poly1305, Nonce,
-};
-use rand::RngCore;
-use rand_core::OsRng;
+//! ChaCha20-Poly1305 authenticated encryption.
+//!
+//! All real work lives in [`crate::aead`]; this module is a thin
+//! cipher-specific facade preserving the historical public API.
 
-use crate::error::{HbError, HbResult};
+use chacha20poly1305::ChaCha20Poly1305;
+
+use crate::aead as shared;
+use crate::error::HbResult;
 
 /// Nonce size for ChaCha20-Poly1305 (96 bits / 12 bytes).
-pub const CHACHA20_NONCE_SIZE: usize = 12;
+pub const CHACHA20_NONCE_SIZE: usize = shared::NONCE_SIZE;
 /// Key size for ChaCha20-Poly1305 (256 bits / 32 bytes).
-pub const CHACHA20_KEY_SIZE: usize = 32;
+pub const CHACHA20_KEY_SIZE: usize = shared::KEY_SIZE;
 /// Authentication tag size (128 bits / 16 bytes).
-pub const CHACHA20_TAG_SIZE: usize = 16;
+pub const CHACHA20_TAG_SIZE: usize = shared::TAG_SIZE;
 
-/// Encrypt plaintext with ChaCha20-Poly1305.
-///
-/// Returns `(nonce, ciphertext_with_tag)`.
+const KIND: shared::CipherKind = shared::CipherKind::ChaCha20Poly1305;
+
+/// Encrypt plaintext with ChaCha20-Poly1305. Returns `(nonce, ciphertext_with_tag)`.
 pub fn encrypt(key: &[u8], plaintext: &[u8], aad: &[u8]) -> HbResult<(Vec<u8>, Vec<u8>)> {
-    if key.len() != CHACHA20_KEY_SIZE {
-        return Err(HbError::ChaCha20(format!(
-            "Key must be {CHACHA20_KEY_SIZE} bytes, got {}",
-            key.len()
-        )));
-    }
-
-    let cipher = ChaCha20Poly1305::new_from_slice(key)
-        .map_err(|e| HbError::ChaCha20(format!("Invalid key: {e}")))?;
-
-    let mut nonce_bytes = [0u8; CHACHA20_NONCE_SIZE];
-    OsRng.fill_bytes(&mut nonce_bytes);
-    let nonce = Nonce::from_slice(&nonce_bytes);
-
-    let payload = chacha20poly1305::aead::Payload {
-        msg: plaintext,
-        aad,
-    };
-
-    let ciphertext = cipher
-        .encrypt(nonce, payload)
-        .map_err(|e| HbError::ChaCha20(format!("Encryption failed: {e}")))?;
-
-    Ok((nonce_bytes.to_vec(), ciphertext))
+    shared::encrypt::<ChaCha20Poly1305>(KIND, key, plaintext, aad)
 }
 
 /// Decrypt ciphertext with ChaCha20-Poly1305.
 pub fn decrypt(key: &[u8], nonce: &[u8], ciphertext: &[u8], aad: &[u8]) -> HbResult<Vec<u8>> {
-    if key.len() != CHACHA20_KEY_SIZE {
-        return Err(HbError::ChaCha20(format!(
-            "Key must be {CHACHA20_KEY_SIZE} bytes, got {}",
-            key.len()
-        )));
-    }
-    if nonce.len() != CHACHA20_NONCE_SIZE {
-        return Err(HbError::ChaCha20(format!(
-            "Nonce must be {CHACHA20_NONCE_SIZE} bytes, got {}",
-            nonce.len()
-        )));
-    }
-
-    let cipher = ChaCha20Poly1305::new_from_slice(key)
-        .map_err(|e| HbError::ChaCha20(format!("Invalid key: {e}")))?;
-
-    let nonce = Nonce::from_slice(nonce);
-    let payload = chacha20poly1305::aead::Payload {
-        msg: ciphertext,
-        aad,
-    };
-
-    cipher
-        .decrypt(nonce, payload)
-        .map_err(|_| HbError::AuthenticationFailed)
+    shared::decrypt::<ChaCha20Poly1305>(KIND, key, nonce, ciphertext, aad)
 }
 
-/// Maximum chunk index to prevent nonce space exhaustion.
-const MAX_CHUNK_INDEX: u64 = 1u64 << 32;
-
-/// Encrypt a chunk for streaming.
+/// Streaming chunk encrypt with derived per-chunk nonce.
 pub fn encrypt_chunk(
     key: &[u8],
     base_nonce: &[u8; CHACHA20_NONCE_SIZE],
@@ -84,36 +35,10 @@ pub fn encrypt_chunk(
     chunk: &[u8],
     aad: &[u8],
 ) -> HbResult<Vec<u8>> {
-    if chunk_index >= MAX_CHUNK_INDEX {
-        return Err(HbError::ChaCha20(
-            "Chunk index exceeds maximum (nonce space exhaustion)".into(),
-        ));
-    }
-
-    let cipher = ChaCha20Poly1305::new_from_slice(key)
-        .map_err(|e| HbError::ChaCha20(format!("Invalid key: {e}")))?;
-
-    let mut nonce_bytes = *base_nonce;
-    let idx_bytes = chunk_index.to_le_bytes();
-    for i in 0..8 {
-        nonce_bytes[4 + i] ^= idx_bytes[i];
-    }
-    let nonce = Nonce::from_slice(&nonce_bytes);
-
-    let mut full_aad = aad.to_vec();
-    full_aad.extend_from_slice(&chunk_index.to_le_bytes());
-
-    let payload = chacha20poly1305::aead::Payload {
-        msg: chunk,
-        aad: &full_aad,
-    };
-
-    cipher
-        .encrypt(nonce, payload)
-        .map_err(|e| HbError::ChaCha20(format!("Chunk encryption failed: {e}")))
+    shared::encrypt_chunk::<ChaCha20Poly1305>(KIND, key, base_nonce, chunk_index, chunk, aad)
 }
 
-/// Decrypt a single chunk from a stream.
+/// Streaming chunk decrypt with derived per-chunk nonce.
 pub fn decrypt_chunk(
     key: &[u8],
     base_nonce: &[u8; CHACHA20_NONCE_SIZE],
@@ -121,38 +46,14 @@ pub fn decrypt_chunk(
     ciphertext: &[u8],
     aad: &[u8],
 ) -> HbResult<Vec<u8>> {
-    if chunk_index >= MAX_CHUNK_INDEX {
-        return Err(HbError::ChaCha20(
-            "Chunk index exceeds maximum (nonce space exhaustion)".into(),
-        ));
-    }
-
-    let cipher = ChaCha20Poly1305::new_from_slice(key)
-        .map_err(|e| HbError::ChaCha20(format!("Invalid key: {e}")))?;
-
-    let mut nonce_bytes = *base_nonce;
-    let idx_bytes = chunk_index.to_le_bytes();
-    for i in 0..8 {
-        nonce_bytes[4 + i] ^= idx_bytes[i];
-    }
-    let nonce = Nonce::from_slice(&nonce_bytes);
-
-    let mut full_aad = aad.to_vec();
-    full_aad.extend_from_slice(&chunk_index.to_le_bytes());
-
-    let payload = chacha20poly1305::aead::Payload {
-        msg: ciphertext,
-        aad: &full_aad,
-    };
-
-    cipher
-        .decrypt(nonce, payload)
-        .map_err(|_| HbError::AuthenticationFailed)
+    shared::decrypt_chunk::<ChaCha20Poly1305>(KIND, key, base_nonce, chunk_index, ciphertext, aad)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rand::RngCore;
+    use rand_core::OsRng;
 
     #[test]
     fn test_encrypt_decrypt_roundtrip() {
@@ -171,12 +72,10 @@ mod tests {
         let mut key = [0u8; 32];
         OsRng.fill_bytes(&mut key);
         let (nonce, mut ciphertext) = encrypt(&key, b"secret data", b"").unwrap();
-
         if let Some(byte) = ciphertext.get_mut(0) {
             *byte ^= 0xff;
         }
-        let result = decrypt(&key, &nonce, &ciphertext, b"");
-        assert!(result.is_err());
+        assert!(decrypt(&key, &nonce, &ciphertext, b"").is_err());
     }
 
     #[test]
@@ -192,5 +91,17 @@ mod tests {
             let pt = decrypt_chunk(&key, &base_nonce, i, &ct, b"stream").unwrap();
             assert_eq!(pt, data.as_bytes());
         }
+    }
+
+    #[test]
+    fn test_invalid_key_size() {
+        assert!(encrypt(&[0u8; 16], b"x", b"").is_err());
+    }
+
+    #[test]
+    fn test_invalid_nonce_size() {
+        let mut key = [0u8; 32];
+        OsRng.fill_bytes(&mut key);
+        assert!(decrypt(&key, &[0u8; 8], &[0u8; 16], b"").is_err());
     }
 }

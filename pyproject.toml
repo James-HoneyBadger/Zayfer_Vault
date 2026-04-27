@@ -43,3 +43,44 @@ features = ["pyo3/extension-module"]
 [tool.pytest.ini_options]
 testpaths = ["tests/python"]
 asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+extend-exclude = ["target", ".venv", "build", "dist", "python/hb_zayfer/_native.pyi"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "UP",  # pyupgrade
+    "C4",  # flake8-comprehensions
+    "SIM", # flake8-simplify
+]
+ignore = [
+    "E501",  # line length is enforced by formatter
+    "B008",  # function calls in argument defaults (common in PySide6)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["B011"]
+"python/hb_zayfer/gui/**" = ["B007"]  # unused loop variables in Qt patterns
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.mypy]
+python_version = "3.10"
+warn_unused_ignores = true
+warn_redundant_casts = true
+ignore_missing_imports = true
+files = ["python/hb_zayfer"]
+exclude = ["python/hb_zayfer/web", "python/hb_zayfer/gui"]  # GUI/web have heavy Qt/FastAPI dynamic typing
+
+[[tool.mypy.overrides]]
+module = "hb_zayfer._native"
+ignore_errors = true

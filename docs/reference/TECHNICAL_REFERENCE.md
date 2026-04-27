@@ -2,6 +2,10 @@
 
 Compact reference for the **current** Zayfer Vault runtime layout and command surface.
 
+> **Naming note.** Zayfer Vault is the user-facing brand. Internal identifiers
+> such as the `hb_zayfer` Python package, `hb_zayfer_core` Rust crate, and
+> `HB_ZAYFER_*` environment variables are retained for backward compatibility.
+
 ---
 
 ## Runtime summary
