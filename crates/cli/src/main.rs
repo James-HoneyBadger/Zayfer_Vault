@@ -152,23 +152,26 @@ enum Commands {
 
     /// Run the Rust-native web platform
     Serve {
-        /// Bind address
-        #[arg(long, default_value = "127.0.0.1")]
+        /// Bind address (env: `HBZ_HOST`)
+        #[arg(long, default_value = "127.0.0.1", env = "HBZ_HOST")]
         host: String,
-        /// Port number
-        #[arg(short = 'p', long, default_value_t = 8000)]
+        /// Port number (env: `HBZ_PORT`)
+        #[arg(short = 'p', long, default_value_t = 8000, env = "HBZ_PORT")]
         port: u16,
         /// Disable token authentication (DANGEROUS — only for trusted loopback use)
         #[arg(long, default_value_t = false)]
         no_auth: bool,
         /// Use a specific authentication token instead of generating one
-        #[arg(long)]
+        /// (env: `HBZ_AUTH_TOKEN`)
+        #[arg(long, env = "HBZ_AUTH_TOKEN", hide_env_values = true)]
         token: Option<String>,
         /// Path to a PEM-encoded TLS certificate (chain). Requires --tls-key.
-        #[arg(long, value_name = "PATH")]
+        /// (env: `HBZ_TLS_CERT`)
+        #[arg(long, value_name = "PATH", env = "HBZ_TLS_CERT")]
         tls_cert: Option<String>,
         /// Path to a PEM-encoded TLS private key. Requires --tls-cert.
-        #[arg(long, value_name = "PATH")]
+        /// (env: `HBZ_TLS_KEY`)
+        #[arg(long, value_name = "PATH", env = "HBZ_TLS_KEY")]
         tls_key: Option<String>,
         /// Generate (or reuse) a self-signed certificate under the Zayfer
         /// config directory and serve over HTTPS. Convenient for local use;

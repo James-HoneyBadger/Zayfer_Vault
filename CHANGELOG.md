@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Environment variable configuration for `serve`.** The `--host`,
+  `--port`, `--token`, `--tls-cert`, and `--tls-key` flags now also
+  read from `HBZ_HOST`, `HBZ_PORT`, `HBZ_AUTH_TOKEN`, `HBZ_TLS_CERT`,
+  and `HBZ_TLS_KEY`. The token env var is hidden from `--help`
+  output. Friendly to systemd unit files, Docker `-e` flags, and
+  Kubernetes `Secret` env injection.
 - **HBZF parser robustness tests.** New randomized smoke tests in
   `crates/core/tests/integration.rs::format_robustness` feed the
   header parser thousands of bytes of pure garbage, every truncation
