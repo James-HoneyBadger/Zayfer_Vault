@@ -1,11 +1,13 @@
-use std::net::SocketAddr;
+use std::collections::HashMap;
+use std::net::{IpAddr, SocketAddr};
 use std::path::{Component, Path as FsPath};
-use std::sync::OnceLock;
+use std::sync::{Arc, Mutex, OnceLock};
+use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
 use axum::{
     body::Body,
-    extract::{DefaultBodyLimit, Multipart, Path, Query, State},
+    extract::{ConnectInfo, DefaultBodyLimit, Multipart, Path, Query, State},
     http::{header, Request as HttpRequest, StatusCode},
     middleware::{self, Next},
     response::{
@@ -396,6 +398,73 @@ pub(crate) fn ensure_self_signed_cert(host: &str) -> Result<(String, String)> {
 #[derive(Clone)]
 struct AuthState {
     token: String,
+    fail_tracker: Arc<Mutex<HashMap<IpAddr, FailRecord>>>,
+}
+
+impl AuthState {
+    fn new(token: String) -> Self {
+        Self {
+            token,
+            fail_tracker: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
+}
+
+/// Per-IP failed-auth tracking. After [`AUTH_FAIL_THRESHOLD`] failures
+/// within [`AUTH_FAIL_WINDOW`] the IP is locked out and receives 429 until
+/// the window rolls over.
+#[derive(Debug, Clone, Copy)]
+struct FailRecord {
+    count: u32,
+    window_start: Instant,
+}
+
+/// Failed-auth attempts allowed per IP before lockout kicks in.
+const AUTH_FAIL_THRESHOLD: u32 = 10;
+/// Sliding window for [`AUTH_FAIL_THRESHOLD`].
+const AUTH_FAIL_WINDOW: Duration = Duration::from_secs(60);
+
+/// Returns `Some(RetryAfter)` if the caller's IP is currently locked out,
+/// otherwise records this failed attempt and returns `None`.
+fn record_auth_failure(
+    tracker: &Mutex<HashMap<IpAddr, FailRecord>>,
+    ip: IpAddr,
+) -> Option<Duration> {
+    let mut map = tracker.lock().ok()?;
+    let now = Instant::now();
+    let entry = map.entry(ip).or_insert(FailRecord {
+        count: 0,
+        window_start: now,
+    });
+    if now.duration_since(entry.window_start) > AUTH_FAIL_WINDOW {
+        // Window rolled over — reset.
+        entry.count = 0;
+        entry.window_start = now;
+    }
+    entry.count = entry.count.saturating_add(1);
+    if entry.count > AUTH_FAIL_THRESHOLD {
+        let elapsed = now.duration_since(entry.window_start);
+        let retry = AUTH_FAIL_WINDOW.saturating_sub(elapsed);
+        return Some(retry);
+    }
+    None
+}
+
+/// Clear any failed-attempt record for `ip` (called on successful auth).
+fn record_auth_success(tracker: &Mutex<HashMap<IpAddr, FailRecord>>, ip: IpAddr) {
+    if let Ok(mut map) = tracker.lock() {
+        map.remove(&ip);
+    }
+}
+
+/// Pull the peer address out of the request, falling back to `127.0.0.1`
+/// when the connection didn't carry one (e.g. unit-test `oneshot` calls).
+fn peer_ip(request: &HttpRequest<Body>) -> IpAddr {
+    request
+        .extensions()
+        .get::<ConnectInfo<SocketAddr>>()
+        .map(|ci| ci.0.ip())
+        .unwrap_or(IpAddr::V4(std::net::Ipv4Addr::LOCALHOST))
 }
 
 async fn token_auth_middleware(
@@ -403,16 +472,19 @@ async fn token_auth_middleware(
     request: HttpRequest<Body>,
     next: Next,
 ) -> Result<Response, StatusCode> {
+    let ip = peer_ip(&request);
     // Header check
     if let Some(value) = request.headers().get(header::AUTHORIZATION) {
         if let Ok(text) = value.to_str() {
             if let Some(stripped) = text.strip_prefix("Bearer ") {
                 if subtle_eq(stripped.trim(), &auth.token) {
+                    record_auth_success(&auth.fail_tracker, ip);
                     return Ok(next.run(request).await);
                 }
             }
             // Also accept the bare token for compatibility with curl one-liners.
             if subtle_eq(text.trim(), &auth.token) {
+                record_auth_success(&auth.fail_tracker, ip);
                 return Ok(next.run(request).await);
             }
         }
@@ -423,16 +495,20 @@ async fn token_auth_middleware(
             if let Some(value) = pair.strip_prefix("token=") {
                 let decoded = percent_decode(value).unwrap_or_else(|| value.to_string());
                 if subtle_eq(&decoded, &auth.token) {
+                    record_auth_success(&auth.fail_tracker, ip);
                     return Ok(next.run(request).await);
                 }
             }
         }
     }
-    // Rate-limit brute-force guessing by stalling 250 ms before
-    // reporting failure. Cheap, stateless, and turns 64-char hex
-    // token enumeration into ~10^77 years even at full pipeline
-    // depth — overkill, but hardens against any future shortening.
-    tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+    // Per-IP lockout: after AUTH_FAIL_THRESHOLD failures inside
+    // AUTH_FAIL_WINDOW, return 429 until the window rolls over.
+    if let Some(_retry) = record_auth_failure(&auth.fail_tracker, ip) {
+        return Err(StatusCode::TOO_MANY_REQUESTS);
+    }
+    // Stall 250 ms before reporting failure to cap brute-force throughput
+    // on the first AUTH_FAIL_THRESHOLD attempts before the lockout engages.
+    tokio::time::sleep(Duration::from_millis(250)).await;
     Err(StatusCode::UNAUTHORIZED)
 }
 
@@ -526,7 +602,7 @@ pub(crate) fn serve_with_auth(
                 });
                 axum_server::bind_rustls(addr, config)
                     .handle(handle)
-                    .serve(router.into_make_service())
+                    .serve(router.into_make_service_with_connect_info::<SocketAddr>())
                     .await
                     .context("Rust web server (TLS) failed")?;
             }
@@ -534,10 +610,13 @@ pub(crate) fn serve_with_auth(
                 let listener = tokio::net::TcpListener::bind(addr)
                     .await
                     .with_context(|| format!("Failed to bind {}", addr))?;
-                axum::serve(listener, router)
-                    .with_graceful_shutdown(shutdown_signal())
-                    .await
-                    .context("Rust web server failed")?;
+                axum::serve(
+                    listener,
+                    router.into_make_service_with_connect_info::<SocketAddr>(),
+                )
+                .with_graceful_shutdown(shutdown_signal())
+                .await
+                .context("Rust web server failed")?;
             }
         }
         Ok(())
@@ -579,7 +658,7 @@ pub(crate) fn build_authed_router(token: String) -> Result<Router> {
     // We can't easily split a built router; instead, we attach the auth layer
     // to a copy of every /api route. The cleanest approach is to apply
     // middleware at the top level and short-circuit non-/api requests.
-    let auth_state = AuthState { token };
+    let auth_state = AuthState::new(token);
     Ok(base.layer(middleware::from_fn_with_state(auth_state, api_only_auth)))
 }
 
@@ -1743,6 +1822,32 @@ mod tests {
         assert!(!subtle_eq("abc", "abd"));
         assert!(!subtle_eq("abc", "ab"));
         assert!(!subtle_eq("", "x"));
+    }
+
+    #[test]
+    fn record_auth_failure_locks_after_threshold() {
+        use std::collections::HashMap;
+        use std::net::Ipv4Addr;
+        use std::sync::Mutex;
+
+        let tracker: Mutex<HashMap<IpAddr, FailRecord>> = Mutex::new(HashMap::new());
+        let ip: IpAddr = Ipv4Addr::new(10, 0, 0, 7).into();
+
+        // First AUTH_FAIL_THRESHOLD failures must NOT lock out.
+        for _ in 0..AUTH_FAIL_THRESHOLD {
+            assert!(record_auth_failure(&tracker, ip).is_none());
+        }
+        // The next failure crosses the threshold and must return Some(retry).
+        let retry = record_auth_failure(&tracker, ip).expect("should be locked out");
+        assert!(retry <= AUTH_FAIL_WINDOW);
+
+        // A different IP is unaffected.
+        let other: IpAddr = Ipv4Addr::new(10, 0, 0, 8).into();
+        assert!(record_auth_failure(&tracker, other).is_none());
+
+        // Successful auth clears the original IP's record.
+        record_auth_success(&tracker, ip);
+        assert!(record_auth_failure(&tracker, ip).is_none());
     }
 
     // -------------------------------------------------------------------
