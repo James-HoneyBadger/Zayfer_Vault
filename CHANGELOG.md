@@ -11,6 +11,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Failed-auth stall.** The `/api/*` token-auth middleware now sleeps
+  250 ms before returning `401 Unauthorized`, capping the brute-force
+  attempt rate without keeping any per-IP state. Cheap, stateless,
+  and combined with the 32-byte hex tokens turns enumeration into an
+  astronomical workload.
+- **Workspace-wide lint policy.** The root `Cargo.toml` declares
+  `[workspace.lints.rust]` (`unsafe_code = deny`,
+  `unreachable_pub = warn`) and `[workspace.lints.clippy]`
+  (`dbg_macro = warn`, `todo = warn`, `print_stdout = allow`),
+  inherited by every crate via `[lints] workspace = true`. The single
+  documented exception (`crates/core/src/secure_mem.rs`'s `mlock`/
+  `munlock` FFI) opts out via a file-scoped `#![allow(unsafe_code)]`.
+  Six `pub` items in `crates/cli/src/platform_server.rs` were demoted
+  to `pub(crate)` to silence `unreachable_pub`.
 - **Environment variable configuration for `serve`.** The `--host`,
   `--port`, `--token`, `--tls-cert`, and `--tls-key` flags now also
   read from `HBZ_HOST`, `HBZ_PORT`, `HBZ_AUTH_TOKEN`, `HBZ_TLS_CERT`,
