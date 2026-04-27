@@ -83,7 +83,10 @@ warn_unused_ignores = true
 warn_redundant_casts = true
 ignore_missing_imports = true
 files = ["python/hb_zayfer"]
-exclude = ["python/hb_zayfer/web", "python/hb_zayfer/gui"]  # GUI/web have heavy Qt/FastAPI dynamic typing
+# GUI excluded — heavy PySide6 dynamic typing is best handled by
+# Pylance/Pyright incrementally; mypy generates noise without value.
+# `web` is included now that it type-checks cleanly.
+exclude = ["python/hb_zayfer/gui"]
 
 [[tool.mypy.overrides]]
 module = "hb_zayfer._native"
