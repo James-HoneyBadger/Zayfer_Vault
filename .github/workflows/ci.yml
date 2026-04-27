@@ -128,10 +128,19 @@ jobs:
       - name: Install maturin & Python deps
         run: |
           pip install --upgrade pip
-          pip install maturin[patchelf] pytest pytest-asyncio httpx fastapi uvicorn PySide6
+          pip install maturin[patchelf] pytest pytest-asyncio pytest-qt httpx fastapi uvicorn python-multipart PySide6 ruff mypy
 
       - name: Build native module (develop)
         run: maturin develop --release
+
+      - name: Ruff lint
+        run: ruff check python/ tests/
+
+      - name: Ruff format check
+        run: ruff format --check python/ tests/
+
+      - name: Mypy type-check
+        run: mypy python/hb_zayfer
 
       - name: Web app smoke test
         run: |
