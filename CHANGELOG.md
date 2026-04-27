@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Keystore module split.** The monolithic
+  `crates/core/src/keystore.rs` (~780 lines) is now a `keystore/`
+  module: `types.rs` (key metadata, usage constraints, expiry status,
+  contacts, on-disk index containers), `format.rs` (`compute_fingerprint`,
+  `detect_key_format`, `KeyFormat`), and `mod.rs` (the `KeyStore` impl
+  itself). The public API
+  (`hb_zayfer_core::keystore::{Contact, KeyAlgorithm, KeyExpiryStatus,
+  KeyMetadata, KeyStore, KeyUsage}`) is byte-identical.
+
 ### Added
 
 - **Failed-auth stall.** The `/api/*` token-auth middleware now sleeps
