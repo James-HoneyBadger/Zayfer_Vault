@@ -1,7 +1,8 @@
 """Zayfer Vault — Full-featured encryption/decryption suite.
 
-This package exposes the Rust-powered cryptographic core via a clean Python API.
-All heavy cryptographic operations run in native Rust with the GIL released.
+This package exposes the Rust-powered cryptographic core via a clean
+Python API. All heavy cryptographic operations run in native Rust with
+the GIL released.
 
 Quick start::
 

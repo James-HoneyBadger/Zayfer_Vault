@@ -91,3 +91,7 @@ exclude = ["python/hb_zayfer/gui"]
 [[tool.mypy.overrides]]
 module = "hb_zayfer._native"
 ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = "hb_zayfer.gui.*"
+ignore_errors = true

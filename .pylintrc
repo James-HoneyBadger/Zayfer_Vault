@@ -1,0 +1,32 @@
+[MASTER]
+ignore=target,.venv,build,dist
+ignore-patterns=^test_.*\.py$
+
+[TYPECHECK]
+# Native extension + optional deps trigger false import errors in editor linting.
+extension-pkg-allow-list=hb_zayfer._native
+ignored-modules=hb_zayfer._native,PySide6,fastapi,pydantic,click,rich,pytest,pytestqt,segno
+
+[MESSAGES CONTROL]
+# Project quality gates are ruff + mypy + pytest in CI.
+# Relax pylint-only style warnings that conflict with Qt patterns and ruff formatting.
+disable=
+    import-error,
+    no-name-in-module,
+    line-too-long,
+    trailing-whitespace,
+    missing-function-docstring,
+    missing-class-docstring,
+    import-outside-toplevel,
+    broad-exception-caught,
+    attribute-defined-outside-init,
+    invalid-name,
+    protected-access,
+    no-member,
+    global-statement,
+    redefined-outer-name,
+    unspecified-encoding,
+    unused-import
+
+[FORMAT]
+max-line-length=100
