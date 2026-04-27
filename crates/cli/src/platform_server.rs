@@ -5,7 +5,7 @@ use std::sync::OnceLock;
 use anyhow::{Context, Result};
 use axum::{
     body::Body,
-    extract::{Multipart, Path, Query, State},
+    extract::{DefaultBodyLimit, Multipart, Path, Query, State},
     http::{header, Request as HttpRequest, StatusCode},
     middleware::{self, Next},
     response::{
@@ -600,7 +600,9 @@ pub fn build_platform_router() -> Result<Router> {
             .fallback_service(ServeFile::new(static_dir.join("index.html")));
     }
 
-    Ok(router.layer(middleware::from_fn(security_headers_middleware)))
+    Ok(router
+        .layer(DefaultBodyLimit::max(MAX_UPLOAD_BYTES + 1024 * 1024))
+        .layer(middleware::from_fn(security_headers_middleware)))
 }
 
 /// Apply a small set of conservative security headers to every response.
@@ -1271,6 +1273,22 @@ mod tests {
         let data = json_response(router, request).await;
         assert_eq!(data["brand_name"], "Zayfer Vault");
         assert!(data["version"].as_str().unwrap().starts_with("1."));
+    }
+
+    #[tokio::test]
+    async fn oversize_request_is_rejected() {
+        // Send a body larger than MAX_UPLOAD_BYTES + headroom; axum should
+        // reject it via the DefaultBodyLimit layer with 413 Payload Too Large.
+        let router = build_platform_router().unwrap();
+        let oversize = vec![0u8; MAX_UPLOAD_BYTES + 2 * 1024 * 1024];
+        let request = Request::builder()
+            .uri("/api/encrypt/text")
+            .method(Method::POST)
+            .header("content-type", "application/json")
+            .body(Body::from(oversize))
+            .unwrap();
+        let response = router.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
     }
 
     #[tokio::test]

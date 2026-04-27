@@ -86,6 +86,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- **Explicit request body limit** on the web platform: ~257 MiB
+  (MAX_UPLOAD_BYTES + 1 MiB envelope headroom), enforced via axum's
+  `DefaultBodyLimit`. Oversized requests are rejected with
+  `413 Payload Too Large` before any handler runs.
 - **HSTS over TLS.** When the platform is bound over HTTPS, every response
   now carries `Strict-Transport-Security: max-age=31536000; includeSubDomains`.
   HSTS is intentionally **not** sent over plaintext (per RFC 6797).
