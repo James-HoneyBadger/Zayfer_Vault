@@ -475,6 +475,146 @@ fn audit_export() {
     assert!(export_path.exists());
 }
 
+#[test]
+fn audit_detects_tampered_entry() {
+    use hb_zayfer_core::audit::{AuditLogger, AuditOperation};
+    use std::fs;
+    let dir = TempDir::new().unwrap();
+    let log_path = dir.path().join("audit.log");
+    let logger = AuditLogger::new(log_path.clone());
+    for i in 0..3 {
+        logger
+            .log(
+                AuditOperation::KeyGenerated {
+                    algorithm: "Ed25519".into(),
+                    fingerprint: format!("fp{i}"),
+                },
+                None,
+            )
+            .unwrap();
+    }
+    assert!(logger.verify_integrity().unwrap());
+
+    // Tamper with the file: flip one byte in the middle line.
+    let raw = fs::read(&log_path).unwrap();
+    let mut tampered = raw.clone();
+    let mid = tampered.len() / 2;
+    tampered[mid] ^= 0x01;
+    fs::write(&log_path, tampered).unwrap();
+
+    // Either the JSON now fails to parse (HbError) or the chain
+    // verification returns false; both are acceptable detection signals.
+    match logger.verify_integrity() {
+        Ok(valid) => assert!(!valid, "tampered chain must not verify as valid"),
+        Err(_) => { /* parse error is also detection */ }
+    }
+}
+
+#[test]
+fn audit_detects_truncated_log() {
+    use hb_zayfer_core::audit::{AuditLogger, AuditOperation};
+    use std::fs::OpenOptions;
+    let dir = TempDir::new().unwrap();
+    let log_path = dir.path().join("audit.log");
+    let logger = AuditLogger::new(log_path.clone());
+    for i in 0..4 {
+        logger
+            .log(
+                AuditOperation::KeyGenerated {
+                    algorithm: "Ed25519".into(),
+                    fingerprint: format!("fp{i}"),
+                },
+                None,
+            )
+            .unwrap();
+    }
+    let initial = logger.entry_count().unwrap();
+    assert_eq!(initial, 4);
+    // Truncate the file to half its size: the resulting last line is
+    // partial JSON, which the logger must surface as an error or a count
+    // strictly less than 4 valid entries.
+    let len = std::fs::metadata(&log_path).unwrap().len();
+    OpenOptions::new()
+        .write(true)
+        .open(&log_path)
+        .unwrap()
+        .set_len(len / 2)
+        .unwrap();
+    match logger.entry_count() {
+        Ok(n) => assert!(n < initial, "truncated log must report fewer entries"),
+        Err(_) => { /* parse error is acceptable */ }
+    }
+}
+
+#[test]
+fn keystore_check_usage_enforces_expiry() {
+    use chrono::{Duration, Utc};
+    use hb_zayfer_core::keystore::{KeyMetadata, KeyUsage};
+    let mut meta = KeyMetadata {
+        fingerprint: "deadbeef".into(),
+        algorithm: hb_zayfer_core::keystore::KeyAlgorithm::Ed25519,
+        label: "test".into(),
+        created_at: Utc::now(),
+        has_private: true,
+        has_public: true,
+        allowed_usages: None,
+        expires_at: None,
+    };
+    // No expiry, no usage constraint → all operations allowed.
+    assert!(meta.check_usage(KeyUsage::Sign).is_ok());
+
+    // Expired key: any usage should be rejected.
+    meta.expires_at = Some(Utc::now() - Duration::days(1));
+    assert!(meta.check_usage(KeyUsage::Sign).is_err());
+
+    // Future expiry + usage constraint: only listed usage permitted.
+    meta.expires_at = Some(Utc::now() + Duration::days(7));
+    meta.allowed_usages = Some(vec![KeyUsage::Verify]);
+    assert!(meta.check_usage(KeyUsage::Verify).is_ok());
+    assert!(meta.check_usage(KeyUsage::Sign).is_err());
+}
+
+#[test]
+fn keystore_check_expiring_keys_buckets_correctly() {
+    use chrono::{Duration, Utc};
+    use hb_zayfer_core::ed25519;
+    use hb_zayfer_core::keystore::{KeyAlgorithm, KeyExpiryStatus, KeyStore};
+    let dir = TempDir::new().unwrap();
+    let mut ks = KeyStore::open(dir.path().to_path_buf()).unwrap();
+
+    // Seed three Ed25519 public keys with distinct fingerprints.
+    let kp_e = ed25519::generate_keypair();
+    let kp_s = ed25519::generate_keypair();
+    let kp_f = ed25519::generate_keypair();
+    let pk_e = ed25519::export_verifying_key_raw(&kp_e.verifying_key);
+    let pk_s = ed25519::export_verifying_key_raw(&kp_s.verifying_key);
+    let pk_f = ed25519::export_verifying_key_raw(&kp_f.verifying_key);
+    let fp_e = ed25519::fingerprint(&kp_e.verifying_key);
+    let fp_s = ed25519::fingerprint(&kp_s.verifying_key);
+    let fp_f = ed25519::fingerprint(&kp_f.verifying_key);
+
+    ks.store_public_key(&fp_e, &pk_e, KeyAlgorithm::Ed25519, "expired")
+        .unwrap();
+    ks.store_public_key(&fp_s, &pk_s, KeyAlgorithm::Ed25519, "soon")
+        .unwrap();
+    ks.store_public_key(&fp_f, &pk_f, KeyAlgorithm::Ed25519, "far")
+        .unwrap();
+
+    ks.set_key_expiry(&fp_e, Some(Utc::now() - Duration::days(2)))
+        .unwrap();
+    ks.set_key_expiry(&fp_s, Some(Utc::now() + Duration::days(3)))
+        .unwrap();
+    ks.set_key_expiry(&fp_f, Some(Utc::now() + Duration::days(365)))
+        .unwrap();
+
+    let results = ks.check_expiring_keys(7);
+    // Only the expired and "soon" keys fall within a 7-day window.
+    assert_eq!(results.len(), 2);
+    // Expired must come first (sort order by status).
+    assert!(matches!(results[0].1, KeyExpiryStatus::Expired));
+    assert!(matches!(results[1].1, KeyExpiryStatus::ExpiringSoon { .. }));
+}
+
 // ==========================================================================
 // Config
 // ==========================================================================
