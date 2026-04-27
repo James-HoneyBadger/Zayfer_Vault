@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **GUI type correctness and API misuse.** Four narrowly scoped fixes:
+  `qr_view.py` called the non-existent `KeyStore.get_key()` and read
+  `meta.public_key_bytes` (also non-existent) — now uses
+  `get_key_metadata()` + `load_public_key()` per the actual native
+  API; `sign_view.py` dereferenced `get_key_metadata()`'s result
+  without a `None` check; `audit_view.py` typed the entry list as
+  `list[object]` blocking attribute access — now
+  `list["hbz.AuditEntry"]`; `settings_manager.py`'s `get()`/`set()`
+  loop locals are now annotated `Any` so re-assignment through
+  nested `dict.get()` no longer trips mypy.
+
 ### Changed
 
 - **Keystore module split.** The monolithic
