@@ -160,11 +160,17 @@ class SignView(QWidget):
         """Populate key combos with signing-capable keys."""
         try:
             ks = hbz.KeyStore()
-            keys = [k for k in ks.list_keys() if k.has_private and k.algorithm.lower() in ("ed25519", "rsa2048", "rsa4096", "pgp")]
+            keys = [
+                k
+                for k in ks.list_keys()
+                if k.has_private and k.algorithm.lower() in ("ed25519", "rsa2048", "rsa4096", "pgp")
+            ]
             for combo in (self.file_key_combo, self.text_key_combo):
                 combo.clear()
                 for k in keys:
-                    combo.addItem(f"{k.label} ({k.algorithm}) [{k.fingerprint[:12]}…]", k.fingerprint)
+                    combo.addItem(
+                        f"{k.label} ({k.algorithm}) [{k.fingerprint[:12]}…]", k.fingerprint
+                    )
         except Exception:
             pass
 
@@ -180,7 +186,9 @@ class SignView(QWidget):
                 self.file_output.setText(path + ".sig")
 
     def _browse_output_file(self) -> None:
-        path, _ = QFileDialog.getSaveFileName(self, "Save Signature As", "", "Signature Files (*.sig);;All Files (*)")
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Save Signature As", "", "Signature Files (*.sig);;All Files (*)"
+        )
         if path:
             self.file_output.setText(path)
 
@@ -259,6 +267,7 @@ class SignView(QWidget):
 
         try:
             import base64
+
             ks = hbz.KeyStore()
             priv_data = ks.load_private_key(fp, pw.encode())
 

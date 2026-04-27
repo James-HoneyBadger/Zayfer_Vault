@@ -150,7 +150,9 @@ class EncryptView(QWidget):
         # Password strength meter for file encryption
         self.file_strength_meter = PasswordStrengthMeter()
         opts_layout.addWidget(self.file_strength_meter)
-        self.passphrase_input.textChanged.connect(lambda: self.file_strength_meter.update_strength(self.passphrase_input.text()))
+        self.passphrase_input.textChanged.connect(
+            lambda: self.file_strength_meter.update_strength(self.passphrase_input.text())
+        )
 
         # Match indicator
         self.match_label = QLabel("")
@@ -221,7 +223,9 @@ class EncryptView(QWidget):
         # Password strength meter for text encryption
         self.text_strength_meter = PasswordStrengthMeter()
         layout.addWidget(self.text_strength_meter)
-        self.text_passphrase.textChanged.connect(lambda: self.text_strength_meter.update_strength(self.text_passphrase.text()))
+        self.text_passphrase.textChanged.connect(
+            lambda: self.text_strength_meter.update_strength(self.text_passphrase.text())
+        )
 
         # Match indicator for text tab
         self.text_match_label = QLabel("")
@@ -343,7 +347,9 @@ class EncryptView(QWidget):
                 self.file_output.setText(path + ".hbzf")
 
     def _browse_output(self) -> None:
-        path, _ = QFileDialog.getSaveFileName(self, "Save encrypted file", filter="HBZF files (*.hbzf);;All files (*)")
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Save encrypted file", filter="HBZF files (*.hbzf);;All files (*)"
+        )
         if path:
             self.file_output.setText(path)
 
@@ -366,8 +372,12 @@ class EncryptView(QWidget):
                 QMessageBox.warning(self, "Error", "Passphrases do not match.")
                 return
             worker = CryptoWorker(
-                hbz.encrypt_file, inp, out,
-                algorithm=algo, wrapping="password", passphrase=pw.encode("utf-8"),
+                hbz.encrypt_file,
+                inp,
+                out,
+                algorithm=algo,
+                wrapping="password",
+                passphrase=pw.encode("utf-8"),
                 **_load_kdf_settings(),
             )
         else:
@@ -387,16 +397,28 @@ class EncryptView(QWidget):
 
                 if meta and meta.algorithm in ("RSA-2048", "RSA-4096"):
                     worker = CryptoWorker(
-                        hbz.encrypt_file, inp, out,
-                        algorithm=algo, wrapping="rsa", recipient_public_pem=pub_data.decode(),
+                        hbz.encrypt_file,
+                        inp,
+                        out,
+                        algorithm=algo,
+                        wrapping="rsa",
+                        recipient_public_pem=pub_data.decode(),
                     )
                 elif meta and meta.algorithm == "X25519":
                     worker = CryptoWorker(
-                        hbz.encrypt_file, inp, out,
-                        algorithm=algo, wrapping="x25519", recipient_public_raw=pub_data,
+                        hbz.encrypt_file,
+                        inp,
+                        out,
+                        algorithm=algo,
+                        wrapping="x25519",
+                        recipient_public_raw=pub_data,
                     )
                 else:
-                    QMessageBox.warning(self, "Error", f"Cannot encrypt with {meta.algorithm if meta else 'unknown'} key.")
+                    QMessageBox.warning(
+                        self,
+                        "Error",
+                        f"Cannot encrypt with {meta.algorithm if meta else 'unknown'} key.",
+                    )
                     return
             except Exception as e:
                 QMessageBox.critical(self, "Error", str(e))
@@ -418,6 +440,7 @@ class EncryptView(QWidget):
         size = None
         try:
             from pathlib import Path
+
             if inp:
                 size = Path(inp).stat().st_size
         except Exception:
@@ -459,8 +482,11 @@ class EncryptView(QWidget):
 
         def _encrypt_text_work():
             return hbz.encrypt_data(
-                text_bytes, algorithm=algo, wrapping="password",
-                passphrase=pw_bytes, **kdf_kw,
+                text_bytes,
+                algorithm=algo,
+                wrapping="password",
+                passphrase=pw_bytes,
+                **kdf_kw,
             )
 
         worker = CryptoWorker(_encrypt_text_work)

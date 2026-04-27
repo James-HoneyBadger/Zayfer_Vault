@@ -65,7 +65,9 @@ class KeyringView(QWidget):
         # Table
         self.table = QTableWidget()
         self.table.setColumnCount(6)
-        self.table.setHorizontalHeaderLabels(["Label", "Algorithm", "Fingerprint", "Private", "Public", "Created"])
+        self.table.setHorizontalHeaderLabels(
+            ["Label", "Algorithm", "Fingerprint", "Private", "Public", "Created"]
+        )
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Interactive)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
@@ -154,17 +156,20 @@ class KeyringView(QWidget):
 
     def _update_table(self) -> None:
         """Update table with current filter."""
-        search_text = self.search_input.text().lower() if hasattr(self, 'search_input') else ""
+        search_text = self.search_input.text().lower() if hasattr(self, "search_input") else ""
 
-        if not hasattr(self, 'all_keys'):
+        if not hasattr(self, "all_keys"):
             self.all_keys = []
 
         # Filter keys
         if search_text:
-            filtered = [k for k in self.all_keys
-                       if search_text in k.label.lower()
-                       or search_text in k.algorithm.lower()
-                       or search_text in k.fingerprint.lower()]
+            filtered = [
+                k
+                for k in self.all_keys
+                if search_text in k.label.lower()
+                or search_text in k.algorithm.lower()
+                or search_text in k.fingerprint.lower()
+            ]
         else:
             filtered = self.all_keys
 
@@ -241,16 +246,14 @@ class KeyringView(QWidget):
 
                 # Require typed confirmation for private keys
                 text, ok = QInputDialog.getText(
-                    self, "Confirm Deletion", msg,
-                    QLineEdit.EchoMode.Normal, ""
+                    self, "Confirm Deletion", msg, QLineEdit.EchoMode.Normal, ""
                 )
                 if not ok or text != "DELETE":
                     return
             else:
                 msg += "Type <b>DELETE</b> to confirm:"
                 text, ok = QInputDialog.getText(
-                    self, "Confirm Deletion", msg,
-                    QLineEdit.EchoMode.Normal, ""
+                    self, "Confirm Deletion", msg, QLineEdit.EchoMode.Normal, ""
                 )
                 if not ok or text != "DELETE":
                     return
@@ -273,8 +276,7 @@ class KeyringView(QWidget):
     def _import_key(self) -> None:
         """Import a public key from a file."""
         path, _ = QFileDialog.getOpenFileName(
-            self, "Import Public Key",
-            filter="Key files (*.pub *.pem *.asc);;All files (*)"
+            self, "Import Public Key", filter="Key files (*.pub *.pem *.asc);;All files (*)"
         )
         if not path:
             return
@@ -285,9 +287,13 @@ class KeyringView(QWidget):
 
             # Ask for a label
             from PySide6.QtWidgets import QInputDialog
+
             label, ok = QInputDialog.getText(
-                self, "Import Key", "Label for imported key:",
-                QLineEdit.EchoMode.Normal, Path(path).stem
+                self,
+                "Import Key",
+                "Label for imported key:",
+                QLineEdit.EchoMode.Normal,
+                Path(path).stem,
             )
             if not ok or not label.strip():
                 return

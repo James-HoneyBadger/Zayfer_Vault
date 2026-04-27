@@ -36,6 +36,7 @@ def _passphrase_strength(pw: str) -> tuple[int, str]:
     """
     try:
         from hb_zayfer.gui.password_strength import PasswordStrengthMeter
+
         return PasswordStrengthMeter._calculate_strength(pw)
     except ImportError:
         pass
@@ -70,9 +71,24 @@ def _passphrase_strength(pw: str) -> tuple[int, str]:
         score -= 10
 
     common = [
-        "password", "12345678", "qwerty", "abc123", "monkey", "letmein",
-        "trustno1", "dragon", "baseball", "iloveyou", "master", "sunshine",
-        "ashley", "bailey", "shadow", "superman", "qazwsx", "michael",
+        "password",
+        "12345678",
+        "qwerty",
+        "abc123",
+        "monkey",
+        "letmein",
+        "trustno1",
+        "dragon",
+        "baseball",
+        "iloveyou",
+        "master",
+        "sunshine",
+        "ashley",
+        "bailey",
+        "shadow",
+        "superman",
+        "qazwsx",
+        "michael",
     ]
     if pw.lower() in common:
         score = max(10, score - 40)
@@ -101,13 +117,16 @@ def _prompt_passphrase(confirm: bool = False) -> bytes:
         score, label = _passphrase_strength(pw)
         if score < 50:
             err_console.print(f"[yellow]⚠ Passphrase strength: {label} ({score}/100)[/yellow]")
-            err_console.print("[yellow]  Consider using a longer passphrase with mixed characters.[/yellow]")
+            err_console.print(
+                "[yellow]  Consider using a longer passphrase with mixed characters.[/yellow]"
+            )
     return pw.encode("utf-8")
 
 
 # ---------------------------------------------------------------------------
 # Root group
 # ---------------------------------------------------------------------------
+
 
 @click.group()
 @click.version_option(version=hbz.version(), prog_name="hb-zayfer")
@@ -119,11 +138,14 @@ def cli() -> None:
 # Key generation
 # ---------------------------------------------------------------------------
 
+
 @cli.command()
 @click.argument("algorithm", type=click.Choice(["rsa2048", "rsa4096", "ed25519", "x25519", "pgp"]))
 @click.option("--label", "-l", required=True, help="Human-readable label for the key.")
 @click.option("--user-id", "-u", default=None, help="User ID for PGP keys (e.g. 'Name <email>').")
-@click.option("--export-dir", "-o", type=click.Path(), default=None, help="Directory to export public key.")
+@click.option(
+    "--export-dir", "-o", type=click.Path(), default=None, help="Directory to export public key."
+)
 def keygen(algorithm: str, label: str, user_id: str | None, export_dir: str | None) -> None:
     """Generate a new key pair and store it in the keyring."""
     passphrase = _prompt_passphrase(confirm=True)
@@ -169,20 +191,35 @@ def keygen(algorithm: str, label: str, user_id: str | None, export_dir: str | No
 # Encrypt
 # ---------------------------------------------------------------------------
 
+
 @cli.command()
 @click.argument("input_file", type=click.Path(exists=True))
-@click.option("--output", "-o", type=click.Path(), default=None, help="Output file (default: <input>.hbzf).")
-@click.option("--algorithm", "-a", type=click.Choice(["aes", "chacha"]), default="aes", help="Symmetric cipher.")
+@click.option(
+    "--output", "-o", type=click.Path(), default=None, help="Output file (default: <input>.hbzf)."
+)
+@click.option(
+    "--algorithm",
+    "-a",
+    type=click.Choice(["aes", "chacha"]),
+    default="aes",
+    help="Symmetric cipher.",
+)
 @click.option("--password", "-p", is_flag=True, help="Encrypt with a passphrase.")
-@click.option("--recipient", "-r", default=None, help="Recipient contact name or fingerprint prefix.")
-def encrypt(input_file: str, output: str | None, algorithm: str, password: bool, recipient: str | None) -> None:
+@click.option(
+    "--recipient", "-r", default=None, help="Recipient contact name or fingerprint prefix."
+)
+def encrypt(
+    input_file: str, output: str | None, algorithm: str, password: bool, recipient: str | None
+) -> None:
     """Encrypt a file."""
     output = output or f"{input_file}.hbzf"
 
     if password or not recipient:
         pw = _prompt_passphrase(confirm=True)
         with console.status("Encrypting..."):
-            hbz.encrypt_file(input_file, output, algorithm=algorithm, wrapping="password", passphrase=pw)
+            hbz.encrypt_file(
+                input_file, output, algorithm=algorithm, wrapping="password", passphrase=pw
+            )
     else:
         ks = hbz.KeyStore()
         fps = ks.resolve_recipient(recipient)
@@ -198,12 +235,22 @@ def encrypt(input_file: str, output: str | None, algorithm: str, password: bool,
 
         if meta.algorithm in ("RSA-2048", "RSA-4096"):
             with console.status("Encrypting with RSA..."):
-                hbz.encrypt_file(input_file, output, algorithm=algorithm, wrapping="rsa",
-                                 recipient_public_pem=pub_data.decode())
+                hbz.encrypt_file(
+                    input_file,
+                    output,
+                    algorithm=algorithm,
+                    wrapping="rsa",
+                    recipient_public_pem=pub_data.decode(),
+                )
         elif meta.algorithm == "X25519":
             with console.status("Encrypting with X25519..."):
-                hbz.encrypt_file(input_file, output, algorithm=algorithm, wrapping="x25519",
-                                 recipient_public_raw=pub_data)
+                hbz.encrypt_file(
+                    input_file,
+                    output,
+                    algorithm=algorithm,
+                    wrapping="x25519",
+                    recipient_public_raw=pub_data,
+                )
         else:
             err_console.print(f"Cannot encrypt with {meta.algorithm} key. Use RSA or X25519.")
             sys.exit(1)
@@ -221,9 +268,12 @@ def encrypt(input_file: str, output: str | None, algorithm: str, password: bool,
 # Decrypt
 # ---------------------------------------------------------------------------
 
+
 @cli.command()
 @click.argument("input_file", type=click.Path(exists=True))
-@click.option("--output", "-o", type=click.Path(), default=None, help="Output file (default: strip .hbzf).")
+@click.option(
+    "--output", "-o", type=click.Path(), default=None, help="Output file (default: strip .hbzf)."
+)
 @click.option("--key", "-k", default=None, help="Fingerprint prefix of the decryption key.")
 def decrypt(input_file: str, output: str | None, key: str | None) -> None:
     """Decrypt an HBZF file."""
@@ -302,10 +352,17 @@ def _select_key(ks: hbz.KeyStore, hint: str | None, algo_prefix: str) -> str:
 # Sign / Verify
 # ---------------------------------------------------------------------------
 
+
 @cli.command()
 @click.argument("input_file", type=click.Path(exists=True))
 @click.option("--key", "-k", default=None, help="Fingerprint prefix of signing key.")
-@click.option("--output", "-o", type=click.Path(), default=None, help="Signature output file (default: <input>.sig).")
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(),
+    default=None,
+    help="Signature output file (default: <input>.sig).",
+)
 @click.option("--algorithm", "-a", type=click.Choice(["ed25519", "rsa", "pgp"]), default="ed25519")
 def sign(input_file: str, key: str | None, output: str | None, algorithm: str) -> None:
     """Sign a file."""
@@ -338,7 +395,9 @@ def sign(input_file: str, key: str | None, output: str | None, algorithm: str) -
 @cli.command()
 @click.argument("input_file", type=click.Path(exists=True))
 @click.argument("signature_file", type=click.Path(exists=True))
-@click.option("--key", "-k", default=None, help="Fingerprint prefix or contact name for verification key.")
+@click.option(
+    "--key", "-k", default=None, help="Fingerprint prefix or contact name for verification key."
+)
 @click.option("--algorithm", "-a", type=click.Choice(["ed25519", "rsa", "pgp"]), default="ed25519")
 def verify(input_file: str, signature_file: str, key: str | None, algorithm: str) -> None:
     """Verify a file's signature."""
@@ -379,6 +438,7 @@ def verify(input_file: str, signature_file: str, key: str | None, algorithm: str
 # ---------------------------------------------------------------------------
 # Key management
 # ---------------------------------------------------------------------------
+
 
 @cli.group()
 def keys() -> None:
@@ -437,7 +497,12 @@ def keys_export(fingerprint_prefix: str, output: str | None) -> None:
 @keys.command("import")
 @click.argument("key_file", type=click.Path(exists=True))
 @click.option("--label", "-l", required=True, help="Label for the imported key.")
-@click.option("--algorithm", "-a", required=True, type=click.Choice(["rsa2048", "rsa4096", "ed25519", "x25519", "pgp"]))
+@click.option(
+    "--algorithm",
+    "-a",
+    required=True,
+    type=click.Choice(["rsa2048", "rsa4096", "ed25519", "x25519", "pgp"]),
+)
 @click.option("--private", is_flag=True, help="Import as a private key (will be encrypted).")
 def keys_import(key_file: str, label: str, algorithm: str, private: bool) -> None:
     """Import a public or private key file."""
@@ -478,6 +543,7 @@ def keys_delete(fingerprint_prefix: str, yes: bool) -> None:
 # ---------------------------------------------------------------------------
 # Contact management
 # ---------------------------------------------------------------------------
+
 
 @cli.group()
 def contacts() -> None:
@@ -546,6 +612,7 @@ def contacts_link(contact_name: str, fingerprint_prefix: str) -> None:
 # Backup and audit
 # ---------------------------------------------------------------------------
 
+
 @cli.group()
 def backup() -> None:
     """Create, restore, and verify encrypted keystore backups."""
@@ -564,7 +631,14 @@ def backup_create(output: str, label: str | None) -> None:
 
 
 @backup.command("restore")
-@click.option("--input", "-i", "input_file", required=True, type=click.Path(exists=True), help="Backup file path.")
+@click.option(
+    "--input",
+    "-i",
+    "input_file",
+    required=True,
+    type=click.Path(exists=True),
+    help="Backup file path.",
+)
 @click.option("--yes", "-y", is_flag=True, help="Skip confirmation prompt.")
 def backup_restore(input_file: str, yes: bool) -> None:
     """Restore keystore from an encrypted backup."""
@@ -583,7 +657,14 @@ def backup_restore(input_file: str, yes: bool) -> None:
 
 
 @backup.command("verify")
-@click.option("--input", "-i", "input_file", required=True, type=click.Path(exists=True), help="Backup file path.")
+@click.option(
+    "--input",
+    "-i",
+    "input_file",
+    required=True,
+    type=click.Path(exists=True),
+    help="Backup file path.",
+)
 def backup_verify(input_file: str) -> None:
     """Verify a backup file and passphrase without restoring."""
     ks = hbz.KeyStore()
@@ -604,7 +685,14 @@ def audit() -> None:
 
 
 @audit.command("show")
-@click.option("--limit", "-n", default=20, show_default=True, type=int, help="Number of recent entries to show.")
+@click.option(
+    "--limit",
+    "-n",
+    default=20,
+    show_default=True,
+    type=int,
+    help="Number of recent entries to show.",
+)
 def audit_show(limit: int) -> None:
     """Show recent audit log entries."""
     logger = hbz.AuditLogger()
@@ -637,7 +725,9 @@ def audit_verify() -> None:
 
 
 @audit.command("export")
-@click.option("--output", "-o", required=True, type=click.Path(), help="Output path for exported log.")
+@click.option(
+    "--output", "-o", required=True, type=click.Path(), help="Output path for exported log."
+)
 def audit_export(output: str) -> None:
     """Export audit log to a file."""
     logger = hbz.AuditLogger()
@@ -648,6 +738,7 @@ def audit_export(output: str) -> None:
 # ---------------------------------------------------------------------------
 # Text encryption (convenience)
 # ---------------------------------------------------------------------------
+
 
 @cli.command("encrypt-text")
 @click.option("--algorithm", "-a", type=click.Choice(["aes", "chacha"]), default="aes")
@@ -676,6 +767,7 @@ def decrypt_text() -> None:
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
+
 
 def main() -> None:
     """CLI entry point."""

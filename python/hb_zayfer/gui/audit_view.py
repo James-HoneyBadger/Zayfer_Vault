@@ -50,7 +50,7 @@ def _friendly_operation(raw: str) -> tuple[str, str]:
     """
     for key, label in _OP_LABELS.items():
         if raw.startswith(key):
-            details = raw[len(key):].strip().strip("{}").strip()
+            details = raw[len(key) :].strip().strip("{}").strip()
             return label, details
     return raw, ""
 
@@ -217,9 +217,7 @@ class AuditView(QWidget):
                     "tampering or corruption.",
                 )
         except Exception as exc:
-            QMessageBox.critical(
-                self, "Integrity Check", f"Error verifying integrity:\n{exc}"
-            )
+            QMessageBox.critical(self, "Integrity Check", f"Error verifying integrity:\n{exc}")
 
     def _export_log(self) -> None:
         """Export audit log to a user-chosen file."""
@@ -234,10 +232,6 @@ class AuditView(QWidget):
         try:
             logger = hbz.AuditLogger()
             logger.export(path)
-            QMessageBox.information(
-                self, "Export Complete", f"Audit log exported to:\n{path}"
-            )
+            QMessageBox.information(self, "Export Complete", f"Audit log exported to:\n{path}")
         except Exception as exc:
-            QMessageBox.critical(
-                self, "Export Failed", f"Failed to export audit log:\n{exc}"
-            )
+            QMessageBox.critical(self, "Export Failed", f"Failed to export audit log:\n{exc}")

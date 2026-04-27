@@ -109,7 +109,9 @@ class SettingsView(QWidget):
         self.scrypt_logn_spin = QSpinBox()
         self.scrypt_logn_spin.setRange(10, 22)
         self.scrypt_logn_spin.setValue(15)
-        self.scrypt_logn_spin.setToolTip("CPU/memory cost parameter (2^N). Higher = more secure but slower.")
+        self.scrypt_logn_spin.setToolTip(
+            "CPU/memory cost parameter (2^N). Higher = more secure but slower."
+        )
         scrypt_logn_row.addWidget(self.scrypt_logn_spin)
         scrypt_logn_row.addStretch()
         crypto_layout.addLayout(scrypt_logn_row)

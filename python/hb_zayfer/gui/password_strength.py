@@ -62,7 +62,7 @@ class PasswordStrengthMeter(QWidget):
     def _calculate_strength(password: str) -> tuple[int, str]:
         """
         Calculate password strength score (0-100) and descriptive text.
-        
+
         Scoring:
         - Length: base score
         - Character variety: bonus points
@@ -86,48 +86,152 @@ class PasswordStrengthMeter(QWidget):
             score += 80 + min((length - 16) * 2, 20)  # 80-100
 
         # Character variety bonuses
-        has_lower = bool(re.search(r'[a-z]', password))
-        has_upper = bool(re.search(r'[A-Z]', password))
-        has_digit = bool(re.search(r'\d', password))
-        has_special = bool(re.search(r'[^a-zA-Z0-9]', password))
+        has_lower = bool(re.search(r"[a-z]", password))
+        has_upper = bool(re.search(r"[A-Z]", password))
+        has_digit = bool(re.search(r"\d", password))
+        has_special = bool(re.search(r"[^a-zA-Z0-9]", password))
 
         variety_count = sum([has_lower, has_upper, has_digit, has_special])
         score += variety_count * 5
 
         # Penalties for common patterns
-        if re.match(r'^[a-z]+$', password) or re.match(r'^[A-Z]+$', password):
+        if re.match(r"^[a-z]+$", password) or re.match(r"^[A-Z]+$", password):
             score -= 10  # Only letters
-        if re.match(r'^\d+$', password):
+        if re.match(r"^\d+$", password):
             score -= 20  # Only digits
-        if re.search(r'(.)\1{2,}', password):
+        if re.search(r"(.)\1{2,}", password):
             score -= 10  # Repeated characters (aaa, 111)
-        if re.search(r'(012|123|234|345|456|567|678|789|890|abc|bcd|cde|def)', password.lower()):
+        if re.search(r"(012|123|234|345|456|567|678|789|890|abc|bcd|cde|def)", password.lower()):
             score -= 10  # Sequential patterns
 
         # Common password check (top entries from breach databases)
         common = {
-            'password', 'password1', 'password123', '12345678', '123456789',
-            '1234567890', '12345', '123456', '1234', 'qwerty', 'qwerty123',
-            'abc123', 'monkey', 'letmein', 'trustno1', 'dragon', 'baseball',
-            'iloveyou', 'master', 'sunshine', 'ashley', 'bailey', 'shadow',
-            'superman', 'qazwsx', 'michael', 'football', 'princess', 'access',
-            'hello', 'charlie', 'donald', 'welcome', 'login', 'admin',
-            'passw0rd', 'starwars', 'solo', 'master1', 'jordan', 'harley',
-            'ranger', 'daniel', 'robert', 'thomas', 'jennifer', 'jessica',
-            'joshua', 'andrew', 'hunter', 'buster', 'soccer', 'hockey',
-            'george', 'pepper', 'ginger', 'flower', 'zaq1zaq1', 'mustang',
-            'fuckyou', 'freedom', 'whatever', 'nothing', 'secret', 'biteme',
-            'batman', 'jordan23', 'summer', 'internet', 'service', 'computer',
-            'asshole', 'killer', 'cheese', 'yankees', 'dallas', 'austin',
-            'thunder', 'taylor', 'matrix', 'corvette', 'merlin', 'diamond',
-            'bigdog', 'cowboy', 'falcon', 'phoenix', 'silver', 'tigger',
-            'jackson', 'dallas1', 'anthony', 'william', 'richard', 'matthew',
-            'chicken', 'maggie', 'cookie', 'orange', 'banana', 'lakers',
-            'andrea', 'nicole', 'samantha', 'heather', 'amanda', 'michelle',
-            'compaq', 'trustme', 'maverick', 'matrix1', 'changeme',
-            'qwerty1', 'test123', 'test1234', 'letmein1', 'default',
-            'master12', 'admin123', 'root', 'toor', 'pass', 'temp',
-            'guest', 'p@ssw0rd', 'p@ssword',
+            "password",
+            "password1",
+            "password123",
+            "12345678",
+            "123456789",
+            "1234567890",
+            "12345",
+            "123456",
+            "1234",
+            "qwerty",
+            "qwerty123",
+            "abc123",
+            "monkey",
+            "letmein",
+            "trustno1",
+            "dragon",
+            "baseball",
+            "iloveyou",
+            "master",
+            "sunshine",
+            "ashley",
+            "bailey",
+            "shadow",
+            "superman",
+            "qazwsx",
+            "michael",
+            "football",
+            "princess",
+            "access",
+            "hello",
+            "charlie",
+            "donald",
+            "welcome",
+            "login",
+            "admin",
+            "passw0rd",
+            "starwars",
+            "solo",
+            "master1",
+            "jordan",
+            "harley",
+            "ranger",
+            "daniel",
+            "robert",
+            "thomas",
+            "jennifer",
+            "jessica",
+            "joshua",
+            "andrew",
+            "hunter",
+            "buster",
+            "soccer",
+            "hockey",
+            "george",
+            "pepper",
+            "ginger",
+            "flower",
+            "zaq1zaq1",
+            "mustang",
+            "fuckyou",
+            "freedom",
+            "whatever",
+            "nothing",
+            "secret",
+            "biteme",
+            "batman",
+            "jordan23",
+            "summer",
+            "internet",
+            "service",
+            "computer",
+            "asshole",
+            "killer",
+            "cheese",
+            "yankees",
+            "dallas",
+            "austin",
+            "thunder",
+            "taylor",
+            "matrix",
+            "corvette",
+            "merlin",
+            "diamond",
+            "bigdog",
+            "cowboy",
+            "falcon",
+            "phoenix",
+            "silver",
+            "tigger",
+            "jackson",
+            "dallas1",
+            "anthony",
+            "william",
+            "richard",
+            "matthew",
+            "chicken",
+            "maggie",
+            "cookie",
+            "orange",
+            "banana",
+            "lakers",
+            "andrea",
+            "nicole",
+            "samantha",
+            "heather",
+            "amanda",
+            "michelle",
+            "compaq",
+            "trustme",
+            "maverick",
+            "matrix1",
+            "changeme",
+            "qwerty1",
+            "test123",
+            "test1234",
+            "letmein1",
+            "default",
+            "master12",
+            "admin123",
+            "root",
+            "toor",
+            "pass",
+            "temp",
+            "guest",
+            "p@ssw0rd",
+            "p@ssword",
         }
         if password.lower() in common:
             score = max(10, score - 40)
@@ -160,22 +264,22 @@ class PasswordStrengthMeter(QWidget):
         if len(password) < 12:
             advice.append("• Use at least 12 characters")
 
-        if not re.search(r'[a-z]', password):
+        if not re.search(r"[a-z]", password):
             advice.append("• Add lowercase letters")
-        if not re.search(r'[A-Z]', password):
+        if not re.search(r"[A-Z]", password):
             advice.append("• Add uppercase letters")
-        if not re.search(r'\d', password):
+        if not re.search(r"\d", password):
             advice.append("• Add numbers")
-        if not re.search(r'[^a-zA-Z0-9]', password):
+        if not re.search(r"[^a-zA-Z0-9]", password):
             advice.append("• Add special characters (!@#$%^&*)")
 
-        if re.search(r'(.)\1{2,}', password):
+        if re.search(r"(.)\1{2,}", password):
             advice.append("• Avoid repeated characters")
 
-        if re.search(r'(012|123|234|345|456|567|678|789)', password):
+        if re.search(r"(012|123|234|345|456|567|678|789)", password):
             advice.append("• Avoid sequential numbers")
 
-        if re.search(r'(abc|bcd|cde|def)', password.lower()):
+        if re.search(r"(abc|bcd|cde|def)", password.lower()):
             advice.append("• Avoid sequential letters")
 
         if not advice:

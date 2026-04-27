@@ -199,7 +199,9 @@ class BackupView(QWidget):
         if self._current_worker is None:
             return
         self._current_worker.cancel()
-        self._append_status("⚠️ Cancellation requested. Any in-flight work will finish in the background.")
+        self._append_status(
+            "⚠️ Cancellation requested. Any in-flight work will finish in the background."
+        )
         self._set_busy(False)
 
     def _on_worker_error(self, error: str) -> None:

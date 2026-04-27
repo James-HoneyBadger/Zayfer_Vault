@@ -141,11 +141,17 @@ class VerifyView(QWidget):
         """Populate key combos with verification-capable keys."""
         try:
             ks = hbz.KeyStore()
-            keys = [k for k in ks.list_keys() if k.has_public and k.algorithm.lower() in ("ed25519", "rsa2048", "rsa4096", "pgp")]
+            keys = [
+                k
+                for k in ks.list_keys()
+                if k.has_public and k.algorithm.lower() in ("ed25519", "rsa2048", "rsa4096", "pgp")
+            ]
             for combo in (self.file_key_combo, self.text_key_combo):
                 combo.clear()
                 for k in keys:
-                    combo.addItem(f"{k.label} ({k.algorithm}) [{k.fingerprint[:12]}…]", k.fingerprint)
+                    combo.addItem(
+                        f"{k.label} ({k.algorithm}) [{k.fingerprint[:12]}…]", k.fingerprint
+                    )
         except Exception:
             pass
 
@@ -159,7 +165,9 @@ class VerifyView(QWidget):
             self.file_input.setText(path)
 
     def _browse_sig_file(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(self, "Select Signature File", "", "Signature Files (*.sig);;All Files (*)")
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Select Signature File", "", "Signature Files (*.sig);;All Files (*)"
+        )
         if path:
             self.file_sig.setText(path)
 
@@ -202,7 +210,9 @@ class VerifyView(QWidget):
 
             valid = self._do_verify(algo, pub_data, message, signature)
             self._show_result(self.file_result, valid)
-            audit_safe(hbz.audit_log_signature_verified, algo.upper(), fp, valid, "source=gui, view=verify")
+            audit_safe(
+                hbz.audit_log_signature_verified, algo.upper(), fp, valid, "source=gui, view=verify"
+            )
         except Exception as e:
             self.file_result.setText(f"❌ Error: {e}")
             self.file_result.setStyleSheet("font-size: 14px; padding: 8px; color: red;")
@@ -225,13 +235,16 @@ class VerifyView(QWidget):
 
         try:
             import base64
+
             signature = base64.b64decode(sig_b64)
             ks = hbz.KeyStore()
             pub_data = ks.load_public_key(fp)
 
             valid = self._do_verify(algo, pub_data, message, signature)
             self._show_result(self.text_result, valid)
-            audit_safe(hbz.audit_log_signature_verified, algo.upper(), fp, valid, "source=gui, view=verify")
+            audit_safe(
+                hbz.audit_log_signature_verified, algo.upper(), fp, valid, "source=gui, view=verify"
+            )
         except Exception as e:
             self.text_result.setText(f"❌ Error: {e}")
             self.text_result.setStyleSheet("font-size: 14px; padding: 8px; color: red;")

@@ -46,7 +46,7 @@ class AboutDialog(QDialog):
             <h3>Encryption Suite</h3>
             <p><b>Zayfer Vault</b> is a comprehensive encryption suite implementing modern cryptographic
             primitives with a focus on security and usability.</p>
-            
+
             <h4>Features:</h4>
             <ul>
                 <li>Multiple encryption algorithms (AES-GCM, ChaCha20-Poly1305)</li>

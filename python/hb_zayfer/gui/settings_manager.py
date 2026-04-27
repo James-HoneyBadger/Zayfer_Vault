@@ -32,13 +32,7 @@ class SettingsManager:
     def _default_settings(self) -> dict[str, Any]:
         """Return default settings."""
         return {
-            "window": {
-                "width": 1000,
-                "height": 700,
-                "x": None,
-                "y": None,
-                "maximized": False
-            },
+            "window": {"width": 1000, "height": 700, "x": None, "y": None, "maximized": False},
             "theme": "dark",
             "last_paths": {
                 "encrypt_input": "",
@@ -46,23 +40,20 @@ class SettingsManager:
                 "decrypt_input": "",
                 "decrypt_output": "",
                 "key_export": "",
-                "key_import": ""
+                "key_import": "",
             },
-            "recent_files": {
-                "encrypted": [],
-                "decrypted": []
-            },
+            "recent_files": {"encrypted": [], "decrypted": []},
             "preferences": {
                 "default_algorithm": "ChaCha20-Poly1305",
                 "default_mode": "password",
                 "confirm_delete": True,
                 "show_passwords": False,
-                "auto_refresh": True
+                "auto_refresh": True,
             },
             "table_columns": {
                 "keyring": [True, True, True, True, True, True],
-                "contacts": [True, True, True, True]
-            }
+                "contacts": [True, True, True, True],
+            },
         }
 
     def save(self) -> None:
@@ -70,22 +61,22 @@ class SettingsManager:
         with self._lock:
             try:
                 self.config_dir.mkdir(parents=True, exist_ok=True)
-                with open(self.settings_file, 'w') as f:
+                with open(self.settings_file, "w") as f:
                     json.dump(self.settings, f, indent=2)
             except Exception as e:
                 print(f"Failed to save settings: {e}")
 
     def get(self, key: str, default: Any = None) -> Any:
         """Get a setting value by dot-notation key.
-        
+
         Args:
             key: Setting key in dot notation (e.g., "window.width")
             default: Default value if key not found
-        
+
         Returns:
             The setting value or default
         """
-        keys = key.split('.')
+        keys = key.split(".")
         value: Any = self.settings
         for k in keys:
             if isinstance(value, dict):
@@ -98,12 +89,12 @@ class SettingsManager:
 
     def set(self, key: str, value: Any) -> None:
         """Set a setting value by dot-notation key.
-        
+
         Args:
             key: Setting key in dot notation (e.g., "window.width")
             value: Value to set
         """
-        keys = key.split('.')
+        keys = key.split(".")
         target: Any = self.settings
         for k in keys[:-1]:
             if k not in target:
@@ -113,7 +104,7 @@ class SettingsManager:
 
     def add_recent_file(self, file_type: str, path: str, max_recent: int = 10) -> None:
         """Add a file to recent files list.
-        
+
         Args:
             file_type: Type of file ("encrypted" or "decrypted")
             path: File path
@@ -127,10 +118,10 @@ class SettingsManager:
 
     def get_recent_files(self, file_type: str) -> list[str]:
         """Get recent files of a specific type.
-        
+
         Args:
             file_type: Type of file ("encrypted" or "decrypted")
-        
+
         Returns:
             List of recent file paths
         """

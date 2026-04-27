@@ -91,7 +91,9 @@ class KeygenView(QWidget):
         # Password strength meter
         self.strength_meter = PasswordStrengthMeter()
         opts_layout.addWidget(self.strength_meter)
-        self.pw_input.textChanged.connect(lambda: self.strength_meter.update_strength(self.pw_input.text()))
+        self.pw_input.textChanged.connect(
+            lambda: self.strength_meter.update_strength(self.pw_input.text())
+        )
 
         # Show password toggle
         self.show_password_check = QCheckBox("Show passphrases")

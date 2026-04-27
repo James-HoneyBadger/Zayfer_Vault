@@ -101,7 +101,12 @@ def create_app() -> FastAPI:
         if api_token is not None:
             # Allow static files and docs without auth
             path = request.url.path
-            if not (path.startswith("/static") or path == "/" or path.startswith("/docs") or path.startswith("/openapi")):
+            if not (
+                path.startswith("/static")
+                or path == "/"
+                or path.startswith("/docs")
+                or path.startswith("/openapi")
+            ):
                 auth = request.headers.get("authorization", "")
                 expected = f"Bearer {api_token}"
                 # Timing-safe comparison to prevent token-guessing side-channel attacks
@@ -147,8 +152,13 @@ def main() -> None:
 
     parser = argparse.ArgumentParser(description="HB_Zayfer Web Server")
     parser.add_argument("--host", default="127.0.0.1", help="Bind address (default: 127.0.0.1)")
-    parser.add_argument("--port", "-p", type=int, default=int(os.environ.get("HB_ZAYFER_PORT", "8000")),
-                        help="Port number (default: 8000, or HB_ZAYFER_PORT env)")
+    parser.add_argument(
+        "--port",
+        "-p",
+        type=int,
+        default=int(os.environ.get("HB_ZAYFER_PORT", "8000")),
+        help="Port number (default: 8000, or HB_ZAYFER_PORT env)",
+    )
     args = parser.parse_args()
 
     app = create_app()

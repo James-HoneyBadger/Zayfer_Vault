@@ -164,17 +164,20 @@ class ContactsView(QWidget):
 
     def _update_table(self) -> None:
         """Update table with current filter."""
-        search_text = self.search_input.text().lower() if hasattr(self, 'search_input') else ""
+        search_text = self.search_input.text().lower() if hasattr(self, "search_input") else ""
 
-        if not hasattr(self, 'all_contacts'):
+        if not hasattr(self, "all_contacts"):
             self.all_contacts = []
 
         # Filter contacts
         if search_text:
-            filtered = [c for c in self.all_contacts
-                       if search_text in c.name.lower()
-                       or (c.email and search_text in c.email.lower())
-                       or (c.notes and search_text in c.notes.lower())]
+            filtered = [
+                c
+                for c in self.all_contacts
+                if search_text in c.name.lower()
+                or (c.email and search_text in c.email.lower())
+                or (c.notes and search_text in c.notes.lower())
+            ]
         else:
             filtered = self.all_contacts
 
@@ -206,7 +209,9 @@ class ContactsView(QWidget):
         form.addRow("Email:", email_input)
         form.addRow("Notes:", notes_input)
 
-        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
         buttons.accepted.connect(dialog.accept)
         buttons.rejected.connect(dialog.reject)
         form.addRow(buttons)
@@ -251,7 +256,9 @@ class ContactsView(QWidget):
             key_combo.addItem("Error loading keys")
         form.addRow("Key:", key_combo)
 
-        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
         buttons.accepted.connect(dialog.accept)
         buttons.rejected.connect(dialog.reject)
         form.addRow(buttons)
@@ -288,11 +295,17 @@ class ContactsView(QWidget):
             if contact.key_fingerprints:
                 msg += f"<b>Linked keys:</b> {len(contact.key_fingerprints)}<br>"
             if contact.notes:
-                msg += f"<b>Notes:</b> {contact.notes[:100]}...<br>" if len(contact.notes) > 100 else f"<b>Notes:</b> {contact.notes}<br>"
+                msg += (
+                    f"<b>Notes:</b> {contact.notes[:100]}...<br>"
+                    if len(contact.notes) > 100
+                    else f"<b>Notes:</b> {contact.notes}<br>"
+                )
             msg += "<br><b>Note:</b> This only removes the contact entry. Associated keys remain in your keyring."
 
             reply = QMessageBox.question(
-                self, "Remove Contact", msg,
+                self,
+                "Remove Contact",
+                msg,
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             )
             if reply != QMessageBox.StandardButton.Yes:
@@ -329,7 +342,9 @@ class ContactsView(QWidget):
             form.addRow("Email:", email_input)
             form.addRow("Notes:", notes_input)
 
-            buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+            buttons = QDialogButtonBox(
+                QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+            )
             buttons.accepted.connect(dialog.accept)
             buttons.rejected.connect(dialog.reject)
             form.addRow(buttons)

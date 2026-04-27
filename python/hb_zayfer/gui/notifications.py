@@ -11,7 +11,11 @@ class ToastNotification(QWidget):
 
     def __init__(self, message: str, toast_type: str = "info", parent: QWidget | None = None):
         super().__init__(parent)
-        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool | Qt.WindowType.WindowStaysOnTopHint)
+        self.setWindowFlags(
+            Qt.WindowType.FramelessWindowHint
+            | Qt.WindowType.Tool
+            | Qt.WindowType.WindowStaysOnTopHint
+        )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
 
@@ -71,11 +75,12 @@ class ToastNotification(QWidget):
     def _is_dark_mode(self) -> bool:
         """Check if dark mode is active."""
         from .theme import Theme
+
         return Theme.is_dark_mode()
 
     def show_notification(self, duration: int = 3000) -> None:
         """Show the notification with fade in/out.
-        
+
         Args:
             duration: Display duration in milliseconds
         """

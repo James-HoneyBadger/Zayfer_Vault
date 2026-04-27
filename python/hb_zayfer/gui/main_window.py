@@ -155,10 +155,7 @@ class MainWindow(QMainWindow):
             item = QListWidgetItem(name)
             item.setToolTip(tooltip)
             item.setSizeHint(QSize(178, 38))
-            item.setFlags(
-                Qt.ItemFlag.ItemIsSelectable
-                | Qt.ItemFlag.ItemIsEnabled
-            )
+            item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
             self.sidebar.addItem(item)
 
         self.sidebar.setCurrentRow(0)
@@ -202,7 +199,22 @@ class MainWindow(QMainWindow):
     def _on_page_changed(self, index: int) -> None:
         self.stack.setCurrentIndex(index)
         # Refresh data views when switching and update status bar
-        view_names = ["Home", "Encrypt", "Decrypt", "Key Generation", "Keyring", "Contacts", "Sign", "Verify", "Password Gen", "Messaging", "QR Exchange", "Settings", "Audit Log", "Backup"]
+        view_names = [
+            "Home",
+            "Encrypt",
+            "Decrypt",
+            "Key Generation",
+            "Keyring",
+            "Contacts",
+            "Sign",
+            "Verify",
+            "Password Gen",
+            "Messaging",
+            "QR Exchange",
+            "Settings",
+            "Audit Log",
+            "Backup",
+        ]
         if index < len(view_names):
             self.status_bar.set_message(f"Viewing: {view_names[index]}")
 
@@ -214,11 +226,11 @@ class MainWindow(QMainWindow):
             self.status_bar.clear_count()
         elif index == 4:  # Keyring
             self.keyring_view.refresh()
-            if hasattr(self.keyring_view, 'all_keys'):
+            if hasattr(self.keyring_view, "all_keys"):
                 self.status_bar.set_count("Keys", len(self.keyring_view.all_keys))
         elif index == 5:  # Contacts
             self.contacts_view.refresh()
-            if hasattr(self.contacts_view, 'all_contacts'):
+            if hasattr(self.contacts_view, "all_contacts"):
                 self.status_bar.set_count("Contacts", len(self.contacts_view.all_contacts))
         elif index == 12:  # Audit Log
             self.audit_view.refresh()
@@ -308,6 +320,7 @@ class MainWindow(QMainWindow):
     def _apply_settings_to_encrypt(self) -> None:
         """Apply default cipher from settings to encrypt view."""
         from hb_zayfer.gui.settings_view import _load_config
+
         cfg = _load_config()
         cipher = cfg.get("cipher", "AES-256-GCM")
         idx = self.encrypt_view.algo_combo.findText(cipher)
@@ -345,6 +358,7 @@ class MainWindow(QMainWindow):
 
         # Save theme
         from .theme import Theme
+
         self.settings.set("theme", "dark" if Theme.is_dark_mode() else "light")
 
         self.settings.save()

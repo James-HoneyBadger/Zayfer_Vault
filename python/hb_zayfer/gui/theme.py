@@ -34,11 +34,21 @@ class Theme:
         palette.setColor(QPalette.ColorRole.HighlightedText, QColor(255, 255, 255))
 
         # Disabled colors for better accessibility
-        palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.WindowText, QColor(150, 150, 150))
-        palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Text, QColor(150, 150, 150))
-        palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.ButtonText, QColor(150, 150, 150))
-        palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Highlight, QColor(200, 200, 200))
-        palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.HighlightedText, QColor(150, 150, 150))
+        palette.setColor(
+            QPalette.ColorGroup.Disabled, QPalette.ColorRole.WindowText, QColor(150, 150, 150)
+        )
+        palette.setColor(
+            QPalette.ColorGroup.Disabled, QPalette.ColorRole.Text, QColor(150, 150, 150)
+        )
+        palette.setColor(
+            QPalette.ColorGroup.Disabled, QPalette.ColorRole.ButtonText, QColor(150, 150, 150)
+        )
+        palette.setColor(
+            QPalette.ColorGroup.Disabled, QPalette.ColorRole.Highlight, QColor(200, 200, 200)
+        )
+        palette.setColor(
+            QPalette.ColorGroup.Disabled, QPalette.ColorRole.HighlightedText, QColor(150, 150, 150)
+        )
 
         app.setPalette(palette)
 
@@ -274,11 +284,21 @@ class Theme:
         palette.setColor(QPalette.ColorRole.HighlightedText, QColor(0, 0, 0))
 
         # Disabled colors
-        palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.WindowText, QColor(127, 127, 127))
-        palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Text, QColor(127, 127, 127))
-        palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.ButtonText, QColor(127, 127, 127))
-        palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Highlight, QColor(80, 80, 80))
-        palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.HighlightedText, QColor(127, 127, 127))
+        palette.setColor(
+            QPalette.ColorGroup.Disabled, QPalette.ColorRole.WindowText, QColor(127, 127, 127)
+        )
+        palette.setColor(
+            QPalette.ColorGroup.Disabled, QPalette.ColorRole.Text, QColor(127, 127, 127)
+        )
+        palette.setColor(
+            QPalette.ColorGroup.Disabled, QPalette.ColorRole.ButtonText, QColor(127, 127, 127)
+        )
+        palette.setColor(
+            QPalette.ColorGroup.Disabled, QPalette.ColorRole.Highlight, QColor(80, 80, 80)
+        )
+        palette.setColor(
+            QPalette.ColorGroup.Disabled, QPalette.ColorRole.HighlightedText, QColor(127, 127, 127)
+        )
 
         app.setPalette(palette)
 
@@ -479,7 +499,7 @@ class Theme:
     def _adjust_color(hex_color: str, factor: float) -> str:
         """Adjust hex color brightness by factor."""
         # Remove '#' if present
-        hex_color = hex_color.lstrip('#')
+        hex_color = hex_color.lstrip("#")
 
         # Convert to RGB
         r = int(hex_color[0:2], 16)
@@ -522,4 +542,8 @@ class Theme:
     @staticmethod
     def get_destructive_text_style() -> str:
         """Get text color for destructive actions."""
-        return "color: #dc3545; font-weight: bold;" if not Theme.is_dark_mode() else "color: #f85149; font-weight: bold;"
+        return (
+            "color: #dc3545; font-weight: bold;"
+            if not Theme.is_dark_mode()
+            else "color: #f85149; font-weight: bold;"
+        )

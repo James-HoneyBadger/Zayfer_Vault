@@ -20,6 +20,7 @@ import pytest
 # Helpers
 # ===========================================================================
 
+
 @pytest.fixture(autouse=True)
 def _isolated_keystore(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """Ensure every test gets its own keystore directory."""
@@ -28,12 +29,14 @@ def _isolated_keystore(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     global _ks_path
     _ks_path = str(tmp_path)
 
+
 _ks_path: str = ""
 
 
 # ===========================================================================
 # Version
 # ===========================================================================
+
 
 def test_version():
     v = hbz.version()
@@ -44,6 +47,7 @@ def test_version():
 # ===========================================================================
 # KDF
 # ===========================================================================
+
 
 def test_generate_salt():
     s = hbz.generate_salt(32)
@@ -81,6 +85,7 @@ def test_kdf_different_passwords():
 # AES-256-GCM
 # ===========================================================================
 
+
 def test_aes_roundtrip():
     key = hbz.derive_key_argon2(b"pw", hbz.generate_salt(32))
     nonce, ct = hbz.aes_encrypt(key, b"Hello AES", b"")
@@ -100,6 +105,7 @@ def test_aes_wrong_key():
 # ChaCha20-Poly1305
 # ===========================================================================
 
+
 def test_chacha_roundtrip():
     key = hbz.derive_key_argon2(b"pw", hbz.generate_salt(32))
     nonce, ct = hbz.chacha_encrypt(key, b"Hello ChaCha", b"")
@@ -118,6 +124,7 @@ def test_chacha_wrong_key():
 # ===========================================================================
 # RSA
 # ===========================================================================
+
 
 def test_rsa_keygen():
     priv_pem, pub_pem = hbz.rsa_generate(2048)
@@ -156,6 +163,7 @@ def test_rsa_fingerprint():
 # Ed25519
 # ===========================================================================
 
+
 def test_ed25519_keygen():
     sk, vk = hbz.ed25519_generate()
     assert "BEGIN" in sk and "BEGIN" in vk
@@ -183,6 +191,7 @@ def test_ed25519_fingerprint():
 # X25519
 # ===========================================================================
 
+
 def test_x25519_keygen():
     sk, pk = hbz.x25519_generate()
     assert isinstance(sk, bytes) and len(sk) == 32
@@ -209,6 +218,7 @@ def test_x25519_fingerprint():
 # ===========================================================================
 # OpenPGP
 # ===========================================================================
+
 
 def test_pgp_keygen():
     pub_arm, sec_arm = hbz.pgp_generate("Test <test@test.com>")
@@ -244,9 +254,12 @@ def test_pgp_fingerprint_and_uid():
 # HBZF Streaming Format
 # ===========================================================================
 
+
 def test_encrypt_decrypt_data_aes():
     ct = hbz.encrypt_data(
-        b"HBZF test", algorithm="aes", wrapping="password",
+        b"HBZF test",
+        algorithm="aes",
+        wrapping="password",
         passphrase=b"pw123",
     )
     assert ct[:4] == b"HBZF"
@@ -256,7 +269,9 @@ def test_encrypt_decrypt_data_aes():
 
 def test_encrypt_decrypt_data_chacha():
     ct = hbz.encrypt_data(
-        b"ChaCha HBZF", algorithm="chacha", wrapping="password",
+        b"ChaCha HBZF",
+        algorithm="chacha",
+        wrapping="password",
         passphrase=b"cc",
     )
     pt = hbz.decrypt_data(ct, passphrase=b"cc")
@@ -265,7 +280,9 @@ def test_encrypt_decrypt_data_chacha():
 
 def test_encrypt_decrypt_data_wrong_password():
     ct = hbz.encrypt_data(
-        b"secret", algorithm="aes", wrapping="password",
+        b"secret",
+        algorithm="aes",
+        wrapping="password",
         passphrase=b"right",
     )
     with pytest.raises(Exception):
@@ -278,8 +295,7 @@ def test_encrypt_decrypt_file(tmp_path: Path):
     dec = tmp_path / "decrypted.txt"
 
     src.write_bytes(b"file content for HBZF")
-    hbz.encrypt_file(str(src), str(enc), algorithm="aes", wrapping="password",
-                     passphrase=b"fp")
+    hbz.encrypt_file(str(src), str(enc), algorithm="aes", wrapping="password", passphrase=b"fp")
     assert enc.exists()
 
     hbz.decrypt_file(str(enc), str(dec), passphrase=b"fp")
@@ -289,6 +305,7 @@ def test_encrypt_decrypt_file(tmp_path: Path):
 # ===========================================================================
 # KeyStore
 # ===========================================================================
+
 
 def test_keystore_basic():
     ks = hbz.KeyStore(_ks_path)
@@ -434,12 +451,12 @@ def test_qr_encode_no_label():
 
 
 def test_generate_password():
-    pw = hbz.generate_password(length=20, uppercase=True, lowercase=True,
-                                digits=True, symbols=True, exclude="")
+    pw = hbz.generate_password(
+        length=20, uppercase=True, lowercase=True, digits=True, symbols=True, exclude=""
+    )
     assert len(pw) == 20
     # Should have decent entropy
-    e = hbz.password_entropy(length=20, uppercase=True, lowercase=True,
-                              digits=True, symbols=True)
+    e = hbz.password_entropy(length=20, uppercase=True, lowercase=True, digits=True, symbols=True)
     assert e > 50
 
 
@@ -453,11 +470,13 @@ def test_generate_passphrase():
 
 
 def test_password_entropy_excludes():
-    e_full = hbz.password_entropy(length=16, uppercase=True, lowercase=True,
-                                   digits=True, symbols=True)
+    e_full = hbz.password_entropy(
+        length=16, uppercase=True, lowercase=True, digits=True, symbols=True
+    )
     # With fewer char classes, entropy should be lower
-    e_less = hbz.password_entropy(length=16, uppercase=True, lowercase=True,
-                                   digits=True, symbols=False)
+    e_less = hbz.password_entropy(
+        length=16, uppercase=True, lowercase=True, digits=True, symbols=False
+    )
     assert e_less < e_full
 
 

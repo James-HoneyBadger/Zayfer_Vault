@@ -181,7 +181,9 @@ class DecryptView(QWidget):
         self.text_passphrase.setEchoMode(mode)
 
     def _browse_input(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(self, "Select HBZF file", filter="HBZF files (*.hbzf);;All files (*)")
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Select HBZF file", filter="HBZF files (*.hbzf);;All files (*)"
+        )
         if path:
             self.file_input.setText(path)
             if path.endswith(".hbzf"):
@@ -207,7 +209,9 @@ class DecryptView(QWidget):
             wraps = {0x00: "Password", 0x01: "RSA-OAEP", 0x02: "X25519-ECDH"}
             algo = algos.get(head[5], f"0x{head[5]:02x}")
             wrap = wraps.get(head[7], f"0x{head[7]:02x}")
-            self.header_label.setText(f"Format: HBZF v{head[4]}  |  Cipher: {algo}  |  Mode: {wrap}")
+            self.header_label.setText(
+                f"Format: HBZF v{head[4]}  |  Cipher: {algo}  |  Mode: {wrap}"
+            )
 
             # If asymmetric, populate key selector
             if head[7] in (0x01, 0x02):  # RSA or X25519
@@ -287,7 +291,9 @@ class DecryptView(QWidget):
                 ks = hbz.KeyStore()
                 priv_data = ks.load_private_key(fp, pw.encode("utf-8"))
                 if wrapping_id == 0x01:
-                    worker = CryptoWorker(hbz.decrypt_file, inp, out, private_pem=priv_data.decode())
+                    worker = CryptoWorker(
+                        hbz.decrypt_file, inp, out, private_pem=priv_data.decode()
+                    )
                 else:
                     worker = CryptoWorker(hbz.decrypt_file, inp, out, secret_raw=priv_data)
             except Exception as e:
@@ -321,6 +327,7 @@ class DecryptView(QWidget):
         size = None
         try:
             from pathlib import Path
+
             size = Path(path).stat().st_size
         except Exception:
             pass
@@ -358,6 +365,7 @@ class DecryptView(QWidget):
             return hbz.decrypt_data(data, passphrase=pw_bytes)
 
         from hb_zayfer.gui.workers import CryptoWorker
+
         worker = CryptoWorker(_decrypt_text_work)
         worker.signals.result.connect(
             lambda pt: self._on_text_decrypt_done(pt.decode("utf-8", errors="replace"))

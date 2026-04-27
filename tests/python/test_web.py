@@ -51,6 +51,7 @@ def test_auth_token_required_when_configured(monkeypatch: pytest.MonkeyPatch):
 # Version
 # ===========================================================================
 
+
 def test_version(client: TestClient):
     r = client.get("/api/version")
     assert r.status_code == 200
@@ -61,37 +62,50 @@ def test_version(client: TestClient):
 # Encrypt / Decrypt text
 # ===========================================================================
 
+
 def test_encrypt_decrypt_text(client: TestClient):
     # Encrypt
-    r = client.post("/api/encrypt/text", json={
-        "plaintext": "hello web",
-        "passphrase": "secret",
-        "algorithm": "aes",
-    })
+    r = client.post(
+        "/api/encrypt/text",
+        json={
+            "plaintext": "hello web",
+            "passphrase": "secret",
+            "algorithm": "aes",
+        },
+    )
     assert r.status_code == 200
     ct_b64 = r.json()["ciphertext_b64"]
     assert len(ct_b64) > 0
 
     # Decrypt
-    r = client.post("/api/decrypt/text", json={
-        "ciphertext_b64": ct_b64,
-        "passphrase": "secret",
-    })
+    r = client.post(
+        "/api/decrypt/text",
+        json={
+            "ciphertext_b64": ct_b64,
+            "passphrase": "secret",
+        },
+    )
     assert r.status_code == 200
     assert r.json()["plaintext"] == "hello web"
 
 
 def test_decrypt_wrong_passphrase(client: TestClient):
-    r = client.post("/api/encrypt/text", json={
-        "plaintext": "data",
-        "passphrase": "right",
-    })
+    r = client.post(
+        "/api/encrypt/text",
+        json={
+            "plaintext": "data",
+            "passphrase": "right",
+        },
+    )
     ct_b64 = r.json()["ciphertext_b64"]
 
-    r = client.post("/api/decrypt/text", json={
-        "ciphertext_b64": ct_b64,
-        "passphrase": "wrong",
-    })
+    r = client.post(
+        "/api/decrypt/text",
+        json={
+            "ciphertext_b64": ct_b64,
+            "passphrase": "wrong",
+        },
+    )
     assert r.status_code == 400
 
 
@@ -99,12 +113,16 @@ def test_decrypt_wrong_passphrase(client: TestClient):
 # Key Generation
 # ===========================================================================
 
+
 def test_keygen_ed25519(client: TestClient):
-    r = client.post("/api/keygen", json={
-        "algorithm": "ed25519",
-        "label": "test-ed",
-        "passphrase": "pass",
-    })
+    r = client.post(
+        "/api/keygen",
+        json={
+            "algorithm": "ed25519",
+            "label": "test-ed",
+            "passphrase": "pass",
+        },
+    )
     assert r.status_code == 200
     data = r.json()
     assert data["algorithm"] == "ed25519"
@@ -112,11 +130,14 @@ def test_keygen_ed25519(client: TestClient):
 
 
 def test_keygen_and_list(client: TestClient):
-    client.post("/api/keygen", json={
-        "algorithm": "ed25519",
-        "label": "key1",
-        "passphrase": "p",
-    })
+    client.post(
+        "/api/keygen",
+        json={
+            "algorithm": "ed25519",
+            "label": "key1",
+            "passphrase": "p",
+        },
+    )
     r = client.get("/api/keys")
     assert r.status_code == 200
     keys = r.json()
@@ -128,12 +149,16 @@ def test_keygen_and_list(client: TestClient):
 # Key Delete
 # ===========================================================================
 
+
 def test_delete_key(client: TestClient):
-    r = client.post("/api/keygen", json={
-        "algorithm": "ed25519",
-        "label": "delme",
-        "passphrase": "p",
-    })
+    r = client.post(
+        "/api/keygen",
+        json={
+            "algorithm": "ed25519",
+            "label": "delme",
+            "passphrase": "p",
+        },
+    )
     fp = r.json()["fingerprint"]
 
     r = client.delete(f"/api/keys/{fp}")
@@ -146,6 +171,7 @@ def test_delete_key(client: TestClient):
 # ===========================================================================
 # Contacts
 # ===========================================================================
+
 
 def test_contacts_crud(client: TestClient):
     # Add
@@ -169,21 +195,27 @@ def test_contacts_crud(client: TestClient):
 
 def test_link_key_to_contact(client: TestClient):
     # Create key
-    r = client.post("/api/keygen", json={
-        "algorithm": "ed25519",
-        "label": "link-test",
-        "passphrase": "p",
-    })
+    r = client.post(
+        "/api/keygen",
+        json={
+            "algorithm": "ed25519",
+            "label": "link-test",
+            "passphrase": "p",
+        },
+    )
     fp = r.json()["fingerprint"]
 
     # Create contact
     client.post("/api/contacts", json={"name": "Bob"})
 
     # Link
-    r = client.post("/api/contacts/link", json={
-        "contact_name": "Bob",
-        "fingerprint": fp,
-    })
+    r = client.post(
+        "/api/contacts/link",
+        json={
+            "contact_name": "Bob",
+            "fingerprint": fp,
+        },
+    )
     assert r.status_code == 200
 
     # Verify
@@ -196,13 +228,17 @@ def test_link_key_to_contact(client: TestClient):
 # Sign / Verify
 # ===========================================================================
 
+
 def _make_ed25519_key(client: TestClient) -> str:
     """Helper: generate an ed25519 key and return its fingerprint."""
-    r = client.post("/api/keygen", json={
-        "algorithm": "ed25519",
-        "label": "sign-test",
-        "passphrase": "p",
-    })
+    r = client.post(
+        "/api/keygen",
+        json={
+            "algorithm": "ed25519",
+            "label": "sign-test",
+            "passphrase": "p",
+        },
+    )
     assert r.status_code == 200
     return r.json()["fingerprint"]
 
@@ -211,22 +247,28 @@ def test_sign_verify_ed25519(client: TestClient):
     fp = _make_ed25519_key(client)
     msg = base64.b64encode(b"hello sign").decode()
 
-    r = client.post("/api/sign", json={
-        "message_b64": msg,
-        "fingerprint": fp,
-        "passphrase": "p",
-        "algorithm": "ed25519",
-    })
+    r = client.post(
+        "/api/sign",
+        json={
+            "message_b64": msg,
+            "fingerprint": fp,
+            "passphrase": "p",
+            "algorithm": "ed25519",
+        },
+    )
     assert r.status_code == 200
     sig_b64 = r.json()["signature_b64"]
     assert len(sig_b64) > 0
 
-    r = client.post("/api/verify", json={
-        "message_b64": msg,
-        "signature_b64": sig_b64,
-        "fingerprint": fp,
-        "algorithm": "ed25519",
-    })
+    r = client.post(
+        "/api/verify",
+        json={
+            "message_b64": msg,
+            "signature_b64": sig_b64,
+            "fingerprint": fp,
+            "algorithm": "ed25519",
+        },
+    )
     assert r.status_code == 200
     assert r.json()["valid"] is True
 
@@ -236,12 +278,15 @@ def test_verify_bad_signature(client: TestClient):
     msg = base64.b64encode(b"data").decode()
     bad_sig = base64.b64encode(b"\x00" * 64).decode()
 
-    r = client.post("/api/verify", json={
-        "message_b64": msg,
-        "signature_b64": bad_sig,
-        "fingerprint": fp,
-        "algorithm": "ed25519",
-    })
+    r = client.post(
+        "/api/verify",
+        json={
+            "message_b64": msg,
+            "signature_b64": bad_sig,
+            "fingerprint": fp,
+            "algorithm": "ed25519",
+        },
+    )
     # Should either return valid=False or 400 depending on implementation
     assert r.status_code in (200, 400)
     if r.status_code == 200:
@@ -251,18 +296,22 @@ def test_verify_bad_signature(client: TestClient):
 def test_sign_unknown_algorithm(client: TestClient):
     fp = _make_ed25519_key(client)
     msg = base64.b64encode(b"hello").decode()
-    r = client.post("/api/sign", json={
-        "message_b64": msg,
-        "fingerprint": fp,
-        "passphrase": "p",
-        "algorithm": "unknown_algo",
-    })
+    r = client.post(
+        "/api/sign",
+        json={
+            "message_b64": msg,
+            "fingerprint": fp,
+            "passphrase": "p",
+            "algorithm": "unknown_algo",
+        },
+    )
     assert r.status_code == 400
 
 
 # ===========================================================================
 # Export public key
 # ===========================================================================
+
 
 def test_export_public_key(client: TestClient):
     fp = _make_ed25519_key(client)
@@ -283,6 +332,7 @@ def test_export_nonexistent_key(client: TestClient):
 # ===========================================================================
 # File encryption / decryption
 # ===========================================================================
+
 
 def test_encrypt_decrypt_file(client: TestClient):
     content = b"secret file contents here"
@@ -342,11 +392,17 @@ def test_encrypt_file_size_limit(client: TestClient, monkeypatch: pytest.MonkeyP
 # Audit log
 # ===========================================================================
 
+
 def test_audit_recent(client: TestClient):
     # Generate a key to create at least one audit entry
-    client.post("/api/keygen", json={
-        "algorithm": "ed25519", "label": "audit-test", "passphrase": "p",
-    })
+    client.post(
+        "/api/keygen",
+        json={
+            "algorithm": "ed25519",
+            "label": "audit-test",
+            "passphrase": "p",
+        },
+    )
     r = client.get("/api/audit/recent?limit=10")
     assert r.status_code == 200
     entries = r.json()
@@ -401,11 +457,17 @@ def test_audit_export_home_prefix_bypass_rejected(client: TestClient):
 # Backup / Restore
 # ===========================================================================
 
+
 def test_backup_create_verify_restore(client: TestClient, tmp_path: Path):
     # Generate a key so the backup isn't empty
-    client.post("/api/keygen", json={
-        "algorithm": "ed25519", "label": "bk-key", "passphrase": "p",
-    })
+    client.post(
+        "/api/keygen",
+        json={
+            "algorithm": "ed25519",
+            "label": "bk-key",
+            "passphrase": "p",
+        },
+    )
     client.post("/api/contacts", json={"name": "BkContact"})
 
     # Use a path within the user's home directory
@@ -414,11 +476,14 @@ def test_backup_create_verify_restore(client: TestClient, tmp_path: Path):
 
     try:
         # Create backup
-        r = client.post("/api/backup/create", json={
-            "output_path": backup_path,
-            "passphrase": "bkpass",
-            "label": "test-backup",
-        })
+        r = client.post(
+            "/api/backup/create",
+            json={
+                "output_path": backup_path,
+                "passphrase": "bkpass",
+                "label": "test-backup",
+            },
+        )
         assert r.status_code == 200
         m = r.json()
         assert m["private_key_count"] >= 1
@@ -426,28 +491,37 @@ def test_backup_create_verify_restore(client: TestClient, tmp_path: Path):
         assert m["label"] == "test-backup"
 
         # Verify backup
-        r = client.post("/api/backup/verify", json={
-            "backup_path": backup_path,
-            "passphrase": "bkpass",
-        })
+        r = client.post(
+            "/api/backup/verify",
+            json={
+                "backup_path": backup_path,
+                "passphrase": "bkpass",
+            },
+        )
         assert r.status_code == 200
         assert r.json()["integrity_hash"] == m["integrity_hash"]
 
         # Restore backup
-        r = client.post("/api/backup/restore", json={
-            "backup_path": backup_path,
-            "passphrase": "bkpass",
-        })
+        r = client.post(
+            "/api/backup/restore",
+            json={
+                "backup_path": backup_path,
+                "passphrase": "bkpass",
+            },
+        )
         assert r.status_code == 200
     finally:
         Path(backup_path).unlink(missing_ok=True)
 
 
 def test_backup_path_traversal(client: TestClient):
-    r = client.post("/api/backup/create", json={
-        "output_path": "/tmp/../../etc/evil",
-        "passphrase": "p",
-    })
+    r = client.post(
+        "/api/backup/create",
+        json={
+            "output_path": "/tmp/../../etc/evil",
+            "passphrase": "p",
+        },
+    )
     assert r.status_code == 400
     assert "home directory" in r.json()["detail"].lower()
 
@@ -455,10 +529,13 @@ def test_backup_path_traversal(client: TestClient):
 def test_backup_home_prefix_bypass_rejected(client: TestClient):
     home = Path.home().resolve()
     bypass = home.parent / f"{home.name}_evil" / "backup.hbzf"
-    r = client.post("/api/backup/create", json={
-        "output_path": str(bypass),
-        "passphrase": "p",
-    })
+    r = client.post(
+        "/api/backup/create",
+        json={
+            "output_path": str(bypass),
+            "passphrase": "p",
+        },
+    )
     assert r.status_code == 400
     assert "home directory" in r.json()["detail"].lower()
 
@@ -466,6 +543,7 @@ def test_backup_home_prefix_bypass_rejected(client: TestClient):
 # ===========================================================================
 # Configuration
 # ===========================================================================
+
 
 def test_config_get(client: TestClient):
     r = client.get("/api/config")
@@ -494,6 +572,7 @@ def test_config_get_unknown_key(client: TestClient):
 # Password generation
 # ===========================================================================
 
+
 def test_passgen_password(client: TestClient):
     r = client.post("/api/passgen", json={"length": 24})
     assert r.status_code == 200
@@ -516,16 +595,20 @@ def test_passgen_passphrase(client: TestClient):
 # Shamir's Secret Sharing
 # ===========================================================================
 
+
 def test_shamir_split_combine(client: TestClient):
     secret = b"my-secret-data"
     secret_b64 = base64.b64encode(secret).decode()
 
     # Split
-    r = client.post("/api/shamir/split", json={
-        "secret_b64": secret_b64,
-        "shares": 5,
-        "threshold": 3,
-    })
+    r = client.post(
+        "/api/shamir/split",
+        json={
+            "secret_b64": secret_b64,
+            "shares": 5,
+            "threshold": 3,
+        },
+    )
     assert r.status_code == 200
     data = r.json()
     assert data["total"] == 5
@@ -542,11 +625,14 @@ def test_shamir_split_combine(client: TestClient):
 
 def test_shamir_below_threshold_fails(client: TestClient):
     secret_b64 = base64.b64encode(b"secret").decode()
-    r = client.post("/api/shamir/split", json={
-        "secret_b64": secret_b64,
-        "shares": 5,
-        "threshold": 3,
-    })
+    r = client.post(
+        "/api/shamir/split",
+        json={
+            "secret_b64": secret_b64,
+            "shares": 5,
+            "threshold": 3,
+        },
+    )
     shares = r.json()["shares"]
 
     # Use only 2 shares (below threshold of 3) — should recover wrong data
@@ -561,16 +647,20 @@ def test_shamir_below_threshold_fails(client: TestClient):
 # QR Key Exchange
 # ===========================================================================
 
+
 def test_qr_encode_decode(client: TestClient):
     pub_key = b"\x01\x02\x03\x04\x05"
     pub_b64 = base64.b64encode(pub_key).decode()
 
     # Encode
-    r = client.post("/api/qr/encode", json={
-        "algorithm": "ed25519",
-        "public_key_b64": pub_b64,
-        "label": "Alice",
-    })
+    r = client.post(
+        "/api/qr/encode",
+        json={
+            "algorithm": "ed25519",
+            "public_key_b64": pub_b64,
+            "label": "Alice",
+        },
+    )
     assert r.status_code == 200
     uri = r.json()["uri"]
     assert uri.startswith("hbzf-key://")
@@ -595,6 +685,7 @@ def test_qr_decode_invalid_uri(client: TestClient):
 # ===========================================================================
 # Rate Limiting
 # ===========================================================================
+
 
 def test_rate_limit_headers(client: TestClient):
     """Responses should include rate-limit headers."""
@@ -625,6 +716,7 @@ def test_rate_limiter_isolated_per_app_instance(monkeypatch: pytest.MonkeyPatch)
 # Authentication middleware
 # ===========================================================================
 
+
 def test_auth_required_when_token_set(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """When HB_ZAYFER_API_TOKEN is set, requests without token get 401."""
     monkeypatch.setenv("HB_ZAYFER_API_TOKEN", "test-secret-token")
@@ -632,6 +724,7 @@ def test_auth_required_when_token_set(tmp_path: Path, monkeypatch: pytest.Monkey
     import importlib
 
     from hb_zayfer.web import app as app_module
+
     importlib.reload(app_module)
     try:
         test_app = app_module.create_app()

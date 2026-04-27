@@ -28,7 +28,7 @@ class StatusBar(QStatusBar):
 
     def set_message(self, message: str, timeout: int = 0) -> None:
         """Set the main status message.
-        
+
         Args:
             message: The message to display
             timeout: Display timeout in milliseconds (0 for permanent)
@@ -40,7 +40,7 @@ class StatusBar(QStatusBar):
 
     def set_operation(self, operation: str) -> None:
         """Set the current operation status.
-        
+
         Args:
             operation: Description of current operation
         """
@@ -52,7 +52,7 @@ class StatusBar(QStatusBar):
 
     def set_count(self, label: str, count: int) -> None:
         """Set the item count display.
-        
+
         Args:
             label: Label for the count (e.g., "Keys", "Contacts")
             count: Number of items

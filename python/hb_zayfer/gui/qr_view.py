@@ -227,9 +227,7 @@ class QRExchangeView(QWidget):
     def _import_key(self) -> None:
         uri = self.import_input.toPlainText().strip()
         if not uri.startswith("hbzf-key://"):
-            QMessageBox.warning(
-                self, "Invalid URI", "URI must start with hbzf-key://"
-            )
+            QMessageBox.warning(self, "Invalid URI", "URI must start with hbzf-key://")
             return
 
         try:

@@ -59,6 +59,7 @@ def _require_home_path(raw_path: str, field_name: str) -> Path:
 # Request / response models
 # ---------------------------------------------------------------------------
 
+
 class EncryptTextRequest(BaseModel):
     plaintext: str
     passphrase: str
@@ -149,6 +150,7 @@ class VersionResponse(BaseModel):
 # Info
 # ---------------------------------------------------------------------------
 
+
 @router.get("/version", response_model=VersionResponse)
 def get_version():
     return VersionResponse(version=AppInfo.current().version)
@@ -158,13 +160,14 @@ def get_version():
 # Text encryption / decryption
 # ---------------------------------------------------------------------------
 
+
 @router.post("/encrypt/text", response_model=EncryptTextResponse)
 def encrypt_text(req: EncryptTextRequest):
     try:
         ciphertext_b64 = CryptoService.encrypt_text(req.plaintext, req.passphrase, req.algorithm)
         return EncryptTextResponse(ciphertext_b64=ciphertext_b64)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @router.post("/decrypt/text", response_model=DecryptTextResponse)
@@ -173,12 +176,13 @@ def decrypt_text(req: DecryptTextRequest):
         plaintext = CryptoService.decrypt_text(req.ciphertext_b64, req.passphrase)
         return DecryptTextResponse(plaintext=plaintext)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 # ---------------------------------------------------------------------------
 # Key generation
 # ---------------------------------------------------------------------------
+
 
 @router.post("/keygen", response_model=KeygenResponse)
 def generate_key(req: KeygenRequest):
@@ -195,14 +199,15 @@ def generate_key(req: KeygenRequest):
             label=result.label,
         )
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 # ---------------------------------------------------------------------------
 # Signing / Verification
 # ---------------------------------------------------------------------------
+
 
 @router.post("/sign", response_model=SignResponse)
 def sign_message(req: SignRequest):
@@ -215,9 +220,9 @@ def sign_message(req: SignRequest):
         )
         return SignResponse(signature_b64=signature_b64)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @router.post("/verify", response_model=VerifyResponse)
@@ -231,14 +236,15 @@ def verify_message(req: VerifyRequest):
         )
         return VerifyResponse(valid=valid)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 # ---------------------------------------------------------------------------
 # Key management
 # ---------------------------------------------------------------------------
+
 
 @router.get("/keys", response_model=list[KeyMetadataOut])
 def list_keys():
@@ -255,7 +261,7 @@ def list_keys():
             for k in KeyService.list_keys()
         ]
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.delete("/keys/{fingerprint}")
@@ -264,7 +270,7 @@ def delete_key(fingerprint: str):
         KeyService.delete_key(fingerprint)
         return {"status": "deleted"}
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @router.get("/keys/{fingerprint}/public")
@@ -273,12 +279,13 @@ def export_public_key(fingerprint: str):
         pub_data = KeyService.load_public_key(fingerprint)
         return {"fingerprint": fingerprint, "public_key_b64": base64.b64encode(pub_data).decode()}
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 # ---------------------------------------------------------------------------
 # Contacts
 # ---------------------------------------------------------------------------
+
 
 @router.get("/contacts", response_model=list[ContactOut])
 def list_contacts():
@@ -294,7 +301,7 @@ def list_contacts():
             for c in KeyService.list_contacts()
         ]
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.post("/contacts")
@@ -303,7 +310,7 @@ def add_contact(req: ContactRequest):
         KeyService.add_contact(req.name, email=req.email, notes=req.notes)
         return {"status": "created", "name": req.name}
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @router.delete("/contacts/{name}")
@@ -312,7 +319,7 @@ def remove_contact(name: str):
         KeyService.remove_contact(name)
         return {"status": "deleted"}
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @router.post("/contacts/link")
@@ -321,12 +328,13 @@ def link_key_to_contact(req: LinkKeyRequest):
         KeyService.link_key_to_contact(req.contact_name, req.fingerprint)
         return {"status": "linked"}
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 # ---------------------------------------------------------------------------
 # File encryption / decryption
 # ---------------------------------------------------------------------------
+
 
 class EncryptFileResponse(BaseModel):
     filename: str
@@ -353,7 +361,7 @@ async def encrypt_file(
         if len(content) > _MAX_UPLOAD_BYTES:
             raise HTTPException(
                 status_code=413,
-                detail=f"File too large (max {_MAX_UPLOAD_BYTES // (1024*1024)} MiB)",
+                detail=f"File too large (max {_MAX_UPLOAD_BYTES // (1024 * 1024)} MiB)",
             )
         in_path.write_bytes(content)
 
@@ -366,7 +374,7 @@ async def encrypt_file(
                 passphrase=passphrase.encode("utf-8"),
             )
         except Exception as e:
-            raise HTTPException(status_code=400, detail=str(e))
+            raise HTTPException(status_code=400, detail=str(e)) from e
 
         _audit_safe(
             hbz.audit_log_file_encrypted,
@@ -411,7 +419,7 @@ async def decrypt_file(
         if len(content) > _MAX_UPLOAD_BYTES:
             raise HTTPException(
                 status_code=413,
-                detail=f"File too large (max {_MAX_UPLOAD_BYTES // (1024*1024)} MiB)",
+                detail=f"File too large (max {_MAX_UPLOAD_BYTES // (1024 * 1024)} MiB)",
             )
         in_path.write_bytes(content)
 
@@ -422,7 +430,7 @@ async def decrypt_file(
                 passphrase=passphrase.encode("utf-8"),
             )
         except Exception as e:
-            raise HTTPException(status_code=400, detail=str(e))
+            raise HTTPException(status_code=400, detail=str(e)) from e
 
         decrypted = out_path.read_bytes()
 
@@ -451,6 +459,7 @@ async def decrypt_file(
 # Audit log
 # ---------------------------------------------------------------------------
 
+
 class AuditEntryOut(BaseModel):
     timestamp: str
     operation: str
@@ -478,7 +487,7 @@ def audit_recent(limit: int = 50):
             for e in AuditService.recent_entries(limit)
         ]
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.get("/audit/verify", response_model=AuditVerifyResponse)
@@ -487,7 +496,7 @@ def audit_verify():
     try:
         return AuditVerifyResponse(valid=AuditService.verify_integrity())
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.get("/audit/count")
@@ -496,7 +505,7 @@ def audit_count():
     try:
         return {"count": AuditService.entry_count()}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.post("/audit/export")
@@ -509,12 +518,13 @@ def audit_export(destination: str):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 # ---------------------------------------------------------------------------
 # Backup & Restore
 # ---------------------------------------------------------------------------
+
 
 class BackupRequest(BaseModel):
     output_path: str
@@ -553,7 +563,7 @@ def create_backup(req: BackupRequest):
             integrity_hash=manifest.integrity_hash,
         )
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @router.post("/backup/verify", response_model=BackupManifestOut)
@@ -572,7 +582,7 @@ def verify_backup(req: RestoreRequest):
             integrity_hash=manifest.integrity_hash,
         )
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @router.post("/backup/restore", response_model=BackupManifestOut)
@@ -591,7 +601,7 @@ def restore_backup(req: RestoreRequest):
             integrity_hash=manifest.integrity_hash,
         )
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 # ---------------------------------------------------------------------------
@@ -605,7 +615,7 @@ def get_config():
     try:
         return ConfigService.load()
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.get("/config/{key}")
@@ -614,11 +624,11 @@ def get_config_key(key: str):
     try:
         return {"key": key, "value": ConfigService.get_value(key)}
     except KeyError:
-        raise HTTPException(status_code=404, detail=f"Unknown config key: {key}")
+        raise HTTPException(status_code=404, detail=f"Unknown config key: {key}") from None
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 class ConfigUpdateRequest(BaseModel):
@@ -632,12 +642,13 @@ def set_config_key(key: str, req: ConfigUpdateRequest):
         value = ConfigService.set_value(key, req.value)
         return {"key": key, "value": value}
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 # ---------------------------------------------------------------------------
 # Password generation
 # ---------------------------------------------------------------------------
+
 
 class PassgenRequest(BaseModel):
     length: int = 20
@@ -672,12 +683,13 @@ def generate_password(req: PassgenRequest):
             )
             return {"type": "password", "value": value, "entropy_bits": entropy}
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 # ---------------------------------------------------------------------------
 # Shamir's Secret Sharing
 # ---------------------------------------------------------------------------
+
 
 class ShamirSplitRequest(BaseModel):
     secret_b64: str
@@ -693,7 +705,7 @@ def shamir_split(req: ShamirSplitRequest):
         share_list = hbz.shamir_split(secret, req.shares, req.threshold)
         return {"shares": share_list, "total": req.shares, "threshold": req.threshold}
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 class ShamirCombineRequest(BaseModel):
@@ -707,12 +719,13 @@ def shamir_combine(req: ShamirCombineRequest):
         secret = hbz.shamir_combine(req.shares)
         return {"secret_b64": base64.b64encode(secret).decode()}
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 # ---------------------------------------------------------------------------
 # QR Key Exchange
 # ---------------------------------------------------------------------------
+
 
 class QREncodeRequest(BaseModel):
     algorithm: str
@@ -728,7 +741,7 @@ def qr_encode_key(req: QREncodeRequest):
         uri = hbz.qr_encode_key_uri(req.algorithm, pub_bytes, req.label)
         return {"uri": uri}
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 class QRDecodeRequest(BaseModel):
@@ -746,4 +759,4 @@ def qr_decode_key(req: QRDecodeRequest):
             "label": label,
         }
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
