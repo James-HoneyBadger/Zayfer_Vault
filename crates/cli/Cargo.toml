@@ -26,6 +26,7 @@ rand_core.workspace = true
 axum = { version = "0.7", features = ["multipart"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net"] }
 tower-http = { version = "0.5", features = ["fs"] }
+chrono = { workspace = true }
 
 [dev-dependencies]
 http-body-util = "0.1"

@@ -230,6 +230,24 @@ struct ConfigUpdateRequest {
     value: serde_json::Value,
 }
 
+#[derive(Debug, Deserialize)]
+struct KeyExpiryRequest {
+    /// RFC 3339 timestamp; pass `null` to remove the expiry.
+    expires_at: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct KeyUsageRequest {
+    /// List of allowed usages (e.g. ["sign", "encrypt"]); pass `null` or an
+    /// empty list to clear all usage constraints.
+    usages: Option<Vec<String>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct AuditExportRequest {
+    destination: String,
+}
+
 const MAX_UPLOAD_BYTES: usize = 256 * 1024 * 1024;
 
 // ---------------------------------------------------------------------------
@@ -431,6 +449,15 @@ pub fn build_platform_router() -> Result<Router> {
         .route("/api/keys/:fingerprint", delete(api_delete_key_handler))
         .route("/api/keys/:fingerprint/public", get(api_public_key_handler))
         .route(
+            "/api/keys/:fingerprint/expiry",
+            put(api_set_key_expiry_handler),
+        )
+        .route(
+            "/api/keys/:fingerprint/usage",
+            put(api_set_key_usage_handler),
+        )
+        .route("/api/keys/expiring", get(api_expiring_keys_handler))
+        .route(
             "/api/contacts",
             get(api_contacts_handler).post(api_add_contact_handler),
         )
@@ -440,6 +467,7 @@ pub fn build_platform_router() -> Result<Router> {
         .route("/api/audit/count", get(api_audit_count_handler))
         .route("/api/audit/recent", get(api_audit_recent_handler))
         .route("/api/audit/verify", get(api_audit_verify_handler))
+        .route("/api/audit/export", post(api_audit_export_handler))
         .route("/api/passgen", post(api_passgen_handler))
         .route("/api/encrypt/text", post(api_encrypt_text_handler))
         .route("/api/encrypt/file", post(api_encrypt_file_handler))
@@ -712,6 +740,115 @@ async fn api_delete_key_handler(
     keystore.delete_key(&fingerprint).map_err(bad_request_err)?;
     Ok(Json(
         json!({ "status": "deleted", "fingerprint": fingerprint }),
+    ))
+}
+
+async fn api_set_key_expiry_handler(
+    Path(fingerprint): Path<String>,
+    Json(req): Json<KeyExpiryRequest>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    use chrono::{DateTime, Utc};
+    let parsed: Option<DateTime<Utc>> = match req.expires_at.as_deref() {
+        None | Some("") => None,
+        Some(ts) => Some(
+            DateTime::parse_from_rfc3339(ts)
+                .map_err(|e| {
+                    (
+                        StatusCode::BAD_REQUEST,
+                        format!("invalid RFC 3339 timestamp: {e}"),
+                    )
+                })?
+                .with_timezone(&Utc),
+        ),
+    };
+    let mut keystore = KeyStore::open_default().map_err(internal_err)?;
+    keystore
+        .set_key_expiry(&fingerprint, parsed)
+        .map_err(bad_request_err)?;
+    Ok(Json(json!({
+        "status": "ok",
+        "fingerprint": fingerprint,
+        "expires_at": req.expires_at,
+    })))
+}
+
+async fn api_set_key_usage_handler(
+    Path(fingerprint): Path<String>,
+    Json(req): Json<KeyUsageRequest>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    use hb_zayfer_core::keystore::KeyUsage;
+    fn parse_usage(s: &str) -> Result<KeyUsage, (StatusCode, String)> {
+        match s {
+            "encrypt" => Ok(KeyUsage::Encrypt),
+            "decrypt" => Ok(KeyUsage::Decrypt),
+            "sign" => Ok(KeyUsage::Sign),
+            "verify" => Ok(KeyUsage::Verify),
+            "key_agreement" | "key-agreement" => Ok(KeyUsage::KeyAgreement),
+            other => Err((
+                StatusCode::BAD_REQUEST,
+                format!("unknown key usage: {other}"),
+            )),
+        }
+    }
+    let usages: Option<Vec<KeyUsage>> = match req.usages {
+        None => None,
+        Some(list) if list.is_empty() => None,
+        Some(list) => Some(
+            list.iter()
+                .map(|s| parse_usage(s))
+                .collect::<Result<Vec<_>, _>>()?,
+        ),
+    };
+    let mut keystore = KeyStore::open_default().map_err(internal_err)?;
+    keystore
+        .set_key_usage(&fingerprint, usages)
+        .map_err(bad_request_err)?;
+    Ok(Json(json!({ "status": "ok", "fingerprint": fingerprint })))
+}
+
+#[derive(Debug, Deserialize)]
+struct ExpiringKeysQuery {
+    /// Warning horizon in days; defaults to 30.
+    days: Option<u32>,
+}
+
+async fn api_expiring_keys_handler(
+    axum::extract::Query(q): axum::extract::Query<ExpiringKeysQuery>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    use hb_zayfer_core::keystore::KeyExpiryStatus;
+    let keystore = KeyStore::open_default().map_err(internal_err)?;
+    let warning_days = q.days.unwrap_or(30);
+    let results = keystore.check_expiring_keys(warning_days);
+    let out: Vec<serde_json::Value> = results
+        .into_iter()
+        .map(|(meta, status)| {
+            let (state, days_left) = match status {
+                KeyExpiryStatus::Expired => ("expired", None),
+                KeyExpiryStatus::ExpiringSoon { days_left } => ("expiring_soon", Some(days_left)),
+            };
+            json!({
+                "fingerprint": meta.fingerprint,
+                "label": meta.label,
+                "algorithm": meta.algorithm,
+                "expires_at": meta.expires_at.map(|d| d.to_rfc3339()),
+                "state": state,
+                "days_left": days_left,
+            })
+        })
+        .collect();
+    Ok(Json(json!({ "warning_days": warning_days, "keys": out })))
+}
+
+async fn api_audit_export_handler(
+    Json(req): Json<AuditExportRequest>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    validate_user_path(&req.destination)?;
+    let logger = AuditLogger::default_location().map_err(internal_err)?;
+    logger
+        .export(std::path::Path::new(&req.destination))
+        .map_err(internal_err)?;
+    Ok(Json(
+        json!({ "status": "exported", "destination": req.destination }),
     ))
 }
 
@@ -1208,5 +1345,65 @@ mod tests {
             .unwrap();
         let response = router.oneshot(request).await.unwrap();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    // -------------------------------------------------------------------
+    // Key lifecycle endpoints
+    // -------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn set_key_expiry_rejects_invalid_timestamp() {
+        let router = build_platform_router().unwrap();
+        let request = Request::builder()
+            .uri("/api/keys/deadbeef/expiry")
+            .method(Method::PUT)
+            .header("content-type", "application/json")
+            .body(Body::from(r#"{"expires_at":"not-a-date"}"#))
+            .unwrap();
+        let response = router.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn set_key_usage_rejects_unknown_usage() {
+        let router = build_platform_router().unwrap();
+        let request = Request::builder()
+            .uri("/api/keys/deadbeef/usage")
+            .method(Method::PUT)
+            .header("content-type", "application/json")
+            .body(Body::from(r#"{"usages":["bogus"]}"#))
+            .unwrap();
+        let response = router.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn expiring_keys_returns_object_with_warning_window() {
+        let router = build_platform_router().unwrap();
+        let request = Request::builder()
+            .uri("/api/keys/expiring?days=7")
+            .body(Body::empty())
+            .unwrap();
+        let response = router.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(response.into_body(), 1 << 20)
+            .await
+            .unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["warning_days"], 7);
+        assert!(json["keys"].is_array());
+    }
+
+    #[tokio::test]
+    async fn audit_export_rejects_traversal() {
+        let router = build_platform_router().unwrap();
+        let request = Request::builder()
+            .uri("/api/audit/export")
+            .method(Method::POST)
+            .header("content-type", "application/json")
+            .body(Body::from(r#"{"destination":"/etc/zayfer-audit.json"}"#))
+            .unwrap();
+        let response = router.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
     }
 }

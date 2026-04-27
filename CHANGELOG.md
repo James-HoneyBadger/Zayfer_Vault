@@ -39,6 +39,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 12 additional unit tests for the new `aead` module: nonce derivation
   uniqueness, AAD index reorder detection, chunk-index overflow, tampered
   ciphertext, mismatched AAD, and per-cipher error labelling.
+- **New web API endpoints** for key lifecycle and audit:
+  `PUT /api/keys/:fp/expiry` (set or clear an RFC 3339 expiry),
+  `PUT /api/keys/:fp/usage` (constrain a key to specific usages),
+  `GET /api/keys/expiring?days=N` (list expired and soon-to-expire keys),
+  `POST /api/audit/export` (write the audit log to a validated path).
+- **Typed Python exceptions** (subclassing the closest built-in for backward
+  compatibility): `ZayferError`, `AuthenticationError`, `KeyNotFoundError`,
+  `ContactNotFoundError`, `IntegrityError`, `KeyAlreadyExistsError`,
+  `ContactAlreadyExistsError`. Re-exported from the top-level package.
+- Refreshed `_native.pyi` stubs (PEP 604 unions, declared exception types).
 - Python lint job in CI (`ruff check`, `ruff format --check`, `mypy`); Python
   3.10 added to the test matrix.
 - README badges, "Why Zayfer Vault?" value-proposition section, and table of
