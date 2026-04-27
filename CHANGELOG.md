@@ -9,6 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Tooling
+
+- **Python CI now lint+type-check gated.** `ruff check`,
+  `ruff format --check`, and `mypy python/hb_zayfer` are now
+  release-blocking in the same job that runs `pytest`. The pip
+  install line gained `pytest-qt` (was missing — GUI smoke tests
+  silently never ran), `python-multipart` (FastAPI form-data dep,
+  test_web.py now collects), `ruff`, and `mypy`. Local `.venv`
+  rebuilt against Python 3.13 (was Python 3.11 and broken since
+  the host upgrade).
+- **Python codebase ruff-clean.** `ruff check python/ tests/`
+  reports zero findings; 256 mechanical fixes applied (W293,
+  F401, I001, UP045/037/035/015, W291/292) plus 22-file `ruff
+  format` pass; B904 raise-from chaining added at all 33 sites
+  in `web/routes.py`; `try/except: pass` patterns replaced with
+  `contextlib.suppress(Exception)` (6 sites). `mypy
+  python/hb_zayfer` is also clean (4 false-typed locals in
+  `KeyService.generate_key` renamed per branch).
+
 ### Security
 
 - **`cargo-deny` baseline.** New `deny.toml` adds four supply-chain
