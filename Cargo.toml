@@ -65,3 +65,15 @@ toml = "0.8"
 opt-level = 3
 lto = "thin"
 strip = "symbols"
+
+[workspace.lints.rust]
+# `deny` rather than `forbid` so individual modules that legitimately
+# need FFI (e.g. crates/core/src/secure_mem.rs for mlock/munlock) can
+# opt out via `#![allow(unsafe_code)]` with a justifying comment.
+unsafe_code = "deny"
+unreachable_pub = "warn"
+
+[workspace.lints.clippy]
+dbg_macro = "warn"
+todo = "warn"
+print_stdout = "allow"

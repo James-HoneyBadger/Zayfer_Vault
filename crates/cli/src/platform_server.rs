@@ -274,7 +274,7 @@ const MAX_UPLOAD_BYTES: usize = 256 * 1024 * 1024;
 // user authenticates.
 
 /// Generate a fresh 32-byte URL-safe random token.
-pub fn generate_token() -> String {
+pub(crate) fn generate_token() -> String {
     let mut bytes = [0u8; 32];
     OsRng.fill_bytes(&mut bytes);
     hex::encode(bytes)
@@ -334,7 +334,7 @@ fn init_tracing() {
 ///
 /// This is intended for **local development only** — browsers will warn
 /// until the certificate is added to the trust store.
-pub fn ensure_self_signed_cert(host: &str) -> Result<(String, String)> {
+pub(crate) fn ensure_self_signed_cert(host: &str) -> Result<(String, String)> {
     use std::fs;
     use std::path::PathBuf;
 
@@ -428,6 +428,11 @@ async fn token_auth_middleware(
             }
         }
     }
+    // Rate-limit brute-force guessing by stalling 250 ms before
+    // reporting failure. Cheap, stateless, and turns 64-char hex
+    // token enumeration into ~10^77 years even at full pipeline
+    // depth — overkill, but hardens against any future shortening.
+    tokio::time::sleep(std::time::Duration::from_millis(250)).await;
     Err(StatusCode::UNAUTHORIZED)
 }
 
@@ -468,7 +473,7 @@ fn percent_decode(input: &str) -> Option<String> {
 
 /// Convenience entry point: serve with a freshly generated token.
 #[allow(dead_code)]
-pub fn serve(host: &str, port: u16) -> Result<()> {
+pub(crate) fn serve(host: &str, port: u16) -> Result<()> {
     serve_with_auth(host, port, Some(generate_token()), None)
 }
 
@@ -481,7 +486,7 @@ pub fn serve(host: &str, port: u16) -> Result<()> {
 ///
 /// When ``tls`` is ``Some((cert_path, key_path))``, both files must be
 /// PEM-encoded; the server then accepts only HTTPS connections.
-pub fn serve_with_auth(
+pub(crate) fn serve_with_auth(
     host: &str,
     port: u16,
     token: Option<String>,
@@ -576,7 +581,7 @@ fn print_startup_banner(addr: SocketAddr, token: Option<&str>, scheme: &str) {
 /// `/api/*` route. `/health`, the SPA fallback, and `/static/*` remain
 /// unauthenticated so that liveness probes and the initial asset bundle
 /// can load before the user signs in.
-pub fn build_authed_router(token: String) -> Result<Router> {
+pub(crate) fn build_authed_router(token: String) -> Result<Router> {
     let base = build_platform_router()?;
     // We can't easily split a built router; instead, we attach the auth layer
     // to a copy of every /api route. The cleanest approach is to apply
@@ -597,7 +602,7 @@ async fn api_only_auth(
     Ok(next.run(request).await)
 }
 
-pub fn build_platform_router() -> Result<Router> {
+pub(crate) fn build_platform_router() -> Result<Router> {
     let state = ServerState {
         info: AppInfo::current(),
     };

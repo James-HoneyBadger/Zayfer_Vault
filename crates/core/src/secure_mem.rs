@@ -9,6 +9,10 @@
 //! - On Unix: uses `libc::mlock` / `libc::munlock`.
 //! - On other platforms: falls back to zeroize-only (no mlock).
 
+// `mlock`/`munlock` are libc FFI; the workspace lints set `unsafe_code = deny`
+// globally, but this module is the documented exception.
+#![allow(unsafe_code)]
+
 use std::ops::{Deref, DerefMut};
 use zeroize::Zeroize;
 
