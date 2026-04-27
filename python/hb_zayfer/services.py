@@ -34,7 +34,7 @@ class AppPaths:
     config_dir: Path
 
     @classmethod
-    def current(cls) -> "AppPaths":
+    def current(cls) -> AppPaths:
         user_home = Path.home().expanduser().resolve()
         raw_app_home = os.environ.get("HB_ZAYFER_HOME")
         if raw_app_home:
@@ -73,7 +73,7 @@ class AppInfo:
         return self.brand_name
 
     @classmethod
-    def current(cls) -> "AppInfo":
+    def current(cls) -> AppInfo:
         return cls(brand_name="Zayfer Vault", version=hbz.version())
 
 
@@ -102,7 +102,7 @@ class WorkspaceSummary:
     audit_count: int
 
     @classmethod
-    def collect(cls) -> "WorkspaceSummary":
+    def collect(cls) -> WorkspaceSummary:
         key_count = 0
         contact_count = 0
         audit_count = 0

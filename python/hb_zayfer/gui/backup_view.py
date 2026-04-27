@@ -8,27 +8,27 @@ best-effort cancel button that suppresses late UI updates from in-flight work.
 
 from __future__ import annotations
 
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
-from PySide6.QtCore import Qt, QThreadPool
+from PySide6.QtCore import QThreadPool
 from PySide6.QtWidgets import (
-    QWidget,
-    QVBoxLayout,
+    QFileDialog,
+    QFormLayout,
+    QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QPushButton,
-    QGroupBox,
-    QFormLayout,
     QMessageBox,
-    QFileDialog,
-    QTextEdit,
     QProgressBar,
+    QPushButton,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
 )
 
-from hb_zayfer.services import BackupService
 from hb_zayfer.gui.workers import CryptoWorker
+from hb_zayfer.services import BackupService
 
 
 class BackupView(QWidget):

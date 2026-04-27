@@ -2,22 +2,22 @@
 
 from __future__ import annotations
 
+from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import QApplication
-from PySide6.QtGui import QPalette, QColor
 
 
 class Theme:
     """Theme manager for light and dark modes."""
-    
+
     _dark_mode: bool = True  # Cached dark mode state
-    
+
     @staticmethod
     def apply_light_theme(app: QApplication) -> None:
         """Apply light theme colors."""
         Theme._dark_mode = False
         app.setStyle("Fusion")
         palette = QPalette()
-        
+
         # Light theme colors with improved contrast
         palette.setColor(QPalette.ColorRole.Window, QColor(245, 245, 245))
         palette.setColor(QPalette.ColorRole.WindowText, QColor(32, 32, 32))
@@ -32,16 +32,16 @@ class Theme:
         palette.setColor(QPalette.ColorRole.Link, QColor(0, 102, 204))
         palette.setColor(QPalette.ColorRole.Highlight, QColor(0, 120, 215))
         palette.setColor(QPalette.ColorRole.HighlightedText, QColor(255, 255, 255))
-        
+
         # Disabled colors for better accessibility
         palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.WindowText, QColor(150, 150, 150))
         palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Text, QColor(150, 150, 150))
         palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.ButtonText, QColor(150, 150, 150))
         palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Highlight, QColor(200, 200, 200))
         palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.HighlightedText, QColor(150, 150, 150))
-        
+
         app.setPalette(palette)
-        
+
         # Comprehensive stylesheet for light mode
         app.setStyleSheet("""
             QToolTip {
@@ -250,14 +250,14 @@ class Theme:
                 color: #ffffff;
             }
         """)
-    
+
     @staticmethod
     def apply_dark_theme(app: QApplication) -> None:
         """Apply dark theme colors."""
         Theme._dark_mode = True
         app.setStyle("Fusion")
         palette = QPalette()
-        
+
         # Dark theme colors
         palette.setColor(QPalette.ColorRole.Window, QColor(53, 53, 53))
         palette.setColor(QPalette.ColorRole.WindowText, QColor(255, 255, 255))
@@ -272,16 +272,16 @@ class Theme:
         palette.setColor(QPalette.ColorRole.Link, QColor(42, 130, 218))
         palette.setColor(QPalette.ColorRole.Highlight, QColor(42, 130, 218))
         palette.setColor(QPalette.ColorRole.HighlightedText, QColor(0, 0, 0))
-        
+
         # Disabled colors
         palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.WindowText, QColor(127, 127, 127))
         palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Text, QColor(127, 127, 127))
         palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.ButtonText, QColor(127, 127, 127))
         palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Highlight, QColor(80, 80, 80))
         palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.HighlightedText, QColor(127, 127, 127))
-        
+
         app.setPalette(palette)
-        
+
         # Additional stylesheet for better dark mode appearance
         app.setStyleSheet("""
             QToolTip {
@@ -426,7 +426,7 @@ class Theme:
                 color: #ffffff;
             }
         """)
-    
+
     @staticmethod
     def get_button_style(color: str = "#007acc", dark_mode: bool = False) -> str:
         """Get styled button CSS for primary action buttons."""
@@ -474,51 +474,51 @@ class Theme:
                     color: #888888;
                 }}
             """
-    
+
     @staticmethod
     def _adjust_color(hex_color: str, factor: float) -> str:
         """Adjust hex color brightness by factor."""
         # Remove '#' if present
         hex_color = hex_color.lstrip('#')
-        
+
         # Convert to RGB
         r = int(hex_color[0:2], 16)
         g = int(hex_color[2:4], 16)
         b = int(hex_color[4:6], 16)
-        
+
         # Adjust
         r = min(255, max(0, int(r * factor)))
         g = min(255, max(0, int(g * factor)))
         b = min(255, max(0, int(b * factor)))
-        
+
         # Convert back to hex
         return f"#{r:02x}{g:02x}{b:02x}"
-    
+
     @staticmethod
     def is_dark_mode() -> bool:
         """Check if dark mode is currently active (cached, no disk reads)."""
         return Theme._dark_mode
-    
+
     @staticmethod
     def get_primary_button_style() -> str:
         """Get primary action button style (blue)."""
         dark = Theme.is_dark_mode()
         return Theme.get_button_style("#0078d7", dark)
-    
+
     @staticmethod
     def get_success_button_style() -> str:
         """Get success/positive action button style (green)."""
         dark = Theme.is_dark_mode()
         color = "#28a745" if not dark else "#2ea44f"
         return Theme.get_button_style(color, dark)
-    
+
     @staticmethod
     def get_destructive_button_style() -> str:
         """Get destructive action button style (red)."""
         dark = Theme.is_dark_mode()
         color = "#dc3545" if not dark else "#f85149"
         return Theme.get_button_style(color, dark)
-    
+
     @staticmethod
     def get_destructive_text_style() -> str:
         """Get text color for destructive actions."""

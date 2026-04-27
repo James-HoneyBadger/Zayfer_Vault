@@ -10,15 +10,11 @@ Requires : maturin develop  (to build the native module first)
 
 from __future__ import annotations
 
-import base64
 import os
-import tempfile
 from pathlib import Path
 
-import pytest
-
 import hb_zayfer as hbz
-
+import pytest
 
 # ===========================================================================
 # Helpers

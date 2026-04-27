@@ -4,28 +4,27 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QWidget,
-    QVBoxLayout,
-    QHBoxLayout,
-    QLabel,
-    QLineEdit,
-    QPushButton,
-    QTableWidget,
-    QTableWidgetItem,
-    QHeaderView,
-    QMessageBox,
+    QAbstractItemView,
+    QComboBox,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
-    QAbstractItemView,
+    QHBoxLayout,
+    QHeaderView,
+    QLabel,
+    QLineEdit,
     QMenu,
-    QApplication,
-    QComboBox,
+    QMessageBox,
+    QPushButton,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
+    QWidget,
 )
 
 import hb_zayfer as hbz
-from hb_zayfer.gui.clipboard import secure_copy
 from hb_zayfer.gui.audit_utils import log_contact_added, log_contact_deleted
+from hb_zayfer.gui.clipboard import secure_copy
 from hb_zayfer.gui.theme import Theme
 
 
@@ -103,30 +102,30 @@ class ContactsView(QWidget):
         """Show context menu on right-click."""
         if self.table.currentRow() < 0:
             return
-        
+
         menu = QMenu(self)
-        
+
         copy_name_action = menu.addAction("📋 Copy Name")
         copy_name_action.triggered.connect(self._copy_name)
-        
+
         copy_email_action = menu.addAction("📋 Copy Email")
         copy_email_action.triggered.connect(self._copy_email)
-        
+
         menu.addSeparator()
-        
+
         edit_action = menu.addAction("✏️ Edit Contact...")
         edit_action.triggered.connect(self._edit_contact)
-        
+
         link_action = menu.addAction("🔗 Link Key...")
         link_action.triggered.connect(self._link_key)
-        
+
         menu.addSeparator()
-        
+
         remove_action = menu.addAction("🗑️ Remove Contact")
         remove_action.triggered.connect(self._remove_contact)
-        
+
         menu.exec(self.table.viewport().mapToGlobal(position))
-    
+
     def _copy_name(self) -> None:
         """Copy contact name to clipboard."""
         row = self.table.currentRow()
@@ -136,7 +135,7 @@ class ContactsView(QWidget):
         if name_item:
             secure_copy(name_item.text(), sensitive=False)
             self._notify("show_success", "Name copied to clipboard")
-    
+
     def _copy_email(self) -> None:
         """Copy contact email to clipboard."""
         row = self.table.currentRow()
@@ -156,7 +155,7 @@ class ContactsView(QWidget):
             QMessageBox.critical(self, "Error", str(e))
             self.all_contacts = []
             return
-        
+
         self._update_table()
 
     def _filter_contacts(self, search_text: str) -> None:
@@ -166,14 +165,14 @@ class ContactsView(QWidget):
     def _update_table(self) -> None:
         """Update table with current filter."""
         search_text = self.search_input.text().lower() if hasattr(self, 'search_input') else ""
-        
+
         if not hasattr(self, 'all_contacts'):
             self.all_contacts = []
-        
+
         # Filter contacts
         if search_text:
-            filtered = [c for c in self.all_contacts 
-                       if search_text in c.name.lower() 
+            filtered = [c for c in self.all_contacts
+                       if search_text in c.name.lower()
                        or (c.email and search_text in c.email.lower())
                        or (c.notes and search_text in c.notes.lower())]
         else:
@@ -273,7 +272,7 @@ class ContactsView(QWidget):
         name = self._selected_contact_name()
         if not name:
             return
-        
+
         # Get contact details
         try:
             ks = hbz.KeyStore()
@@ -281,7 +280,7 @@ class ContactsView(QWidget):
             if not contact:
                 QMessageBox.warning(self, "Error", "Contact not found.")
                 return
-            
+
             # Build detailed message
             msg = f"<b>Remove contact: {contact.name}</b><br>"
             if contact.email:
@@ -291,18 +290,18 @@ class ContactsView(QWidget):
             if contact.notes:
                 msg += f"<b>Notes:</b> {contact.notes[:100]}...<br>" if len(contact.notes) > 100 else f"<b>Notes:</b> {contact.notes}<br>"
             msg += "<br><b>Note:</b> This only removes the contact entry. Associated keys remain in your keyring."
-            
+
             reply = QMessageBox.question(
                 self, "Remove Contact", msg,
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             )
             if reply != QMessageBox.StandardButton.Yes:
                 return
-            
+
             ks.remove_contact(name)
             log_contact_deleted(name)
             self.refresh()
-            
+
             self._notify("show_success", f"Contact '{name}' removed")
         except Exception as e:
             QMessageBox.critical(self, "Error", str(e))

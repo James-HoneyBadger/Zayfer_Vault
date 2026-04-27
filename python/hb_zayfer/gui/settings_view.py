@@ -6,24 +6,24 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QWidget,
-    QVBoxLayout,
+    QApplication,
+    QCheckBox,
+    QComboBox,
+    QGroupBox,
     QHBoxLayout,
     QLabel,
-    QComboBox,
-    QCheckBox,
-    QGroupBox,
-    QSpinBox,
     QLineEdit,
-    QPushButton,
     QMessageBox,
-    QApplication,
+    QPushButton,
+    QSpinBox,
+    QVBoxLayout,
+    QWidget,
 )
 
 import hb_zayfer as hbz
 from hb_zayfer.gui.clipboard import set_auto_clear_timeout
-from hb_zayfer.gui.theme import Theme
 from hb_zayfer.gui.settings_manager import CryptoConfig
+from hb_zayfer.gui.theme import Theme
 
 
 def _config_path() -> Path:

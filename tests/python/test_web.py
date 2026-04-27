@@ -12,9 +12,6 @@ from pathlib import Path
 
 import pytest
 
-import hb_zayfer as hbz
-
-
 pytest.importorskip("httpx")
 pytest.importorskip("fastapi")
 
@@ -632,8 +629,9 @@ def test_auth_required_when_token_set(tmp_path: Path, monkeypatch: pytest.Monkey
     """When HB_ZAYFER_API_TOKEN is set, requests without token get 401."""
     monkeypatch.setenv("HB_ZAYFER_API_TOKEN", "test-secret-token")
     # Must re-import to pick up env var at module level
-    from hb_zayfer.web import app as app_module
     import importlib
+
+    from hb_zayfer.web import app as app_module
     importlib.reload(app_module)
     try:
         test_app = app_module.create_app()

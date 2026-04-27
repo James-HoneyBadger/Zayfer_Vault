@@ -2,27 +2,27 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, QThreadPool
+from PySide6.QtCore import QThreadPool
 from PySide6.QtWidgets import (
-    QWidget,
-    QVBoxLayout,
+    QCheckBox,
+    QComboBox,
+    QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QPushButton,
-    QComboBox,
-    QGroupBox,
-    QProgressBar,
     QMessageBox,
+    QProgressBar,
+    QPushButton,
     QTextEdit,
-    QCheckBox,
+    QVBoxLayout,
+    QWidget,
 )
 
-from hb_zayfer.services import KeyService
-from hb_zayfer.gui.workers import CryptoWorker
-from hb_zayfer.gui.password_strength import PasswordStrengthMeter
 from hb_zayfer.gui.audit_utils import log_key_generated
+from hb_zayfer.gui.password_strength import PasswordStrengthMeter
 from hb_zayfer.gui.theme import Theme
+from hb_zayfer.gui.workers import CryptoWorker
+from hb_zayfer.services import KeyService
 
 
 class KeygenView(QWidget):
@@ -68,7 +68,7 @@ class KeygenView(QWidget):
         uid_row.addWidget(self.uid_input, 1)
         self.uid_row_widget.setVisible(False)  # Hidden until PGP selected
         opts_layout.addWidget(self.uid_row_widget)
-        
+
         # Show/hide UID based on algorithm
         self.algo_combo.currentIndexChanged.connect(self._on_algo_changed)
 
@@ -190,7 +190,7 @@ class KeygenView(QWidget):
                 algo = line.split(":", 1)[1].strip()
         if fp:
             log_key_generated(algo or "KEY", fp)
-        
+
         self._notify("show_success", "Key pair generated and stored")
         # Clear form after success
         self.label_input.clear()

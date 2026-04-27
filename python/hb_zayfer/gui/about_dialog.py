@@ -2,26 +2,26 @@
 
 from __future__ import annotations
 
-from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QPushButton, QTextBrowser
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
+from PySide6.QtWidgets import QDialog, QLabel, QPushButton, QTextBrowser, QVBoxLayout
 
 import hb_zayfer as hbz
 
 
 class AboutDialog(QDialog):
     """About dialog showing application information."""
-    
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("About Zayfer Vault")
         self.setMinimumWidth(500)
         self.setMinimumHeight(400)
-        
+
         layout = QVBoxLayout(self)
         layout.setSpacing(16)
         layout.setContentsMargins(24, 24, 24, 24)
-        
+
         # Title
         title = QLabel("🔐 Zayfer Vault")
         title_font = QFont()
@@ -30,13 +30,13 @@ class AboutDialog(QDialog):
         title.setFont(title_font)
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(title)
-        
+
         # Version
         version = QLabel(f"Version {hbz.version()}")
         version.setAlignment(Qt.AlignmentFlag.AlignCenter)
         version.setStyleSheet("color: #888888; font-size: 14px;")
         layout.addWidget(version)
-        
+
         # Description
         desc = QTextBrowser()
         desc.setOpenExternalLinks(True)
@@ -59,7 +59,7 @@ class AboutDialog(QDialog):
             </div>
         """)
         layout.addWidget(desc)
-        
+
         # Credits
         credits = QLabel(
             "<b>Built with:</b><br>"
@@ -70,13 +70,13 @@ class AboutDialog(QDialog):
         credits.setAlignment(Qt.AlignmentFlag.AlignCenter)
         credits.setStyleSheet("font-size: 12px; color: #666666;")
         layout.addWidget(credits)
-        
+
         # Copyright
         copyright_label = QLabel("© 2026 Honey Badger Universe")
         copyright_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         copyright_label.setStyleSheet("font-size: 11px; color: #888888;")
         layout.addWidget(copyright_label)
-        
+
         # Close button
         close_btn = QPushButton("Close")
         close_btn.setMinimumWidth(100)

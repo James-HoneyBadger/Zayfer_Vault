@@ -4,19 +4,18 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QWidget,
-    QVBoxLayout,
+    QComboBox,
+    QFileDialog,
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QPushButton,
-    QComboBox,
-    QFileDialog,
-    QTextEdit,
     QMessageBox,
+    QPushButton,
     QTabWidget,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
 )
 
 import hb_zayfer as hbz

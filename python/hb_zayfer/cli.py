@@ -8,7 +8,6 @@ from __future__ import annotations
 import getpass
 import sys
 from pathlib import Path
-from typing import Optional
 
 import click
 from rich.console import Console
@@ -125,7 +124,7 @@ def cli() -> None:
 @click.option("--label", "-l", required=True, help="Human-readable label for the key.")
 @click.option("--user-id", "-u", default=None, help="User ID for PGP keys (e.g. 'Name <email>').")
 @click.option("--export-dir", "-o", type=click.Path(), default=None, help="Directory to export public key.")
-def keygen(algorithm: str, label: str, user_id: Optional[str], export_dir: Optional[str]) -> None:
+def keygen(algorithm: str, label: str, user_id: str | None, export_dir: str | None) -> None:
     """Generate a new key pair and store it in the keyring."""
     passphrase = _prompt_passphrase(confirm=True)
     ks = hbz.KeyStore()
@@ -176,7 +175,7 @@ def keygen(algorithm: str, label: str, user_id: Optional[str], export_dir: Optio
 @click.option("--algorithm", "-a", type=click.Choice(["aes", "chacha"]), default="aes", help="Symmetric cipher.")
 @click.option("--password", "-p", is_flag=True, help="Encrypt with a passphrase.")
 @click.option("--recipient", "-r", default=None, help="Recipient contact name or fingerprint prefix.")
-def encrypt(input_file: str, output: Optional[str], algorithm: str, password: bool, recipient: Optional[str]) -> None:
+def encrypt(input_file: str, output: str | None, algorithm: str, password: bool, recipient: str | None) -> None:
     """Encrypt a file."""
     output = output or f"{input_file}.hbzf"
 
@@ -226,7 +225,7 @@ def encrypt(input_file: str, output: Optional[str], algorithm: str, password: bo
 @click.argument("input_file", type=click.Path(exists=True))
 @click.option("--output", "-o", type=click.Path(), default=None, help="Output file (default: strip .hbzf).")
 @click.option("--key", "-k", default=None, help="Fingerprint prefix of the decryption key.")
-def decrypt(input_file: str, output: Optional[str], key: Optional[str]) -> None:
+def decrypt(input_file: str, output: str | None, key: str | None) -> None:
     """Decrypt an HBZF file."""
     if output is None:
         if input_file.endswith(".hbzf"):
@@ -275,7 +274,7 @@ def decrypt(input_file: str, output: Optional[str], key: Optional[str]) -> None:
     )
 
 
-def _select_key(ks: hbz.KeyStore, hint: Optional[str], algo_prefix: str) -> str:
+def _select_key(ks: hbz.KeyStore, hint: str | None, algo_prefix: str) -> str:
     """Resolve a key fingerprint from a hint or list matching private keys."""
     if hint:
         fps = ks.resolve_recipient(hint)
@@ -308,7 +307,7 @@ def _select_key(ks: hbz.KeyStore, hint: Optional[str], algo_prefix: str) -> str:
 @click.option("--key", "-k", default=None, help="Fingerprint prefix of signing key.")
 @click.option("--output", "-o", type=click.Path(), default=None, help="Signature output file (default: <input>.sig).")
 @click.option("--algorithm", "-a", type=click.Choice(["ed25519", "rsa", "pgp"]), default="ed25519")
-def sign(input_file: str, key: Optional[str], output: Optional[str], algorithm: str) -> None:
+def sign(input_file: str, key: str | None, output: str | None, algorithm: str) -> None:
     """Sign a file."""
     output = output or f"{input_file}.sig"
     data = Path(input_file).read_bytes()
@@ -341,7 +340,7 @@ def sign(input_file: str, key: Optional[str], output: Optional[str], algorithm: 
 @click.argument("signature_file", type=click.Path(exists=True))
 @click.option("--key", "-k", default=None, help="Fingerprint prefix or contact name for verification key.")
 @click.option("--algorithm", "-a", type=click.Choice(["ed25519", "rsa", "pgp"]), default="ed25519")
-def verify(input_file: str, signature_file: str, key: Optional[str], algorithm: str) -> None:
+def verify(input_file: str, signature_file: str, key: str | None, algorithm: str) -> None:
     """Verify a file's signature."""
     data = Path(input_file).read_bytes()
     sig = Path(signature_file).read_bytes()
@@ -419,7 +418,7 @@ def keys_list() -> None:
 @keys.command("export")
 @click.argument("fingerprint_prefix")
 @click.option("--output", "-o", type=click.Path(), default=None, help="Output file.")
-def keys_export(fingerprint_prefix: str, output: Optional[str]) -> None:
+def keys_export(fingerprint_prefix: str, output: str | None) -> None:
     """Export a public key."""
     ks = hbz.KeyStore()
     fps = ks.resolve_recipient(fingerprint_prefix)
@@ -510,7 +509,7 @@ def contacts_list() -> None:
 @click.argument("name")
 @click.option("--email", "-e", default=None, help="Contact email.")
 @click.option("--notes", "-n", default=None, help="Notes.")
-def contacts_add(name: str, email: Optional[str], notes: Optional[str]) -> None:
+def contacts_add(name: str, email: str | None, notes: str | None) -> None:
     """Add a new contact."""
     ks = hbz.KeyStore()
     ks.add_contact(name, email=email, notes=notes)
@@ -555,7 +554,7 @@ def backup() -> None:
 @backup.command("create")
 @click.option("--output", "-o", required=True, type=click.Path(), help="Backup output file path.")
 @click.option("--label", "-l", default=None, help="Optional backup label.")
-def backup_create(output: str, label: Optional[str]) -> None:
+def backup_create(output: str, label: str | None) -> None:
     """Create an encrypted keystore backup."""
     ks = hbz.KeyStore()
     passphrase = _prompt_passphrase(confirm=True)

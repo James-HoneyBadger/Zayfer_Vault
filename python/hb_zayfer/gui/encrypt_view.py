@@ -4,33 +4,32 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt, QThreadPool
 from PySide6.QtWidgets import (
-    QWidget,
-    QVBoxLayout,
+    QCheckBox,
+    QComboBox,
+    QCompleter,
+    QFileDialog,
+    QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QPushButton,
-    QComboBox,
-    QFileDialog,
-    QTextEdit,
-    QGroupBox,
-    QRadioButton,
-    QProgressBar,
     QMessageBox,
+    QProgressBar,
+    QPushButton,
+    QRadioButton,
     QTabWidget,
-    QCheckBox,
-    QCompleter,
-    QApplication,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
 )
 
 import hb_zayfer as hbz
-from hb_zayfer.gui.clipboard import secure_copy
-from hb_zayfer.gui.workers import CryptoWorker
-from hb_zayfer.gui.password_strength import PasswordStrengthMeter
-from hb_zayfer.gui.dragdrop import DragDropFileInput
 from hb_zayfer.gui.audit_utils import log_file_encrypted
-from hb_zayfer.gui.theme import Theme
+from hb_zayfer.gui.clipboard import secure_copy
+from hb_zayfer.gui.dragdrop import DragDropFileInput
+from hb_zayfer.gui.password_strength import PasswordStrengthMeter
 from hb_zayfer.gui.settings_manager import CryptoConfig
+from hb_zayfer.gui.theme import Theme
+from hb_zayfer.gui.workers import CryptoWorker
 
 
 def _load_kdf_settings() -> dict:
@@ -152,7 +151,7 @@ class EncryptView(QWidget):
         self.file_strength_meter = PasswordStrengthMeter()
         opts_layout.addWidget(self.file_strength_meter)
         self.passphrase_input.textChanged.connect(lambda: self.file_strength_meter.update_strength(self.passphrase_input.text()))
-        
+
         # Match indicator
         self.match_label = QLabel("")
         opts_layout.addWidget(self.match_label)
@@ -171,7 +170,7 @@ class EncryptView(QWidget):
         self.recipient_input.setEnabled(False)
         rcpt_row.addWidget(self.recipient_input, 1)
         opts_layout.addLayout(rcpt_row)
-        
+
         # Populate recipient autocomplete from contacts and keyring
         self._setup_recipient_completer()
 
@@ -223,7 +222,7 @@ class EncryptView(QWidget):
         self.text_strength_meter = PasswordStrengthMeter()
         layout.addWidget(self.text_strength_meter)
         self.text_passphrase.textChanged.connect(lambda: self.text_strength_meter.update_strength(self.text_passphrase.text()))
-        
+
         # Match indicator for text tab
         self.text_match_label = QLabel("")
         layout.addWidget(self.text_match_label)
@@ -425,7 +424,7 @@ class EncryptView(QWidget):
             pass
         if inp:
             log_file_encrypted(algo, inp, size)
-        
+
         self._notify("show_success", f"File encrypted: {path}")
         # Clear form after success
         self.file_input.clear()

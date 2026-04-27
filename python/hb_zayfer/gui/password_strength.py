@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import re
 
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QLabel, QProgressBar
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QProgressBar, QWidget
 
 
 class PasswordStrengthMeter(QWidget):
@@ -157,10 +156,10 @@ class PasswordStrengthMeter(QWidget):
             return "Enter a password to see strength analysis."
 
         advice = []
-        
+
         if len(password) < 12:
             advice.append("• Use at least 12 characters")
-        
+
         if not re.search(r'[a-z]', password):
             advice.append("• Add lowercase letters")
         if not re.search(r'[A-Z]', password):
@@ -169,17 +168,17 @@ class PasswordStrengthMeter(QWidget):
             advice.append("• Add numbers")
         if not re.search(r'[^a-zA-Z0-9]', password):
             advice.append("• Add special characters (!@#$%^&*)")
-        
+
         if re.search(r'(.)\1{2,}', password):
             advice.append("• Avoid repeated characters")
-        
+
         if re.search(r'(012|123|234|345|456|567|678|789)', password):
             advice.append("• Avoid sequential numbers")
-        
+
         if re.search(r'(abc|bcd|cde|def)', password.lower()):
             advice.append("• Avoid sequential letters")
 
         if not advice:
             return "✓ Strong password!"
-        
+
         return "Suggestions:\n" + "\n".join(advice)

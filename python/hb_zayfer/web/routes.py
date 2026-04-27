@@ -6,7 +6,6 @@ import base64
 import re
 import tempfile
 from pathlib import Path
-from typing import Optional
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
@@ -83,7 +82,7 @@ class KeygenRequest(BaseModel):
     algorithm: str  # rsa2048, rsa4096, ed25519, x25519, pgp
     label: str
     passphrase: str
-    user_id: Optional[str] = None
+    user_id: str | None = None
 
 
 class KeygenResponse(BaseModel):
@@ -116,8 +115,8 @@ class VerifyResponse(BaseModel):
 
 class ContactRequest(BaseModel):
     name: str
-    email: Optional[str] = None
-    notes: Optional[str] = None
+    email: str | None = None
+    notes: str | None = None
 
 
 class LinkKeyRequest(BaseModel):
@@ -136,9 +135,9 @@ class KeyMetadataOut(BaseModel):
 
 class ContactOut(BaseModel):
     name: str
-    email: Optional[str]
+    email: str | None
     key_fingerprints: list[str]
-    notes: Optional[str]
+    notes: str | None
     created_at: str
 
 
@@ -455,9 +454,9 @@ async def decrypt_file(
 class AuditEntryOut(BaseModel):
     timestamp: str
     operation: str
-    prev_hash: Optional[str]
+    prev_hash: str | None
     entry_hash: str
-    note: Optional[str]
+    note: str | None
 
 
 class AuditVerifyResponse(BaseModel):
@@ -520,7 +519,7 @@ def audit_export(destination: str):
 class BackupRequest(BaseModel):
     output_path: str
     passphrase: str
-    label: Optional[str] = None
+    label: str | None = None
 
 
 class BackupManifestOut(BaseModel):
@@ -529,7 +528,7 @@ class BackupManifestOut(BaseModel):
     public_key_count: int
     contact_count: int
     version: int
-    label: Optional[str]
+    label: str | None
     integrity_hash: str
 
 

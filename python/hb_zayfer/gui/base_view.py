@@ -17,8 +17,8 @@ unchanged. New views and refactor passes can opt in by inheriting from
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 from PySide6.QtCore import QThreadPool
 from PySide6.QtWidgets import QFileDialog, QMessageBox, QWidget

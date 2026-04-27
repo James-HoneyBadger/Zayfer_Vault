@@ -6,24 +6,23 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QWidget,
-    QVBoxLayout,
+    QAbstractItemView,
+    QComboBox,
+    QFileDialog,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QPushButton,
+    QSpinBox,
     QTableWidget,
     QTableWidgetItem,
-    QHeaderView,
-    QMessageBox,
-    QFileDialog,
-    QAbstractItemView,
-    QSpinBox,
-    QComboBox,
+    QVBoxLayout,
+    QWidget,
 )
 
 import hb_zayfer as hbz
-
 
 # Map operation debug strings to friendly labels
 _OP_LABELS = {
@@ -61,7 +60,7 @@ class AuditView(QWidget):
 
     def __init__(self) -> None:
         super().__init__()
-        self._all_entries: list["hbz.AuditEntry"] = []
+        self._all_entries: list[hbz.AuditEntry] = []
         self._setup_ui()
 
     # ------------------------------------------------------------------

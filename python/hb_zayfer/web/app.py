@@ -15,8 +15,8 @@ from __future__ import annotations
 
 import os
 import secrets
-import time
 import threading
+import time
 from collections import defaultdict
 from pathlib import Path
 
@@ -25,8 +25,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from hb_zayfer.web.routes import router
 from hb_zayfer.services import AppInfo
+from hb_zayfer.web.routes import router
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -142,6 +142,7 @@ def create_app() -> FastAPI:
 def main() -> None:
     """Run the web server via uvicorn."""
     import argparse
+
     import uvicorn
 
     parser = argparse.ArgumentParser(description="HB_Zayfer Web Server")

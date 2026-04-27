@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QWidget,
-    QVBoxLayout,
+    QGridLayout,
+    QGroupBox,
     QHBoxLayout,
     QLabel,
     QPushButton,
-    QGroupBox,
-    QGridLayout,
+    QVBoxLayout,
+    QWidget,
 )
 
 from hb_zayfer.services import AppInfo, WorkspaceSummary

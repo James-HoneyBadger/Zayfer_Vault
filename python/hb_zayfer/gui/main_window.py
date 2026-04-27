@@ -8,42 +8,39 @@ users generate keys or review settings before handling real data.
 from __future__ import annotations
 
 import os
-from PySide6.QtCore import Qt, QSize, QTimer
+
+from PySide6.QtCore import QSize, Qt, QTimer
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
-    QMainWindow,
-    QWidget,
     QHBoxLayout,
-    QVBoxLayout,
     QListWidget,
     QListWidgetItem,
-    QStackedWidget,
-    QLabel,
-    QStatusBar,
-    QMenuBar,
+    QMainWindow,
     QMessageBox,
+    QStackedWidget,
+    QWidget,
 )
 
-from hb_zayfer.gui.home_view import HomeView
-from hb_zayfer.gui.encrypt_view import EncryptView
-from hb_zayfer.gui.decrypt_view import DecryptView
-from hb_zayfer.gui.keygen_view import KeygenView
-from hb_zayfer.gui.keyring_view import KeyringView
-from hb_zayfer.gui.contacts_view import ContactsView
-from hb_zayfer.gui.sign_view import SignView
-from hb_zayfer.gui.verify_view import VerifyView
-from hb_zayfer.gui.passgen_view import PasswordGenView
-from hb_zayfer.gui.messaging_view import MessagingView
-from hb_zayfer.gui.qr_view import QRExchangeView
+import hb_zayfer as hbz
+from hb_zayfer.gui.about_dialog import AboutDialog
 from hb_zayfer.gui.audit_view import AuditView
 from hb_zayfer.gui.backup_view import BackupView
-from hb_zayfer.gui.settings_view import SettingsView
-from hb_zayfer.gui.statusbar import StatusBar
+from hb_zayfer.gui.contacts_view import ContactsView
+from hb_zayfer.gui.decrypt_view import DecryptView
+from hb_zayfer.gui.encrypt_view import EncryptView
+from hb_zayfer.gui.home_view import HomeView
+from hb_zayfer.gui.keygen_view import KeygenView
+from hb_zayfer.gui.keyring_view import KeyringView
+from hb_zayfer.gui.messaging_view import MessagingView
 from hb_zayfer.gui.notifications import NotificationManager
+from hb_zayfer.gui.passgen_view import PasswordGenView
+from hb_zayfer.gui.qr_view import QRExchangeView
 from hb_zayfer.gui.settings_manager import SettingsManager
-from hb_zayfer.gui.about_dialog import AboutDialog
+from hb_zayfer.gui.settings_view import SettingsView
+from hb_zayfer.gui.sign_view import SignView
+from hb_zayfer.gui.statusbar import StatusBar
+from hb_zayfer.gui.verify_view import VerifyView
 from hb_zayfer.services import AppInfo, AppPaths
-import hb_zayfer as hbz
 
 
 class MainWindow(QMainWindow):
@@ -51,27 +48,27 @@ class MainWindow(QMainWindow):
 
     def __init__(self) -> None:
         super().__init__()
-        
+
         # Initialize settings manager
         self.settings = SettingsManager(AppPaths.current().config_dir)
-        
+
         # Initialize notification manager
         self.notifications = NotificationManager(self)
 
         self.app_info = AppInfo.current()
         self.setWindowTitle(self.app_info.window_title)
         self.setMinimumSize(900, 600)
-        
+
         # Restore window geometry from settings
         width = self.settings.get("window.width", 1100)
         height = self.settings.get("window.height", 700)
         self.resize(width, height)
-        
+
         x = self.settings.get("window.x")
         y = self.settings.get("window.y")
         if x is not None and y is not None:
             self.move(x, y)
-        
+
         if self.settings.get("window.maximized", False):
             self.showMaximized()
 
@@ -277,11 +274,11 @@ class MainWindow(QMainWindow):
         self.status_bar = StatusBar()
         self.setStatusBar(self.status_bar)
         self.status_bar.set_message("Ready")
-    
+
     # ---------------------------------------------------------------
     # Keyboard Shortcuts
     # ---------------------------------------------------------------
-    
+
     def _setup_shortcuts(self) -> None:
         """Setup additional keyboard shortcuts."""
         # Ctrl+F for search (when in keyring or contacts)
@@ -290,14 +287,14 @@ class MainWindow(QMainWindow):
         search_action.setShortcut(search_shortcut)
         search_action.triggered.connect(self._focus_search)
         self.addAction(search_action)
-        
+
         # Ctrl+R for refresh
         refresh_shortcut = QKeySequence("Ctrl+R")
         refresh_action = QAction(self)
         refresh_action.setShortcut(refresh_shortcut)
         refresh_action.triggered.connect(self._refresh_current_view)
         self.addAction(refresh_action)
-    
+
     def _focus_search(self) -> None:
         """Focus search box in current view if available."""
         current_index = self.stack.currentIndex()
@@ -307,7 +304,7 @@ class MainWindow(QMainWindow):
         elif current_index == 5:  # Contacts
             self.contacts_view.search_input.setFocus()
             self.contacts_view.search_input.selectAll()
-    
+
     def _apply_settings_to_encrypt(self) -> None:
         """Apply default cipher from settings to encrypt view."""
         from hb_zayfer.gui.settings_view import _load_config
@@ -319,7 +316,7 @@ class MainWindow(QMainWindow):
         idx2 = self.encrypt_view.text_algo.findText(cipher)
         if idx2 >= 0:
             self.encrypt_view.text_algo.setCurrentIndex(idx2)
-    
+
     def _refresh_current_view(self) -> None:
         """Refresh current view if supported."""
         current_index = self.stack.currentIndex()
@@ -332,11 +329,11 @@ class MainWindow(QMainWindow):
         elif current_index == 5:  # Contacts
             self.contacts_view.refresh()
             self.notifications.show_info("Contacts refreshed")
-    
+
     # ---------------------------------------------------------------
     # Window events
     # ---------------------------------------------------------------
-    
+
     def closeEvent(self, event) -> None:
         """Save settings before closing."""
         # Save window geometry
@@ -345,10 +342,10 @@ class MainWindow(QMainWindow):
         self.settings.set("window.x", self.x())
         self.settings.set("window.y", self.y())
         self.settings.set("window.maximized", self.isMaximized())
-        
+
         # Save theme
         from .theme import Theme
         self.settings.set("theme", "dark" if Theme.is_dark_mode() else "light")
-        
+
         self.settings.save()
         event.accept()

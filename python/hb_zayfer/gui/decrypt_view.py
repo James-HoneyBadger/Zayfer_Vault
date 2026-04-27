@@ -2,31 +2,30 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, QThreadPool
+from PySide6.QtCore import QThreadPool
 from PySide6.QtWidgets import (
-    QWidget,
-    QVBoxLayout,
+    QCheckBox,
+    QComboBox,
+    QFileDialog,
+    QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QPushButton,
-    QComboBox,
-    QFileDialog,
-    QTextEdit,
-    QGroupBox,
-    QProgressBar,
     QMessageBox,
+    QProgressBar,
+    QPushButton,
     QTabWidget,
-    QCheckBox,
-    QApplication,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
 )
 
 import hb_zayfer as hbz
-from hb_zayfer.gui.clipboard import secure_copy
-from hb_zayfer.gui.workers import CryptoWorker
-from hb_zayfer.gui.dragdrop import DragDropFileInput
 from hb_zayfer.gui.audit_utils import log_file_decrypted
+from hb_zayfer.gui.clipboard import secure_copy
+from hb_zayfer.gui.dragdrop import DragDropFileInput
 from hb_zayfer.gui.theme import Theme
+from hb_zayfer.gui.workers import CryptoWorker
 
 
 class DecryptView(QWidget):
@@ -209,7 +208,7 @@ class DecryptView(QWidget):
             algo = algos.get(head[5], f"0x{head[5]:02x}")
             wrap = wraps.get(head[7], f"0x{head[7]:02x}")
             self.header_label.setText(f"Format: HBZF v{head[4]}  |  Cipher: {algo}  |  Mode: {wrap}")
-            
+
             # If asymmetric, populate key selector
             if head[7] in (0x01, 0x02):  # RSA or X25519
                 self.key_combo.setVisible(True)
@@ -221,7 +220,7 @@ class DecryptView(QWidget):
                         keys = [k for k in all_keys if k.algorithm in ("RSA-2048", "RSA-4096")]
                     else:  # X25519
                         keys = [k for k in all_keys if k.algorithm == "X25519"]
-                    
+
                     if not keys:
                         self.key_combo.addItem("No suitable keys found")
                         self.key_warning.setText(f"⚠ No {wrap} private keys in keyring")
@@ -274,7 +273,7 @@ class DecryptView(QWidget):
             if not pw:
                 QMessageBox.warning(self, "Error", "Enter the key passphrase.")
                 return
-            
+
             # Get selected key fingerprint
             if self.key_combo.currentIndex() < 0:
                 QMessageBox.warning(self, "Error", "Please select a private key.")
@@ -283,7 +282,7 @@ class DecryptView(QWidget):
             if not fp:
                 QMessageBox.warning(self, "Error", "No suitable key selected.")
                 return
-            
+
             try:
                 ks = hbz.KeyStore()
                 priv_data = ks.load_private_key(fp, pw.encode("utf-8"))
@@ -327,7 +326,7 @@ class DecryptView(QWidget):
             pass
         if inp:
             log_file_decrypted(algo, inp, size)
-        
+
         self._notify("show_success", f"File decrypted: {path}")
         # Clear form after success
         self.file_input.clear()

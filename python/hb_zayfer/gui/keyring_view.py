@@ -6,26 +6,25 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QWidget,
-    QVBoxLayout,
+    QAbstractItemView,
+    QFileDialog,
     QHBoxLayout,
+    QHeaderView,
+    QInputDialog,
     QLabel,
     QLineEdit,
+    QMenu,
+    QMessageBox,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
-    QHeaderView,
-    QMessageBox,
-    QFileDialog,
-    QAbstractItemView,
-    QInputDialog,
-    QMenu,
-    QApplication,
+    QVBoxLayout,
+    QWidget,
 )
 
 import hb_zayfer as hbz
-from hb_zayfer.gui.clipboard import secure_copy
 from hb_zayfer.gui.audit_utils import log_key_deleted
+from hb_zayfer.gui.clipboard import secure_copy
 from hb_zayfer.gui.theme import Theme
 
 
@@ -103,30 +102,30 @@ class KeyringView(QWidget):
         """Show context menu on right-click."""
         if self.table.currentRow() < 0:
             return
-        
+
         menu = QMenu(self)
-        
+
         copy_fp_action = menu.addAction("📋 Copy Fingerprint")
         copy_fp_action.triggered.connect(self._copy_fingerprint)
-        
+
         copy_label_action = menu.addAction("📋 Copy Label")
         copy_label_action.triggered.connect(self._copy_label)
-        
+
         menu.addSeparator()
-        
+
         export_action = menu.addAction("💾 Export Public Key...")
         export_action.triggered.connect(self._export_key)
-        
+
         import_action = menu.addAction("📥 Import Key...")
         import_action.triggered.connect(self._import_key)
-        
+
         menu.addSeparator()
-        
+
         delete_action = menu.addAction("🗑️ Delete Key")
         delete_action.triggered.connect(self._delete_key)
-        
+
         menu.exec(self.table.viewport().mapToGlobal(position))
-    
+
     def _copy_label(self) -> None:
         """Copy key label to clipboard."""
         row = self.table.currentRow()
@@ -146,7 +145,7 @@ class KeyringView(QWidget):
             QMessageBox.critical(self, "Error", str(e))
             self.all_keys = []
             return
-        
+
         self._update_table()
 
     def _filter_keys(self, search_text: str) -> None:
@@ -156,14 +155,14 @@ class KeyringView(QWidget):
     def _update_table(self) -> None:
         """Update table with current filter."""
         search_text = self.search_input.text().lower() if hasattr(self, 'search_input') else ""
-        
+
         if not hasattr(self, 'all_keys'):
             self.all_keys = []
-        
+
         # Filter keys
         if search_text:
-            filtered = [k for k in self.all_keys 
-                       if search_text in k.label.lower() 
+            filtered = [k for k in self.all_keys
+                       if search_text in k.label.lower()
                        or search_text in k.algorithm.lower()
                        or search_text in k.fingerprint.lower()]
         else:
@@ -199,7 +198,7 @@ class KeyringView(QWidget):
             ks = hbz.KeyStore()
             pub_data = ks.load_public_key(fp)
             Path(path).write_bytes(pub_data)
-            
+
             self._notify("show_success", f"Public key exported to {Path(path).name}")
         except Exception as e:
             QMessageBox.critical(self, "Error", str(e))
@@ -208,7 +207,7 @@ class KeyringView(QWidget):
         fp = self._selected_fingerprint()
         if not fp:
             return
-        
+
         # Get key details
         try:
             ks = hbz.KeyStore()
@@ -216,30 +215,30 @@ class KeyringView(QWidget):
             if not meta:
                 QMessageBox.warning(self, "Error", "Key not found.")
                 return
-            
+
             # Check if key is used in contacts
             contacts = ks.list_contacts()
             linked_contacts = [c.name for c in contacts if fp in c.key_fingerprints]
-            
+
             # Build warning message
             msg = f"<b>Delete key: {meta.label}</b><br>"
             msg += f"<b>Fingerprint:</b> {fp[:32]}...<br>"
             msg += f"<b>Algorithm:</b> {meta.algorithm}<br><br>"
-            
+
             if linked_contacts:
                 msg += f"<b style='color: #dc3545;'>⚠ Warning:</b> This key is linked to {len(linked_contacts)} contact(s):<br>"
                 msg += "<ul>" + "".join(f"<li>{c}</li>" for c in linked_contacts[:5])
                 if len(linked_contacts) > 5:
                     msg += f"<li>... and {len(linked_contacts) - 5} more</li>"
                 msg += "</ul><br>"
-            
+
             if meta.has_private:
                 msg += "<b style='color: #dc3545;'>⚠ This includes the PRIVATE key!</b><br>"
                 msg += "If you delete it, you will permanently lose access to:<br>"
                 msg += "• Data encrypted to this key<br>"
                 msg += "• The ability to sign as this identity<br><br>"
                 msg += "Type <b>DELETE</b> to confirm:"
-                
+
                 # Require typed confirmation for private keys
                 text, ok = QInputDialog.getText(
                     self, "Confirm Deletion", msg,
@@ -255,11 +254,11 @@ class KeyringView(QWidget):
                 )
                 if not ok or text != "DELETE":
                     return
-            
+
             ks.delete_key(fp)
             log_key_deleted(fp)
             self.refresh()
-            
+
             self._notify("show_success", f"Key '{meta.label}' deleted")
         except Exception as e:
             QMessageBox.critical(self, "Error", str(e))
@@ -279,11 +278,11 @@ class KeyringView(QWidget):
         )
         if not path:
             return
-        
+
         try:
             key_data = Path(path).read_bytes()
             key_text = key_data.decode("utf-8", errors="replace")
-            
+
             # Ask for a label
             from PySide6.QtWidgets import QInputDialog
             label, ok = QInputDialog.getText(
@@ -293,9 +292,9 @@ class KeyringView(QWidget):
             if not ok or not label.strip():
                 return
             label = label.strip()
-            
+
             ks = hbz.KeyStore()
-            
+
             # Detect key type
             if "BEGIN PGP" in key_text:
                 fp = hbz.pgp_fingerprint(key_text)
@@ -311,7 +310,7 @@ class KeyringView(QWidget):
                 else:
                     QMessageBox.warning(self, "Error", "Unrecognized key format.")
                     return
-            
+
             self.refresh()
             self._notify("show_success", f"Key '{label}' imported successfully")
         except Exception as e:

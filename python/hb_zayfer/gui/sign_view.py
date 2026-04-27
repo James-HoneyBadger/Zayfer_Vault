@@ -4,27 +4,23 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QWidget,
-    QVBoxLayout,
+    QComboBox,
+    QFileDialog,
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QPushButton,
-    QComboBox,
-    QFileDialog,
-    QTextEdit,
-    QGroupBox,
-    QProgressBar,
     QMessageBox,
+    QPushButton,
     QTabWidget,
-    QApplication,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
 )
 
 import hb_zayfer as hbz
-from hb_zayfer.gui.clipboard import secure_copy
 from hb_zayfer.gui.audit_utils import audit_safe
+from hb_zayfer.gui.clipboard import secure_copy
 
 
 class SignView(QWidget):
@@ -228,7 +224,6 @@ class SignView(QWidget):
             priv_data = ks.load_private_key(fp, pw.encode())
             message = Path(input_path).read_bytes()
 
-            import base64
             if algo in ("ed25519",):
                 sig = hbz.ed25519_sign(priv_data.decode(), message)
             elif algo in ("rsa2048", "rsa4096"):

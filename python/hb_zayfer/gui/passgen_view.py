@@ -2,26 +2,23 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QWidget,
-    QVBoxLayout,
-    QHBoxLayout,
-    QLabel,
-    QLineEdit,
-    QPushButton,
-    QSpinBox,
     QCheckBox,
     QComboBox,
     QGroupBox,
-    QTabWidget,
-    QApplication,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
     QMessageBox,
+    QPushButton,
+    QSpinBox,
+    QTabWidget,
+    QVBoxLayout,
+    QWidget,
 )
 
 import hb_zayfer as hbz
 from hb_zayfer.gui.clipboard import secure_copy
-from hb_zayfer.gui.theme import Theme
 
 
 class PasswordGenView(QWidget):

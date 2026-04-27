@@ -5,19 +5,19 @@ from __future__ import annotations
 import io
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QPixmap, QImage
+from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import (
-    QWidget,
-    QVBoxLayout,
+    QComboBox,
+    QFileDialog,
+    QGroupBox,
     QHBoxLayout,
     QLabel,
-    QPushButton,
-    QComboBox,
-    QGroupBox,
-    QTextEdit,
     QMessageBox,
-    QFileDialog,
+    QPushButton,
     QSplitter,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
 )
 
 import hb_zayfer as hbz

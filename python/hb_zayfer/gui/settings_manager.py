@@ -12,23 +12,23 @@ from hb_zayfer.services import AppPaths
 
 class SettingsManager:
     """Manages application settings persistence."""
-    
+
     def __init__(self, config_dir: Path | None = None):
         self.config_dir = config_dir or AppPaths.current().config_dir
         self.settings_file = self.config_dir / "gui_settings.json"
         self._lock = threading.Lock()
         self.settings: dict[str, Any] = self._load_settings()
-    
+
     def _load_settings(self) -> dict[str, Any]:
         """Load settings from disk."""
         if self.settings_file.exists():
             try:
-                with open(self.settings_file, 'r') as f:
+                with open(self.settings_file) as f:
                     return json.load(f)
             except Exception:
                 pass
         return self._default_settings()
-    
+
     def _default_settings(self) -> dict[str, Any]:
         """Return default settings."""
         return {
@@ -64,7 +64,7 @@ class SettingsManager:
                 "contacts": [True, True, True, True]
             }
         }
-    
+
     def save(self) -> None:
         """Save settings to disk."""
         with self._lock:
@@ -74,7 +74,7 @@ class SettingsManager:
                     json.dump(self.settings, f, indent=2)
             except Exception as e:
                 print(f"Failed to save settings: {e}")
-    
+
     def get(self, key: str, default: Any = None) -> Any:
         """Get a setting value by dot-notation key.
         
@@ -95,7 +95,7 @@ class SettingsManager:
             else:
                 return default
         return value
-    
+
     def set(self, key: str, value: Any) -> None:
         """Set a setting value by dot-notation key.
         
@@ -110,7 +110,7 @@ class SettingsManager:
                 target[k] = {}
             target = target[k]
         target[keys[-1]] = value
-    
+
     def add_recent_file(self, file_type: str, path: str, max_recent: int = 10) -> None:
         """Add a file to recent files list.
         
@@ -124,7 +124,7 @@ class SettingsManager:
             recent.remove(path)
         recent.insert(0, path)
         self.set(f"recent_files.{file_type}", recent[:max_recent])
-    
+
     def get_recent_files(self, file_type: str) -> list[str]:
         """Get recent files of a specific type.
         
@@ -168,13 +168,13 @@ class CryptoConfig:
     defaults if the file is missing or corrupt. Writes are atomic.
     """
 
-    _instance: "CryptoConfig | None" = None
+    _instance: CryptoConfig | None = None
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
 
     @classmethod
-    def instance(cls) -> "CryptoConfig":
+    def instance(cls) -> CryptoConfig:
         if cls._instance is None:
             cls._instance = cls()
         return cls._instance

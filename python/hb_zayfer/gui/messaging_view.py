@@ -4,17 +4,17 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QWidget,
-    QVBoxLayout,
+    QComboBox,
+    QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QPushButton,
-    QComboBox,
-    QTextEdit,
-    QGroupBox,
     QMessageBox,
+    QPushButton,
     QSplitter,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
 )
 
 from hb_zayfer.gui.clipboard import secure_copy

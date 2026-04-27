@@ -5,9 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
-
 import hb_zayfer as hbz
+import pytest
 
 pytest.importorskip("PySide6")
 
