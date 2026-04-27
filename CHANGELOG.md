@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **HBZF parser robustness tests.** New randomized smoke tests in
+  `crates/core/tests/integration.rs::format_robustness` feed the
+  header parser thousands of bytes of pure garbage, every truncation
+  prefix of a valid blob, and bit-flipped variants of a valid blob,
+  asserting the parser never panics. Uses `StdRng::seed_from_u64`
+  for deterministic, reproducible runs without pulling in a fuzzer.
 - **GUI smoke tests via `pytest-qt`.** Added `pytest-qt` to the `dev`
   optional dependency group and a first GUI test module
   (`tests/python/test_gui_password_strength.py`) that boots the
