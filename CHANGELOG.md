@@ -24,6 +24,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   flags on `hb-zayfer serve` enable HTTPS via `axum-server` + rustls (ring
   provider, no C toolchain required). Mismatched flag pairs are rejected and
   the startup banner advertises `https://` URLs when TLS is active.
+- **One-shot self-signed TLS.** New `--auto-tls` flag generates (and
+  caches) a self-signed certificate under `~/.hb_zayfer/tls/` valid for
+  `localhost`, `127.0.0.1`, `::1`, and the bind host. The private key is
+  written with `0600` permissions. Intended for local development only;
+  mutually exclusive with `--tls-cert`/`--tls-key`.
 - **Web platform authentication.** The Rust-native web server now requires a
   bearer token by default. A fresh hex token is generated on each launch and
   printed in the startup banner (Jupyter-style); clients pass it via

@@ -277,6 +277,76 @@ pub fn generate_token() -> String {
     hex::encode(bytes)
 }
 
+/// Ensure a self-signed certificate exists under the Zayfer config
+/// directory and return `(cert_path, key_path)` suitable for passing to
+/// [`serve_with_auth`].
+///
+/// The cert is created on first call and reused thereafter. The certificate
+/// includes Subject Alternative Names for `localhost`, `127.0.0.1`, `::1`,
+/// and the bind host (when not already covered). The private key file is
+/// created with `0600` permissions on Unix.
+///
+/// This is intended for **local development only** — browsers will warn
+/// until the certificate is added to the trust store.
+pub fn ensure_self_signed_cert(host: &str) -> Result<(String, String)> {
+    use std::fs;
+    use std::path::PathBuf;
+
+    let base: PathBuf = dirs::home_dir()
+        .ok_or_else(|| anyhow::anyhow!("Could not resolve home directory for self-signed cert"))?
+        .join(".hb_zayfer")
+        .join("tls");
+    fs::create_dir_all(&base)
+        .with_context(|| format!("Failed to create TLS directory {}", base.display()))?;
+    let cert_path = base.join("self-signed.cert.pem");
+    let key_path = base.join("self-signed.key.pem");
+
+    if cert_path.exists() && key_path.exists() {
+        return Ok((
+            cert_path.to_string_lossy().into_owned(),
+            key_path.to_string_lossy().into_owned(),
+        ));
+    }
+
+    let mut sans = vec![
+        "localhost".to_string(),
+        "127.0.0.1".to_string(),
+        "::1".to_string(),
+    ];
+    if !sans.iter().any(|s| s == host) {
+        sans.push(host.to_string());
+    }
+    let cert = rcgen::generate_simple_self_signed(sans)
+        .context("Failed to generate self-signed certificate")?;
+
+    let cert_pem = cert.cert.pem();
+    let key_pem = cert.key_pair.serialize_pem();
+    fs::write(&cert_path, &cert_pem)
+        .with_context(|| format!("Failed to write {}", cert_path.display()))?;
+    fs::write(&key_path, &key_pem)
+        .with_context(|| format!("Failed to write {}", key_path.display()))?;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&key_path, fs::Permissions::from_mode(0o600))
+            .with_context(|| format!("Failed to chmod {}", key_path.display()))?;
+        fs::set_permissions(&cert_path, fs::Permissions::from_mode(0o644))
+            .with_context(|| format!("Failed to chmod {}", cert_path.display()))?;
+    }
+
+    eprintln!(
+        "[hb-zayfer] Generated self-signed TLS certificate at {} (valid for localhost, 127.0.0.1, ::1, {})",
+        base.display(),
+        host
+    );
+
+    Ok((
+        cert_path.to_string_lossy().into_owned(),
+        key_path.to_string_lossy().into_owned(),
+    ))
+}
+
 #[derive(Clone)]
 struct AuthState {
     token: String,

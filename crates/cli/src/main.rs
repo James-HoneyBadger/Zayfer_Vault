@@ -170,6 +170,12 @@ enum Commands {
         /// Path to a PEM-encoded TLS private key. Requires --tls-cert.
         #[arg(long, value_name = "PATH")]
         tls_key: Option<String>,
+        /// Generate (or reuse) a self-signed certificate under the Zayfer
+        /// config directory and serve over HTTPS. Convenient for local use;
+        /// browsers will warn until the certificate is trusted manually.
+        /// Mutually exclusive with --tls-cert/--tls-key.
+        #[arg(long, default_value_t = false)]
+        auto_tls: bool,
     },
 
     /// Inspect an HBZF encrypted file (show header metadata without decrypting)
@@ -527,16 +533,23 @@ fn main() -> Result<()> {
             token,
             tls_cert,
             tls_key,
+            auto_tls,
         } => {
             let auth_token = if no_auth {
                 None
             } else {
                 Some(token.unwrap_or_else(platform_server::generate_token))
             };
-            let tls = match (tls_cert, tls_key) {
-                (Some(c), Some(k)) => Some((c, k)),
-                (None, None) => None,
-                _ => anyhow::bail!("--tls-cert and --tls-key must be provided together"),
+            let tls = match (tls_cert, tls_key, auto_tls) {
+                (Some(c), Some(k), false) => Some((c, k)),
+                (None, None, false) => None,
+                (None, None, true) => Some(platform_server::ensure_self_signed_cert(&host)?),
+                (Some(_), None, _) | (None, Some(_), _) => {
+                    anyhow::bail!("--tls-cert and --tls-key must be provided together")
+                }
+                (Some(_), Some(_), true) => {
+                    anyhow::bail!("--auto-tls is mutually exclusive with --tls-cert/--tls-key")
+                }
             };
             platform_server::serve_with_auth(&host, port, auth_token, tls)?
         }
