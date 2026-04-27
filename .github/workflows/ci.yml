@@ -205,3 +205,9 @@ jobs:
 
       - name: Run audit
         run: cargo audit
+
+      - name: Install cargo-deny
+        run: cargo install cargo-deny --locked || true
+
+      - name: Run cargo-deny (advisories, licenses, bans, sources)
+        run: cargo deny check

@@ -1,4 +1,6 @@
 [package]
+# wasm artefact bundled into the web SPA, not crates.io.
+publish = false
 name = "hb_zayfer_wasm"
 version.workspace = true
 edition.workspace = true

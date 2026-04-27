@@ -11,6 +11,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- **`cargo-deny` baseline.** New `deny.toml` adds four supply-chain
+  gates on top of `cargo audit`: SPDX license allow-list (permissive
+  only, with explicit per-crate exceptions for sequoia-openpgp /
+  buffered-reader LGPL, option-ext MPL, xxhash-rust BSL),
+  vulnerability advisories (mirrors `.cargo/audit.toml`), wildcard
+  dependency ban, and registry source allow-list (only crates.io).
+  Wired into CI as a new step in the `audit` job. `crates/cli`,
+  `crates/python`, `crates/wasm` are now marked `publish = false`
+  (they ship as binaries / wheels / WASM bundles, never as crates.io
+  releases). All four `cargo deny check` categories pass.
 - **`cargo audit` baseline.** All currently acknowledged advisories
   are documented in `docs/reference/SECURITY.md` ("Acknowledged
   Supply-Chain Advisories") and listed in `.cargo/audit.toml` so

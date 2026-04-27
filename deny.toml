@@ -1,0 +1,90 @@
+# cargo-deny configuration for Zayfer Vault.
+#
+# Three checks gate the supply chain:
+#   advisories — RUSTSEC vulnerabilities and unmaintained crates
+#   licenses   — SPDX allow-list (must be permissive, MIT/BSD/Apache family)
+#   bans       — duplicate-version surveillance (warn, not deny)
+#
+# The advisory ignore list mirrors `.cargo/audit.toml` and is also
+# documented in `docs/reference/SECURITY.md` (Acknowledged
+# Supply-Chain Advisories). Anything outside this list is
+# release-blocking.
+#
+# Run locally:  cargo deny check
+# CI:           the existing audit step in .github/workflows/ci.yml
+
+[graph]
+all-features = false
+
+[advisories]
+version = 2
+ignore = [
+    # rsa: Marvin timing attack — no upstream fix available; mitigated
+    # by the fact that Zayfer Vault uses RSA only on local files where
+    # an attacker cannot observe per-operation timing.
+    "RUSTSEC-2023-0071",
+    # number_prefix: unmaintained — pulled in only via indicatif's
+    # progress-bar formatting; no security impact.
+    "RUSTSEC-2025-0119",
+    # rustls-pemfile: unmaintained — pulled in via axum-server. The
+    # actual PEM parsing now lives in rustls-pki-types; axum-server
+    # 0.7 still uses the wrapper but the code path is identical.
+    "RUSTSEC-2025-0134",
+    # rand: unsoundness only when a custom logger is installed —
+    # Zayfer Vault uses the default rand backends.
+    "RUSTSEC-2026-0097",
+]
+
+[licenses]
+version = 2
+# Permissive licenses we accept by default. Copyleft (GPL, LGPL,
+# AGPL, MPL, BSL) is NOT in the global allow list — additions
+# require an explicit per-crate exception below.
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+    "Zlib",
+    "CC0-1.0",
+    "0BSD",
+]
+confidence-threshold = 0.8
+
+# Per-crate license exceptions. Each entry must justify why a
+# non-permissive license is acceptable for this project.
+exceptions = [
+    # Sequoia is the OpenPGP backbone; its LGPL-2.0-or-later licence
+    # is acceptable because Zayfer Vault dynamically links it as a
+    # Rust dep — downstream users are not redistributing modified
+    # sequoia, only consuming its public API.
+    { crate = "sequoia-openpgp", allow = ["LGPL-2.0-or-later"] },
+    { crate = "buffered-reader", allow = ["LGPL-2.0-or-later"] },
+    # option-ext (transitively via dirs-sys) is MPL-2.0. MPL is a
+    # weak file-level copyleft that does not affect the linking
+    # binary; we accept it for this single transitive dep.
+    { crate = "option-ext", allow = ["MPL-2.0"] },
+    # xxhash-rust ships under the Boost Software License 1.0, which
+    # is permissive in practice (no notice requirement on binary
+    # distribution).
+    { crate = "xxhash-rust", allow = ["BSL-1.0"] },
+]
+
+[bans]
+multiple-versions = "warn"
+# Path-only workspace deps (e.g. `hb_zayfer_core = { path = "../core" }`)
+# are treated as wildcards by cargo-deny but are normal in a Cargo
+# workspace, so we exempt them.
+wildcards = "deny"
+allow-wildcard-paths = true
+# Workspace authors decide on duplicates case-by-case; the warning
+# surface is informational, not gate-blocking.
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

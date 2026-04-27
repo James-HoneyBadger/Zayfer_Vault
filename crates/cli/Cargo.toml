@@ -5,6 +5,8 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 description = "CLI binary for HB_Zayfer encryption suite"
+# Binary distributed via GitHub releases / scripts/package.sh, not crates.io.
+publish = false
 
 [[bin]]
 name = "hb-zayfer"

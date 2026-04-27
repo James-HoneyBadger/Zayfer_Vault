@@ -5,6 +5,8 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 description = "Python bindings for HB_Zayfer encryption suite"
+# cdylib distributed as the hb_zayfer Python wheel via maturin, not crates.io.
+publish = false
 
 [lib]
 name = "_native"
