@@ -37,6 +37,7 @@ from hb_zayfer.gui.passgen_view import PasswordGenView
 from hb_zayfer.gui.qr_view import QRExchangeView
 from hb_zayfer.gui.settings_manager import SettingsManager
 from hb_zayfer.gui.settings_view import SettingsView
+from hb_zayfer.gui.shortcuts_dialog import ShortcutsDialog
 from hb_zayfer.gui.sign_view import SignView
 from hb_zayfer.gui.statusbar import StatusBar
 from hb_zayfer.gui.verify_view import VerifyView
@@ -105,12 +106,21 @@ class MainWindow(QMainWindow):
         view_menu.addAction("&Backup", lambda: self.sidebar.setCurrentRow(13))
 
         help_menu = menu.addMenu("&Help")
+        shortcuts_action = QAction("&Keyboard Shortcuts…", self)
+        shortcuts_action.setShortcut(QKeySequence("F1"))
+        shortcuts_action.triggered.connect(self._show_shortcuts)
+        help_menu.addAction(shortcuts_action)
+        help_menu.addSeparator()
         about_action = QAction("&About", self)
         about_action.triggered.connect(self._show_about)
         help_menu.addAction(about_action)
 
     def _show_about(self) -> None:
         dialog = AboutDialog(self)
+        dialog.exec()
+
+    def _show_shortcuts(self) -> None:
+        dialog = ShortcutsDialog(self)
         dialog.exec()
 
     # ---------------------------------------------------------------
@@ -133,6 +143,11 @@ class MainWindow(QMainWindow):
         self.sidebar.setSpacing(2)
         self.sidebar.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.sidebar.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.sidebar.setAccessibleName("Main navigation sidebar")
+        self.sidebar.setAccessibleDescription(
+            "Use Up/Down arrows to switch between application views; "
+            "Alt+1 through Alt+9 jump directly to common views."
+        )
 
         pages = [
             ("🏠 Home", "Overview and quick actions"),
@@ -154,6 +169,11 @@ class MainWindow(QMainWindow):
         for name, tooltip in pages:
             item = QListWidgetItem(name)
             item.setToolTip(tooltip)
+            # Strip emoji from accessible text so screen readers announce
+            # "Encrypt: Encrypt files or text" rather than the raw glyph.
+            plain = name.split(" ", 1)[-1] if " " in name else name
+            item.setData(Qt.ItemDataRole.AccessibleTextRole, plain)
+            item.setData(Qt.ItemDataRole.AccessibleDescriptionRole, tooltip)
             item.setSizeHint(QSize(178, 38))
             item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
             self.sidebar.addItem(item)

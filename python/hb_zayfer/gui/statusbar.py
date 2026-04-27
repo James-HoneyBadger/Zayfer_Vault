@@ -14,16 +14,19 @@ class StatusBar(QStatusBar):
 
         # Main message label (left side)
         self.message_label = QLabel("Ready")
+        self.message_label.setAccessibleName("Status message")
         self.addWidget(self.message_label, 1)
 
         # Operation status (center-right)
         self.operation_label = QLabel("")
         self.operation_label.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.operation_label.setAccessibleName("Current operation")
         self.addPermanentWidget(self.operation_label)
 
         # Item count (right)
         self.count_label = QLabel("")
         self.count_label.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.count_label.setAccessibleName("Item count")
         self.addPermanentWidget(self.count_label)
 
     def set_message(self, message: str, timeout: int = 0) -> None:
