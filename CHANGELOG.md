@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Expanded WASM crypto surface.** The browser bindings now expose
+  `sha512`, `hmac_sha256`, `hmac_sha512`, `hkdf_sha256`, and
+  `random_password` (with character-class guarantees and modulo-bias-free
+  rejection sampling), bringing parity with common operations available
+  in the CLI/Python build.
 - **Live audit log streaming.** New `GET /api/audit/stream` Server-Sent
   Events endpoint pushes new audit entries to connected clients in real
   time (2-second polling cadence, 15-second keep-alive). Each event has

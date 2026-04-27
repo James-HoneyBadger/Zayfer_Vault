@@ -14,7 +14,11 @@
 //! | `ed25519_keygen` / `ed25519_sign` / `ed25519_verify` | Ed25519 signatures |
 //! | `x25519_keygen` / `x25519_dh` | X25519 Diffie-Hellman |
 //! | `derive_key` | Argon2id key derivation |
-//! | `sha256` | SHA-256 hash |
+//! | `hkdf_sha256` | HKDF-SHA-256 key expansion |
+//! | `hmac_sha256` / `hmac_sha512` | Keyed message authentication |
+//! | `sha256` / `sha512` | SHA-2 hashes |
+//! | `random_password` | OS-random password with character-class guarantees |
+//! | `random_bytes` | OS random bytes |
 //!
 //! # Building
 //!
@@ -229,6 +233,144 @@ pub fn sha256(data: &[u8]) -> Vec<u8> {
     let mut hasher = Sha256::new();
     hasher.update(data);
     hasher.finalize().to_vec()
+}
+
+/// Compute SHA-512 hash. Returns 64-byte digest.
+#[wasm_bindgen]
+pub fn sha512(data: &[u8]) -> Vec<u8> {
+    use sha2::{Digest, Sha512};
+    let mut hasher = Sha512::new();
+    hasher.update(data);
+    hasher.finalize().to_vec()
+}
+
+// ---------------------------------------------------------------------------
+// HMAC
+// ---------------------------------------------------------------------------
+
+/// HMAC-SHA-256 of `data` under `key`. Returns 32-byte tag.
+#[wasm_bindgen]
+pub fn hmac_sha256(key: &[u8], data: &[u8]) -> Result<Vec<u8>, JsError> {
+    use hmac::{Hmac, Mac};
+    type HmacSha256 = Hmac<sha2::Sha256>;
+    let mut mac = HmacSha256::new_from_slice(key).map_err(|e| JsError::new(&e.to_string()))?;
+    mac.update(data);
+    Ok(mac.finalize().into_bytes().to_vec())
+}
+
+/// HMAC-SHA-512 of `data` under `key`. Returns 64-byte tag.
+#[wasm_bindgen]
+pub fn hmac_sha512(key: &[u8], data: &[u8]) -> Result<Vec<u8>, JsError> {
+    use hmac::{Hmac, Mac};
+    type HmacSha512 = Hmac<sha2::Sha512>;
+    let mut mac = HmacSha512::new_from_slice(key).map_err(|e| JsError::new(&e.to_string()))?;
+    mac.update(data);
+    Ok(mac.finalize().into_bytes().to_vec())
+}
+
+// ---------------------------------------------------------------------------
+// HKDF (RFC 5869)
+// ---------------------------------------------------------------------------
+
+/// HKDF-SHA-256 expand: derive `length` bytes (max 8160) from `ikm` using the
+/// optional `salt` and `info` context. Returns the derived key material.
+#[wasm_bindgen]
+pub fn hkdf_sha256(
+    ikm: &[u8],
+    salt: &[u8],
+    info: &[u8],
+    length: usize,
+) -> Result<Vec<u8>, JsError> {
+    use hkdf::Hkdf;
+    if length == 0 || length > 8160 {
+        return Err(JsError::new("length must be in 1..=8160"));
+    }
+    let salt_opt = if salt.is_empty() { None } else { Some(salt) };
+    let hk = Hkdf::<sha2::Sha256>::new(salt_opt, ikm);
+    let mut okm = vec![0u8; length];
+    hk.expand(info, &mut okm)
+        .map_err(|e| JsError::new(&e.to_string()))?;
+    Ok(okm)
+}
+
+// ---------------------------------------------------------------------------
+// Password generation
+// ---------------------------------------------------------------------------
+
+const PWGEN_UPPER: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+const PWGEN_LOWER: &[u8] = b"abcdefghijklmnopqrstuvwxyz";
+const PWGEN_DIGITS: &[u8] = b"0123456789";
+const PWGEN_SYMBOLS: &[u8] = b"!@#$%^&*()-_=+[]{}|;:,.<>?/~`";
+
+/// Generate a random-character password using OS randomness.
+///
+/// Each enabled character class contributes to the alphabet; the result is
+/// guaranteed to contain at least one character from every enabled class
+/// (when the requested length permits). `length` is clamped to a minimum
+/// of 4 and must be at most 1024.
+#[wasm_bindgen]
+pub fn random_password(
+    length: usize,
+    uppercase: bool,
+    lowercase: bool,
+    digits: bool,
+    symbols: bool,
+) -> Result<String, JsError> {
+    if length > 1024 {
+        return Err(JsError::new("length must be at most 1024"));
+    }
+    let mut alphabet: Vec<u8> = Vec::new();
+    let mut classes: Vec<&[u8]> = Vec::new();
+    if uppercase {
+        alphabet.extend_from_slice(PWGEN_UPPER);
+        classes.push(PWGEN_UPPER);
+    }
+    if lowercase {
+        alphabet.extend_from_slice(PWGEN_LOWER);
+        classes.push(PWGEN_LOWER);
+    }
+    if digits {
+        alphabet.extend_from_slice(PWGEN_DIGITS);
+        classes.push(PWGEN_DIGITS);
+    }
+    if symbols {
+        alphabet.extend_from_slice(PWGEN_SYMBOLS);
+        classes.push(PWGEN_SYMBOLS);
+    }
+    if alphabet.is_empty() {
+        return Err(JsError::new("at least one character class must be enabled"));
+    }
+    let len = length.max(4);
+
+    // Sample uniformly from the alphabet using rejection sampling on bytes.
+    let pick_from = |set: &[u8]| -> u8 {
+        let n = set.len() as u32;
+        // Reject bytes >= floor(256 / n) * n to avoid modulo bias.
+        let bound = (256u32 / n) * n;
+        loop {
+            let mut b = [0u8; 1];
+            OsRng.fill_bytes(&mut b);
+            if (b[0] as u32) < bound {
+                return set[(b[0] as usize) % (n as usize)];
+            }
+        }
+    };
+
+    let mut bytes = Vec::with_capacity(len);
+    for _ in 0..len {
+        bytes.push(pick_from(&alphabet));
+    }
+    // Ensure each class is represented at least once (when length permits).
+    for (i, set) in classes.iter().enumerate() {
+        if i >= len {
+            break;
+        }
+        if !bytes.iter().any(|c| set.contains(c)) {
+            bytes[i] = pick_from(set);
+        }
+    }
+    // ASCII-only by construction, so `from_utf8` cannot fail.
+    String::from_utf8(bytes).map_err(|e| JsError::new(&e.to_string()))
 }
 
 // ---------------------------------------------------------------------------
