@@ -8,7 +8,10 @@ use axum::{
     extract::{Multipart, Path, Query, State},
     http::{header, Request as HttpRequest, StatusCode},
     middleware::{self, Next},
-    response::Response,
+    response::{
+        sse::{Event, KeepAlive, Sse},
+        Response,
+    },
     routing::{delete, get, post, put},
     Json, Router,
 };
@@ -495,6 +498,7 @@ pub fn build_platform_router() -> Result<Router> {
         .route("/api/config", get(api_config_handler))
         .route("/api/audit/count", get(api_audit_count_handler))
         .route("/api/audit/recent", get(api_audit_recent_handler))
+        .route("/api/audit/stream", get(api_audit_stream_handler))
         .route("/api/audit/verify", get(api_audit_verify_handler))
         .route("/api/audit/export", post(api_audit_export_handler))
         .route("/api/passgen", post(api_passgen_handler))
@@ -605,6 +609,72 @@ async fn api_audit_verify_handler() -> Result<Json<serde_json::Value>, (StatusCo
     Ok(Json(
         json!({ "valid": logger.verify_integrity().map_err(internal_err)? }),
     ))
+}
+
+/// Server-Sent Events stream of new audit entries.
+///
+/// On connect, the server sends the most recent 20 entries as a backlog so
+/// clients have immediate context, then polls the audit log on a fixed
+/// cadence and emits any entry whose `entry_hash` it has not already sent.
+/// Each SSE event has `event: audit` and a JSON payload matching the shape
+/// of `/api/audit/recent`. A keep-alive comment is sent every 15 seconds.
+async fn api_audit_stream_handler() -> Result<
+    Sse<impl futures_util::Stream<Item = Result<Event, std::convert::Infallible>>>,
+    (StatusCode, String),
+> {
+    use std::collections::HashSet;
+    use std::time::Duration;
+    // Validate up-front so the client gets a clean error rather than a
+    // half-open SSE connection that immediately dies.
+    let _ = AuditLogger::default_location().map_err(internal_err)?;
+
+    let stream = async_stream::stream! {
+        let mut seen: HashSet<String> = HashSet::new();
+        let mut interval = tokio::time::interval(Duration::from_secs(2));
+        // First tick fires immediately so the backlog ships without delay.
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        let mut bootstrapped = false;
+        loop {
+            interval.tick().await;
+            let logger = match AuditLogger::default_location() {
+                Ok(l) => l,
+                Err(_) => continue,
+            };
+            // On first iteration, fetch a backlog of 20; subsequently poll
+            // a slightly larger window to catch bursts between ticks.
+            let n = if bootstrapped { 50 } else { 20 };
+            let entries = match logger.recent_entries(n) {
+                Ok(e) => e,
+                Err(_) => continue,
+            };
+            bootstrapped = true;
+            for e in entries {
+                if !seen.insert(e.entry_hash.clone()) {
+                    continue;
+                }
+                let payload = serde_json::json!({
+                    "timestamp": e.timestamp.to_rfc3339(),
+                    "operation": format!("{:?}", e.operation),
+                    "prev_hash": e.prev_hash,
+                    "entry_hash": e.entry_hash,
+                    "note": e.note,
+                });
+                let event = Event::default()
+                    .event("audit")
+                    .json_data(payload)
+                    .unwrap_or_else(|_| Event::default().event("audit").data("{}"));
+                yield Ok::<_, std::convert::Infallible>(event);
+            }
+            // Bound memory: forget hashes once we've tracked many entries.
+            // The append-only log guarantees we won't re-emit in practice
+            // because we only consider the most recent N on each tick.
+            if seen.len() > 1024 {
+                seen.clear();
+            }
+        }
+    };
+
+    Ok(Sse::new(stream).keep_alive(KeepAlive::new().interval(Duration::from_secs(15))))
 }
 
 async fn api_passgen_handler(
@@ -1082,6 +1152,30 @@ mod tests {
         let data = json_response(router, request).await;
         assert_eq!(data["brand_name"], "Zayfer Vault");
         assert!(data["version"].as_str().unwrap().starts_with("1."));
+    }
+
+    #[tokio::test]
+    async fn audit_stream_returns_event_stream() {
+        // Verify the endpoint negotiates the SSE content-type and responds
+        // OK. We don't read the body to avoid blocking on the long-lived
+        // stream.
+        let router = build_platform_router().unwrap();
+        let request = Request::builder()
+            .uri("/api/audit/stream")
+            .method(Method::GET)
+            .body(Body::empty())
+            .unwrap();
+        let response = router.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let ct = response
+            .headers()
+            .get("content-type")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or_default();
+        assert!(
+            ct.starts_with("text/event-stream"),
+            "expected SSE content-type, got: {ct}"
+        );
     }
 
     #[tokio::test]

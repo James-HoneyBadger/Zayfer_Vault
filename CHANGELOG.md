@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Live audit log streaming.** New `GET /api/audit/stream` Server-Sent
+  Events endpoint pushes new audit entries to connected clients in real
+  time (2-second polling cadence, 15-second keep-alive). Each event has
+  `event: audit` and a JSON payload matching `/api/audit/recent`.
 - **TLS for the web platform.** New `--tls-cert <PATH>` and `--tls-key <PATH>`
   flags on `hb-zayfer serve` enable HTTPS via `axum-server` + rustls (ring
   provider, no C toolchain required). Mismatched flag pairs are rejected and
